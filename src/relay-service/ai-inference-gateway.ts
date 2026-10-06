@@ -80,6 +80,7 @@ export interface ManagedAiGatewayOptions {
   burstWindowMs?: number;
   burstMax?: number;
   structuredThinking?: ChatCompleteOptions['thinking'];
+  toolThinking?: ChatCompleteOptions['thinking'];
   maxOutputTokens?: number;
   maxInputChars?: number;
   concurrency?: number;
@@ -465,7 +466,9 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
         };
       }
       inFlight += 1;
-      const thinking = parsed.responseFormat?.type === 'json_object' && !parsed.tools?.length ? options.structuredThinking : undefined;
+      const isToolExchange = !!parsed.tools?.length || parsed.messages.some(message => message.role === 'tool');
+      const thinking = isToolExchange ? options.toolThinking
+        : parsed.responseFormat?.type === 'json_object' ? options.structuredThinking : undefined;
       const deadlineAt = started + timeoutMs;
       const requestAbort = new AbortController();
       const onCallerAbort = () => requestAbort.abort('caller');

@@ -254,6 +254,7 @@ export function resolveManagedAiGateway(
     concurrency: Number.isFinite(concurrency) ? concurrency : 8,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 90_000,
     ...(env.MANAGED_AI_STRUCTURED_THINKING === 'disabled' ? { structuredThinking: { type: 'disabled' as const } } : {}),
+    ...(env.MANAGED_AI_TOOL_THINKING === 'disabled' ? { toolThinking: { type: 'disabled' as const } } : {}),
     log: logSafe,
   });
 }

@@ -102,3 +102,18 @@ test('whole-body socket disconnect cancels provider; normal response never cance
  try{await enter;if(disconnect){req.destroy();await new Promise(r=>setTimeout(r,30));assert.equal(signal.aborted,true);release()}else{release();await received;await new Promise(r=>setTimeout(r,10));assert.equal(signal.aborted,false)}}finally{release();relay.server.closeAllConnections();await new Promise<void>(r=>relay.server.close(()=>r()))}
  }
 });
+
+test('tool configuration follows tool exchange, including continuation; Self and plain calls retain separate defaults',async()=>{
+ const seen:unknown[]=[]; const g=await gateway({toolThinking:{type:'disabled'},structuredThinking:{type:'disabled'},complete:async o=>{seen.push(o.thinking);assert.equal(o.maxTokens,2048);return{text:'{}'}}});
+ const tools=[{type:'function',function:{name:'fixture',parameters:{type:'object'}}}];
+ const requests=[{...body,tools},{...body,tools:[],messages:[{role:'assistant',content:'',tool_calls:[{id:'call-1',type:'function',function:{name:'fixture',arguments:'{}'}}]},{role:'tool',tool_call_id:'call-1',content:'ok'}]},{...body,responseFormat:{type:'json_object'}},{...body}];
+ for(let i=0;i<requests.length;i++) await g.infer({body:{...requests[i],idempotencyKey:'config-'+i,maxTokens:4096},installToken:token});
+ assert.deepEqual(seen,[{type:'disabled'},{type:'disabled'},{type:'disabled'},undefined]);
+});
+
+test('truncated tool reply is neither retried nor cached as success',async()=>{
+ let calls=0;const g=await gateway({toolThinking:{type:'disabled'},complete:async()=>{calls++;return{text:'',finishReason:'length',truncated:true}}});
+ const input={body:{...body,tools:[{type:'function',function:{name:'fixture',parameters:{}}}]},installToken:token};
+ const first=await g.infer(input); assert.equal(first.body.ok,false);assert.equal(calls,1);
+ const next=await g.infer(input);assert.equal(next.body.ok,false);assert.equal(calls,1);
+});
