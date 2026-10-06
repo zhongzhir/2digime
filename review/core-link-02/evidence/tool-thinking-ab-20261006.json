@@ -1,0 +1,168 @@
+{
+  "baseline": "cf32734",
+  "onlineConfigurationChanged": false,
+  "searchCalls": 0,
+  "automaticRetries": 0,
+  "supplierCalls": 3,
+  "supplierElapsedMsSum": 12719,
+  "usage": {
+    "prompt_tokens": 8874,
+    "completion_tokens": 2166,
+    "total_tokens": 11040
+  },
+  "abInitialPayloadHashesMatch": true,
+  "calls": [
+    {
+      "label": "compare-1-A",
+      "attempt": 1,
+      "startedAt": "2026-10-06T07:26:19Z",
+      "requestId": "08587618-5400-4788-b627-2fd2466c7494",
+      "variant": "A",
+      "inputHashExcludingThinking": "1c298990cb8423c6c7a47318aec3279cfdab842b38cb238ff58911fafea279f5",
+      "configuredModel": "deepseek-v4-flash",
+      "maxTokens": 2048,
+      "reasoningConfig": "provider_default",
+      "usage": {
+        "prompt_tokens": 2947,
+        "completion_tokens": 2047,
+        "total_tokens": 4994,
+        "prompt_tokens_details": {
+          "cached_tokens": 256
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 2027
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 2691
+      },
+      "httpStatus": 200,
+      "finishReason": "length",
+      "text": "下面比较只依据本次能读到的两条**历史候选摘录**（来自「发现",
+      "outputLength": 31,
+      "toolCalls": [],
+      "toolCallCount": 0,
+      "reasoningLength": 5148,
+      "returnedModel": "deepseek-flash",
+      "responseId": "67689f23-1017-43ca-89db-44d5bca7bcaf",
+      "truncated": true,
+      "elapsedMs": 10776,
+      "onlineHashesUnchanged": true
+    },
+    {
+      "label": "compare-1-B",
+      "attempt": 2,
+      "startedAt": "2026-10-06T07:28:02Z",
+      "requestId": "af06cc6d-ddf0-4625-9d7c-1b559d780fc0",
+      "variant": "B",
+      "inputHashExcludingThinking": "1c298990cb8423c6c7a47318aec3279cfdab842b38cb238ff58911fafea279f5",
+      "configuredModel": "deepseek-v4-flash",
+      "maxTokens": 2048,
+      "reasoningConfig": {
+        "type": "disabled"
+      },
+      "usage": {
+        "prompt_tokens": 2922,
+        "completion_tokens": 40,
+        "total_tokens": 2962,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 2922
+      },
+      "httpStatus": 200,
+      "finishReason": "tool_calls",
+      "text": "",
+      "outputLength": 0,
+      "toolCalls": [
+        {
+          "id": "call_00_CzVRfNd7CxH2V3W31Buc1075",
+          "name": "set_expected_effects",
+          "arguments": "{\"effects\": []}"
+        }
+      ],
+      "toolCallCount": 1,
+      "reasoningLength": 0,
+      "returnedModel": "deepseek-flash",
+      "responseId": "e3936878-aafd-495b-b99a-007c6e3c69e5",
+      "truncated": false,
+      "elapsedMs": 787,
+      "onlineHashesUnchanged": true
+    },
+    {
+      "label": "compare-2-B",
+      "attempt": 3,
+      "startedAt": "2026-10-06T07:28:55Z",
+      "requestId": "c044896b-f4b1-4c5c-b34b-9ecd3fab382b",
+      "variant": "B",
+      "inputHashExcludingThinking": "52939b67e7c045d41862ef2c77a29ee564b35cc5e485ffeef72a914eb2afcbc5",
+      "configuredModel": "deepseek-v4-flash",
+      "maxTokens": 2048,
+      "reasoningConfig": {
+        "type": "disabled"
+      },
+      "usage": {
+        "prompt_tokens": 3005,
+        "completion_tokens": 79,
+        "total_tokens": 3084,
+        "prompt_tokens_details": {
+          "cached_tokens": 2816
+        },
+        "prompt_cache_hit_tokens": 2816,
+        "prompt_cache_miss_tokens": 189
+      },
+      "httpStatus": 200,
+      "finishReason": "tool_calls",
+      "text": "",
+      "outputLength": 0,
+      "toolCalls": [
+        {
+          "id": "call_00_6oLJREHkhqXih4gxDHm74641",
+          "name": "set_expected_effects",
+          "arguments": "{\"effects\": [{\"target\": \"本次对话答复\", \"effect\": \"observation\", \"expectedState\": \"对话内给出两门历史课程对比、先学建议、链接与未核实项\"}]}"
+        }
+      ],
+      "toolCallCount": 1,
+      "reasoningLength": 0,
+      "returnedModel": "deepseek-flash",
+      "responseId": "7a7478a9-ae8e-4320-ac52-83cc63c85d06",
+      "truncated": false,
+      "elapsedMs": 1156,
+      "onlineHashesUnchanged": true
+    }
+  ],
+  "talkResult": {
+    "elapsedMs": 90174,
+    "calls": 2,
+    "error": "deadline awaiting isolated supplier",
+    "cancelled": false,
+    "events": [
+      {
+        "type": "supplier_response",
+        "id": "compare-1",
+        "toolCount": 6,
+        "finishReason": "tool_calls"
+      },
+      {
+        "id": "run_7a33f2f9-3483-4f7d-8dc0-3a02fb9a69f5",
+        "at": "2026-10-06T07:27:10.556Z",
+        "turnId": "turn_c36d3248-50e0-4bab-a33c-fb0f4cce1a30",
+        "capabilityId": "set_expected_effects",
+        "instruction": "请比较所选两门历史课程，沿用发现里的原需求和时间约束，推荐先学哪门及理由。保留来源链接，把历史材料与未核实项说清，不要联网、报名或付费。",
+        "ok": false,
+        "summary": "expected effects 为空",
+        "failureReason": "expected effects 为空"
+      }
+    ]
+  },
+  "status": "comparison_incomplete_stop",
+  "readFile": "not_run",
+  "authorizedWrite": "not_run",
+  "cancellation": "not_run",
+  "limitations": [
+    "manual Workbench bridge consumed shared deadline; cannot classify as provider deadline failure",
+    "remaining duration serialized before browser transfer; cannot prove exact request deadline at supplier start without clock alignment",
+    "new real B final answer absent; tool-only response does not prove answer quality",
+    "not a production gateway or Electron acceptance"
+  ]
+}
