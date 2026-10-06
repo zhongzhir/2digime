@@ -1,0 +1,31 @@
+--- a/src/relay-service/ai-inference-gateway.ts
++++ b/src/relay-service/ai-inference-gateway.ts
+@@ -80,6 +80,7 @@
+   burstWindowMs?: number;
+   burstMax?: number;
+   structuredThinking?: ChatCompleteOptions['thinking'];
++  toolThinking?: ChatCompleteOptions['thinking'];
+   maxOutputTokens?: number;
+   maxInputChars?: number;
+   concurrency?: number;
+@@ -465,7 +466,9 @@
+         };
+       }
+       inFlight += 1;
+-      const thinking = parsed.responseFormat?.type === 'json_object' && !parsed.tools?.length ? options.structuredThinking : undefined;
++      const isToolExchange = !!parsed.tools?.length || parsed.messages.some(message => message.role === 'tool');
++      const thinking = isToolExchange ? options.toolThinking
++        : parsed.responseFormat?.type === 'json_object' ? options.structuredThinking : undefined;
+       const deadlineAt = started + timeoutMs;
+       const requestAbort = new AbortController();
+       const onCallerAbort = () => requestAbort.abort('caller');
+--- a/src/relay-service/server.ts
++++ b/src/relay-service/server.ts
+@@ -254,6 +254,7 @@
+     concurrency: Number.isFinite(concurrency) ? concurrency : 8,
+     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 90_000,
+     ...(env.MANAGED_AI_STRUCTURED_THINKING === 'disabled' ? { structuredThinking: { type: 'disabled' as const } } : {}),
++    ...(env.MANAGED_AI_TOOL_THINKING === 'disabled' ? { toolThinking: { type: 'disabled' as const } } : {}),
+     log: logSafe,
+   });
+ }
