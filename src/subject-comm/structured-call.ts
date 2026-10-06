@@ -101,7 +101,7 @@ export async function completeStructured<T>(input: {
       note.ms = Date.now() - started;
       input.onAttempt?.(note);
       if (value !== null) return { value, attempts };
-      if (expired) break;
+      if (expired || note.failure === 'truncated') break;
     } catch (err) {
       lastError = err;
       note.ms = Date.now() - started;
@@ -112,7 +112,7 @@ export async function completeStructured<T>(input: {
       note.failure = detail?.failure ?? 'network';
       note.error = note.failure || 'unknown'; // Never log raw provider/error text.
       input.onAttempt?.(note);
-      if (input.signal?.aborted || note.cancellation || ['network','http','empty'].includes(note.failure || '')) break;
+      if (input.signal?.aborted || note.cancellation || ['network','http','empty','truncated'].includes(note.failure || '')) break;
     }
   }
   return { value: null, attempts, ...(lastError !== undefined ? { lastError } : {}) };

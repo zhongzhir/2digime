@@ -331,6 +331,7 @@ function throwIfAborted(signal?: AbortSignal): void {
 }
 
 function isRetryableModelError(err: unknown): boolean {
+  if ((err as { diagnostic?: { failure?: string } })?.diagnostic?.failure === 'truncated') return false;
   if (err instanceof Error && (err.name === 'TalkCancelled' || err.name === 'TalkTimeoutError')) return false;
   const kind = (err as { kind?: string }).kind;
   if (kind === 'network' || kind === 'timeout' || kind === 'server_error' || kind === 'rate_limited' || kind === 'bad_response') {

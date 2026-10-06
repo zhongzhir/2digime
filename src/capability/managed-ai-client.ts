@@ -204,7 +204,7 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
     diagnostic.outputLength = typeof json.text === 'string' ? json.text.length : null;
     const status = classifyHttp(res.status, json.status, json.error);
     if (status !== 'AVAILABLE' || json.ok === false) {
-      fail(status, 'http');
+      fail(status, json.error === 'truncated' || json.truncated === true || json.finishReason === 'length' ? 'truncated' : 'http');
     }
     const text = typeof json.text === 'string' ? json.text : '';
     const toolCalls = Array.isArray(json.toolCalls) ? json.toolCalls : undefined;

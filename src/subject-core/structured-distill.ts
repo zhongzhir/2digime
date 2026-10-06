@@ -296,6 +296,7 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
     try {
       result = await attempt(true);
     } catch (firstErr) {
+      if ((firstErr as { diagnostic?: { failure?: string } })?.diagnostic?.failure === 'truncated') throw firstErr;
       // 部分兼容端点不支持 json_object；再试一次无强制格式
       try {
         result = await attempt(false);

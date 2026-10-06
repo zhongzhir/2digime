@@ -143,6 +143,7 @@ export class SubjectService {
     } catch (error) {
       this.lastSemanticJsonError =
         error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
+      if ((error as { diagnostic?: { failure?: string } })?.diagnostic?.failure === 'truncated') return null;
     }
     // 部分兼容端点不接受 response_format；失败后降级再试一次
     try {

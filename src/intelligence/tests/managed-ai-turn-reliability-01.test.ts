@@ -21,6 +21,17 @@ import type { TalkChatFn, TalkExecution } from '../types';
 const TOKEN_A = 'a'.repeat(64);
 const TOKEN_B = 'b'.repeat(64);
 
+test('Talk managed truncation is terminal: no additional model attempt',async()=>{
+ let calls=0;
+ const chat=createManagedAiChatComplete({gatewayUrl:'https://offline.invalid',installToken:TOKEN_A,fetchImpl:async()=>{
+  calls++;return new Response(JSON.stringify({ok:false,status:'PROVIDER_ERROR',error:'truncated',finishReason:'length',text:''}),{status:502});
+ }});
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'dm-talk-truncated-'));
+ const runtime=createDigitalMeRuntime({documentCapability:'fake',registerOpenAiStub:false,talkChat:async input=>{const r=await chat({...input,baseUrl:'https://offline.invalid',model:'managed-ai'});return{text:r.text}}});
+ const bus=createCommandBus(runtime);
+ try{await bus.invoke('subject.createPackage',{displayName:'离线测试',targetDir:path.join(root,'pkg')});await bus.invoke('talk',{text:'neutral fixture'});assert.equal(calls,1)}finally{await runtime.stop()}
+});
+
 function scriptedChat(replies: TalkChatFn[]): TalkChatFn {
   let i = 0;
   return async (input) => {

@@ -1,0 +1,81 @@
+diff --git a/review/core-link-02/DEPLOY-AFTER-APPROVAL.sh b/review/core-link-02/DEPLOY-AFTER-APPROVAL.sh
+index f32a219..aa09ad2 100644
+--- a/review/core-link-02/DEPLOY-AFTER-APPROVAL.sh
++++ b/review/core-link-02/DEPLOY-AFTER-APPROVAL.sh
+@@ -3 +3 @@
+-set -euo pipefail
++set -Eeuo pipefail
+@@ -6,0 +7,17 @@ backup="$stage/backup"
++mutation_started=0
++rollback_on_exit() {
++  local rc=$?
++  trap - EXIT ERR INT TERM
++  if (( rc != 0 && mutation_started == 1 )); then
++    printf '%s\n' 'Deployment failed; restoring backup.' >&2
++    if bash "$stage/ROLLBACK-AFTER-APPROVAL.sh"; then
++      printf '%s\n' 'Rollback completed.' >&2
++    else
++      printf '%s\n' 'ROLLBACK FAILED: manual recovery required; backup retained.' >&2
++    fi
++  fi
++  exit "$rc"
++}
++trap rollback_on_exit EXIT
++trap 'exit 130' INT
++trap 'exit 143' TERM
+@@ -13 +30,2 @@ cp -a --parents dist/relay-service/server.js dist/relay-service/ai-inference-gat
+-install -m 600 /etc/digitalme-relay.env "$backup/relay.env"
++cp -a /etc/digitalme-relay.env "$backup/relay.env"
++mutation_started=1
+@@ -18 +36 @@ python3 - <<'PY'
+-import os,pathlib,tempfile
++import os,pathlib,tempfile,stat
+@@ -19,0 +38 @@ p=pathlib.Path('/etc/digitalme-relay.env')
++original=p.stat()
+@@ -27 +46,2 @@ with os.fdopen(fd,'w') as f:
+-os.chmod(name,0o600)
++os.chown(name,original.st_uid,original.st_gid)
++os.chmod(name,stat.S_IMODE(original.st_mode))
+diff --git a/review/core-link-02/ROLLBACK-AFTER-APPROVAL.sh b/review/core-link-02/ROLLBACK-AFTER-APPROVAL.sh
+index 475f027..b085fcc 100644
+--- a/review/core-link-02/ROLLBACK-AFTER-APPROVAL.sh
++++ b/review/core-link-02/ROLLBACK-AFTER-APPROVAL.sh
+@@ -11 +11,2 @@ install -m 644 "$backup/dist/infrastructure/model-http.js" "$app/dist/infrastruc
+-install -m 600 "$backup/relay.env" /etc/digitalme-relay.env
++cp -a "$backup/relay.env" /etc/.digitalme-relay.rollback.env
++mv -f /etc/.digitalme-relay.rollback.env /etc/digitalme-relay.env
+diff --git a/src/capability/managed-ai-client.ts b/src/capability/managed-ai-client.ts
+index 57a1d9e..757a7e7 100644
+--- a/src/capability/managed-ai-client.ts
++++ b/src/capability/managed-ai-client.ts
+@@ -207 +207 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
+-      fail(status, 'http');
++      fail(status, json.error === 'truncated' || json.truncated === true || json.finishReason === 'length' ? 'truncated' : 'http');
+diff --git a/src/intelligence/loop.ts b/src/intelligence/loop.ts
+index c84664d..886cee5 100644
+--- a/src/intelligence/loop.ts
++++ b/src/intelligence/loop.ts
+@@ -333,0 +334 @@ function isRetryableModelError(err: unknown): boolean {
++  if ((err as { diagnostic?: { failure?: string } })?.diagnostic?.failure === 'truncated') return false;
+diff --git a/src/subject-comm/structured-call.ts b/src/subject-comm/structured-call.ts
+index 34dfcb3..74456e3 100644
+--- a/src/subject-comm/structured-call.ts
++++ b/src/subject-comm/structured-call.ts
+@@ -104 +104 @@ export async function completeStructured<T>(input: {
+-      if (expired) break;
++      if (expired || note.failure === 'truncated') break;
+@@ -115 +115 @@ export async function completeStructured<T>(input: {
+-      if (input.signal?.aborted || note.cancellation || ['network','http','empty'].includes(note.failure || '')) break;
++      if (input.signal?.aborted || note.cancellation || ['network','http','empty','truncated'].includes(note.failure || '')) break;
+diff --git a/src/subject-core/structured-distill.ts b/src/subject-core/structured-distill.ts
+index 2058a3b..5ec96ad 100644
+--- a/src/subject-core/structured-distill.ts
++++ b/src/subject-core/structured-distill.ts
+@@ -298,0 +299 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
++      if ((firstErr as { diagnostic?: { failure?: string } })?.diagnostic?.failure === 'truncated') throw firstErr;
+diff --git a/src/subject-core/subject-service.ts b/src/subject-core/subject-service.ts
+index 72fd9c4..fff4e15 100644
+--- a/src/subject-core/subject-service.ts
++++ b/src/subject-core/subject-service.ts
+@@ -145,0 +146 @@ export class SubjectService {
++      if ((error as { diagnostic?: { failure?: string } })?.diagnostic?.failure === 'truncated') return null;

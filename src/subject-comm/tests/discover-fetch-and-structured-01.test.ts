@@ -49,7 +49,7 @@ test('发布时间：缺失、无法解析、早于 1990、晚于现在两天以
   assert.equal(trustedPublishedMs(make('2026-10-02T12:00:00Z'), nowMs), Date.parse('2026-10-02T12:00:00Z'));
 });
 
-test('结构化调用：被截断就升级到第二次；第一次关闭推理、第二次保留；两次都不行如实返回空', async () => {
+test('结构化调用：截断进入终态不升级预算；格式失败保持既有有界行为', async () => {
   const calls: Array<{ maxTokens: number; thinking: unknown }> = [];
   const chat = async (opts: { maxTokens?: number; thinking?: unknown }) => {
     calls.push({ maxTokens: opts.maxTokens ?? 0, thinking: opts.thinking });
@@ -69,11 +69,10 @@ test('结构化调用：被截断就升级到第二次；第一次关闭推理�
     },
     onAttempt: (a) => attempts.push({ pass: a.pass, truncated: a.truncated, parsed: a.parsed }),
   });
-  assert.deepEqual(result.value, { a: 1 });
-  assert.equal(result.attempts, 2);
+  assert.equal(result.value, null);
+  assert.equal(result.attempts, 1);
   assert.deepEqual(calls[0]!.thinking, { type: 'disabled' });
-  assert.equal(calls[1]!.thinking, undefined, '第二次保留推理，复杂判断需要');
-  assert.ok(calls[1]!.maxTokens! > calls[0]!.maxTokens!);
+  assert.equal(calls.length, 1);
   assert.equal(attempts[0]!.truncated, true);
   assert.equal(attempts[0]!.parsed, false);
 
@@ -97,5 +96,6 @@ test('结构化调用：半截 JSON 即使碰巧能解析，只要被标为截�
     request: { messages: [{ role: 'user', content: 'x' }] } as never,
     parse: (text) => JSON.parse(text) as { a: number },
   });
-  assert.deepEqual(result.value, { a: 2 });
+  assert.equal(result.value, null);
+  assert.equal(n, 1);
 });

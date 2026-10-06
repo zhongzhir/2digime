@@ -8,7 +8,8 @@ test -s "$backup/relay.env"
 install -m 644 "$backup/dist/relay-service/server.js" "$app/dist/relay-service/server.js"
 install -m 644 "$backup/dist/relay-service/ai-inference-gateway.js" "$app/dist/relay-service/ai-inference-gateway.js"
 install -m 644 "$backup/dist/infrastructure/model-http.js" "$app/dist/infrastructure/model-http.js"
-install -m 600 "$backup/relay.env" /etc/digitalme-relay.env
+cp -a "$backup/relay.env" /etc/.digitalme-relay.rollback.env
+mv -f /etc/.digitalme-relay.rollback.env /etc/digitalme-relay.env
 (cd "$app" && sha256sum --check "$stage/deployed-before.sha256")
 systemctl restart digitalme-relay.service
 systemctl is-active --quiet digitalme-relay.service
