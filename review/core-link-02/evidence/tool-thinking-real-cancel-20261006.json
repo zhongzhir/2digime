@@ -1,0 +1,160 @@
+{
+  "mode": "cancel",
+  "stages": [
+    {
+      "status": "stopped",
+      "error": "user_cancel_after_async_stat_before_write",
+      "elapsedMs": 1253,
+      "stageCalls": 1,
+      "cancelled": true,
+      "cancelSource": "user_cancel_after_async_stat_before_write",
+      "events": [
+        {
+          "type": "cancel",
+          "source": "user",
+          "boundary": "before_write",
+          "callsAtCancel": 1
+        }
+      ],
+      "rows": [
+        {
+          "requestId": "0a926e52-f301-4a41-9383-a76411777466",
+          "stage": "cancel",
+          "startedAt": "2026-10-06T09:09:10.259Z",
+          "remainingMs": 89996,
+          "configuredModel": "deepseek-v4-flash",
+          "maxTokens": 2048,
+          "thinking": "disabled",
+          "toolCount": 5,
+          "inputHash": "6b1651bba9418241cdab8cdf8d362b987fa6d579e14cb4ab398d9db4826221bd",
+          "httpStartedAt": "2026-10-06T09:09:10.261Z",
+          "elapsedMs": 1244,
+          "httpStatus": 200,
+          "finishReason": "tool_calls",
+          "outputLength": 25,
+          "toolCallCount": 1,
+          "reasoningLength": 0,
+          "reasoningTokens": null,
+          "returnedModel": "deepseek-flash",
+          "usage": {
+            "inputTokens": 1728,
+            "outputTokens": 101,
+            "totalTokens": 1829
+          },
+          "usageSource": "provider",
+          "text": "I'll write that file now.",
+          "rawToolCalls": [
+            {
+              "index": 0,
+              "id": "call_00_QQS3Uwqnilbr60iMry6Q8100",
+              "type": "function",
+              "function": {
+                "name": "write_file",
+                "arguments": "{\"relativePath\": \"cancelled.txt\", \"content\": \"取消边界测试\", \"root\": \"/tmp/dm-tool-thinking-inprocess-20261006-b7/cancel-window/authorized\"}"
+              }
+            }
+          ]
+        }
+      ],
+      "cancelFileExists": false,
+      "boundaryTriggered": true,
+      "callsAtCancel": 1,
+      "transportAttemptedAfterStop": 0,
+      "cancelVerified": true
+    },
+    {
+      "status": "stopped",
+      "error": "user_cancel_after_actual_write",
+      "elapsedMs": 737,
+      "stageCalls": 1,
+      "cancelled": true,
+      "cancelSource": "user_cancel_after_actual_write",
+      "events": [
+        {
+          "type": "cancel",
+          "source": "user",
+          "boundary": "after_write",
+          "callsAtCancel": 1
+        },
+        {
+          "id": "run_e738c0c7-43fe-46cf-b6e1-ab4df0d07821",
+          "at": "2026-10-06T09:09:11.510Z",
+          "turnId": "turn_7bec435b-b229-4e65-bf27-a99059a93045",
+          "capabilityId": "write_file",
+          "instruction": "cancelled.txt",
+          "ok": true,
+          "summary": "已写入 /tmp/dm-tool-thinking-inprocess-20261006-b7/cancel-window/authorized/cancelled.txt。回读全文 6 字。",
+          "producedOutputs": [
+            "/tmp/dm-tool-thinking-inprocess-20261006-b7/cancel-window/authorized/cancelled.txt"
+          ],
+          "outputPath": "/tmp/dm-tool-thinking-inprocess-20261006-b7/cancel-window/authorized/cancelled.txt",
+          "observedEffect": {
+            "kind": "file_created",
+            "target": "/tmp/dm-tool-thinking-inprocess-20261006-b7/cancel-window/authorized/cancelled.txt",
+            "mutated": true
+          }
+        }
+      ],
+      "rows": [
+        {
+          "requestId": "541bf30b-bdb6-4c37-9ab1-ecc74722eb4f",
+          "stage": "cancel",
+          "startedAt": "2026-10-06T09:09:11.510Z",
+          "remainingMs": 89999,
+          "configuredModel": "deepseek-v4-flash",
+          "maxTokens": 2048,
+          "thinking": "disabled",
+          "toolCount": 5,
+          "inputHash": "6b1651bba9418241cdab8cdf8d362b987fa6d579e14cb4ab398d9db4826221bd",
+          "httpStartedAt": "2026-10-06T09:09:11.511Z",
+          "elapsedMs": 734,
+          "httpStatus": 200,
+          "finishReason": "tool_calls",
+          "outputLength": 51,
+          "toolCallCount": 1,
+          "reasoningLength": 0,
+          "reasoningTokens": null,
+          "returnedModel": "deepseek-flash",
+          "usage": {
+            "inputTokens": 1728,
+            "outputTokens": 105,
+            "totalTokens": 1833
+          },
+          "usageSource": "provider",
+          "text": "I'll create that file now in the authorized folder.",
+          "rawToolCalls": [
+            {
+              "index": 0,
+              "id": "call_00_WQJ2cIfp1cGDg6fZ3BTh0142",
+              "type": "function",
+              "function": {
+                "name": "write_file",
+                "arguments": "{\"relativePath\": \"cancelled.txt\", \"content\": \"取消边界测试\", \"root\": \"/tmp/dm-tool-thinking-inprocess-20261006-b7/cancel-window/authorized\"}"
+              }
+            }
+          ]
+        }
+      ],
+      "cancelFileExists": true,
+      "boundaryTriggered": true,
+      "callsAtCancel": 1,
+      "transportAttemptedAfterStop": 0,
+      "cancelVerified": true,
+      "disk": {
+        "text": "取消边界测试",
+        "bytes": 18,
+        "sha256": "1b3ff77744da57cf857159a02a725ca16834f81c4c564a54eb01d5617d378271"
+      }
+    }
+  ],
+  "supplierCalls": 2,
+  "searchCalls": 0,
+  "automaticRetries": 0,
+  "onlineHashesUnchanged": true,
+  "usage": {
+    "inputTokens": 3456,
+    "outputTokens": 206,
+    "totalTokens": 3662,
+    "unknownCalls": 0
+  }
+}

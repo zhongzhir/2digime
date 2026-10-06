@@ -3,6 +3,7 @@
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict'),{performance}=require('node:perf_hooks');
 const {runTalkTurn}=require('../dist/intelligence/loop'),{emptyThread}=require('../dist/intelligence/store'),{chatComplete}=require('../dist/infrastructure/model-http');
 const mode=process.argv[2],root=path.resolve(process.env.DM_DIAG_ROOT||'build/evidence/tool-thinking-inprocess-20261006');
+const callLimit=mode==='cancel'?4:7;
 const folder=path.join(root,'authorized'),journalPath=path.join(root,'supplier-journal.json');
 const compareText='请比较所选两门历史课程，沿用发现里的原需求和时间约束，推荐先学哪门及理由。保留来源链接，把历史材料与未核实项说清，不要联网、报名或付费。';
 let journal=[],config,actualFetch=global.fetch,live=false,currentStage,activeRow;
@@ -24,20 +25,20 @@ async function one(stage,{fixture,deadlineMs=90000,cancelBoundary,denyWrite=fals
  if(live)assert.equal(await fs.stat(path.join(root,'live-'+stage+(cancelBoundary?'-'+cancelBoundary:'')+'.json')).then(()=>true,()=>false),false,'no repeated stage');
  currentStage=stage;const start=performance.now(),expires=start+deadlineMs,controller=new AbortController(),events=[],rows=[];
  const timer=setTimeout(()=>controller.abort(new Error('shared_deadline')),deadlineMs);timer.unref();
- const stat=fs.stat,writeFile=fs.writeFile;let boundaryTriggered=false;
+ const stat=fs.stat,writeFile=fs.writeFile;let boundaryTriggered=false,callsAtCancel;
  const cancelPath=path.join(folder,'cancelled.txt'),writtenPath=path.join(folder,'neutral-result.txt'),readPath=path.join(folder,'neutral.txt');
  const original=JSON.parse(await fs.readFile(path.join(root,'input.json'),'utf8'));
  const thread=emptyThread(new Date().toISOString());if(stage==='compare')thread.discoveryGoal=original.goal;
  const prompts={compare:compareText,read:`请调用 read_file 读取 ${readPath}，告诉我蓝色和绿色文件夹总数与核验码。不写文件、不联网。`,write:'我明确授权你用 write_file 在已授权目录新建 neutral-result.txt，内容为“库存核验完成：总计10个，核验码Q7R3。”，然后用 read_file 回读并交付。不联网、不读目录外文件。',files:`请先用 read_file 读取 ${readPath}，核对库存数量和核验码。我明确授权你随后用 write_file 在已授权目录新建 neutral-result.txt，内容为“库存核验完成：总计10个，核验码Q7R3。”，再用 read_file 回读，最后说明实际读取与写入结果。不联网、不读目录外文件。`,cancel:'我明确授权你用 write_file 在已授权目录新建 cancelled.txt，内容为“取消边界测试”。只写这个文件，不联网。',recovery:'这是隔离测试，请在对话中说明核验结果，不读写文件、不联网。'};
  if(stage==='read'||stage==='files')await fs.writeFile(readPath,'离线库存样本：蓝色文件夹7个，绿色文件夹3个。核验码Q7R3。\n');
- if(cancelBoundary==='before_write')fs.stat=async function(p,...args){try{return await stat.call(fs,p,...args);}finally{if(path.resolve(String(p))===cancelPath){boundaryTriggered=true;controller.abort(new Error('user_cancel_after_async_stat_before_write'));events.push({type:'cancel',source:'user',boundary:cancelBoundary});}}};
- if(cancelBoundary==='after_write')fs.writeFile=async function(p,...args){const r=await writeFile.call(fs,p,...args);if(path.resolve(String(p))===cancelPath){boundaryTriggered=true;controller.abort(new Error('user_cancel_after_actual_write'));events.push({type:'cancel',source:'user',boundary:cancelBoundary});}return r;};
+ if(cancelBoundary==='before_write')fs.stat=async function(p,...args){try{return await stat.call(fs,p,...args);}finally{if(path.resolve(String(p))===cancelPath){boundaryTriggered=true;callsAtCancel=stageCalls;controller.abort(new Error('user_cancel_after_async_stat_before_write'));events.push({type:'cancel',source:'user',boundary:cancelBoundary,callsAtCancel});}}};
+ if(cancelBoundary==='after_write')fs.writeFile=async function(p,...args){const r=await writeFile.call(fs,p,...args);if(path.resolve(String(p))===cancelPath){boundaryTriggered=true;callsAtCancel=stageCalls;controller.abort(new Error('user_cancel_after_actual_write'));events.push({type:'cancel',source:'user',boundary:cancelBoundary,callsAtCancel});}return r;};
  let stageCalls=0;let transportAttemptedAfterStop=0;let output;
  try{
   const result=await runTalkTurn({thread,userText:prompts[stage],selfContext:stage==='compare'?original.selfContext:'没有本人认识，这是隔离测试样本。',agents:[],workRoot:folder,writeFolders:denyWrite?[]:[folder],contextPaths:stage==='read'||stage==='files'?[readPath]:[],now:new Date().toISOString(),signal:controller.signal,deadlineAt:Date.now()+deadlineMs,onExecution:e=>events.push(e),
    chat:async input=>{
     controller.signal.throwIfAborted();const left=Math.floor(expires-performance.now());if(left<=0)throw plainStop('shared deadline exhausted');
-    if(live&&journal.length>=7)throw plainStop('supplier call budget exhausted');
+    if(live&&journal.length>=callLimit)throw plainStop('supplier call budget exhausted');
     assert.ok(++stageCalls<=8,'tool round budget');
     const id=crypto.randomUUID(),row={requestId:id,stage,startedAt:new Date().toISOString(),remainingMs:left,configuredModel:live?config.model:'fixture-model',maxTokens:2048,thinking:'disabled',toolCount:input.tools?.length||0,inputHash:crypto.createHash('sha256').update(JSON.stringify({messages:input.messages,tools:input.tools})).digest('hex')};
     const t=performance.now();rows.push(row);
@@ -61,7 +62,7 @@ async function one(stage,{fixture,deadlineMs=90000,cancelBoundary,denyWrite=fals
   if(stage==='write'||stage==='files'){const disk=await fs.readFile(writtenPath,'utf8');assert.equal(disk,'库存核验完成：总计10个，核验码Q7R3。');assert.ok(events.some(e=>e.capabilityId==='read_file'&&e.ok),'explicit readback missing');if(stage==='files'){assert.ok(events.filter(e=>e.capabilityId==='read_file'&&e.ok).length>=2,'input read and output readback required');const kinds=events.filter(e=>e.capabilityId==='read_file'||e.capabilityId==='write_file');assert.equal(kinds[0].capabilityId,'read_file');assert.ok(kinds.some(e=>e.capabilityId==='write_file'&&e.ok),'actual write required');}output.disk={text:disk,bytes:Buffer.byteLength(disk),sha256:crypto.createHash('sha256').update(disk).digest('hex')};}
  }catch(e){output={status:'stopped',error:e.message,elapsedMs:Math.round(performance.now()-start),stageCalls,cancelled:controller.signal.aborted,cancelSource:controller.signal.reason?.message,events,rows};}
  finally{clearTimeout(timer);fs.stat=stat;fs.writeFile=writeFile;if(!live)global.fetch=actualFetch;}
- if(stage==='cancel'){const exists=await stat(cancelPath).then(()=>true,()=>false);Object.assign(output,{cancelFileExists:exists,boundaryTriggered,transportAttemptedAfterStop});if(cancelBoundary==='before_write')assert.ok(boundaryTriggered&&output.cancelled&&!exists&&stageCalls===1,'before-write cancellation failed');if(cancelBoundary==='after_write')assert.ok(boundaryTriggered&&output.cancelled&&exists&&events.some(e=>e.observedEffect?.mutated),'actual pre-cancel effect lost');}
+ if(stage==='cancel'){const exists=await stat(cancelPath).then(()=>true,()=>false);Object.assign(output,{cancelFileExists:exists,boundaryTriggered,callsAtCancel,transportAttemptedAfterStop});output.cancelVerified=!!(boundaryTriggered&&output.cancelled&&stageCalls===callsAtCancel&&transportAttemptedAfterStop===0&&(cancelBoundary==='before_write'?!exists:exists&&events.some(e=>e.observedEffect?.mutated)));if(exists){const bytes=await fs.readFile(cancelPath);output.disk={text:bytes.toString(),bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')};}}
  await save((live?'live-':'fixture-')+stage+(cancelBoundary?'-'+cancelBoundary:'')+'.json',output);return output;
 }
 async function fixtures(){
@@ -80,16 +81,22 @@ async function fixtures(){
  const deadline=await one('recovery',{deadlineMs:25,fixture:input=>new Promise((resolve,reject)=>input.signal.addEventListener('abort',()=>reject(input.signal.reason),{once:true}))});assert.equal(deadline.status,'stopped');assert.ok(deadline.cancelled);assert.equal(deadline.stageCalls,1);await save('fixture-deadline.json',deadline);
  live=true;journal=Array.from({length:7},()=>({fixture:true}));const budget=await one('recovery',{fixture:()=>{throw Error('must not reach transport');}});live=false;journal=[];assert.equal(budget.status,'stopped');assert.equal(budget.stageCalls,0);await save('fixture-budget.json',budget);
  const before=await one('cancel',{fixture:cancelFixture,cancelBoundary:'before_write'});const after=await one('cancel',{fixture:cancelFixture,cancelBoundary:'after_write'});
+ assert.ok(before.cancelVerified&&after.cancelVerified);
  // Files remain evidence; live run uses a separate root.
  await save('fixture-summary.json',{passed:true,realSupplierCalls:0,cases:['error_return_continue_final','real_read','authorized_write_readback','HTTP_error_no_retry','deadline_no_next_call','budget_no_next_call','cancel_before_write','cancel_after_write'],recoveryCalls:recovery.stageCalls,before:before.cancelFileExists,after:after.cancelFileExists});console.log('FIXTURE_PASS');
 }
 (async()=>{
  await fs.mkdir(folder,{recursive:true});
+ if(mode==='fixture-cancel'){const fake=()=>fixtureResponse('',[rawTool('write_file',{relativePath:'cancelled.txt',content:'取消边界测试'})]);const before=await one('cancel',{fixture:fake,cancelBoundary:'before_write'});const after=await one('cancel',{fixture:fake,cancelBoundary:'after_write'});assert.ok(before.cancelVerified&&after.cancelVerified);await save('fixture-cancel-summary.json',{passed:true,realSupplierCalls:0,before,after});console.log('CANCEL_FIXTURE_PASS');return;}
  if(mode==='fixture'){await fixtures();return;}
- assert.ok(['compare','tools'].includes(mode));await initLive();
+ assert.ok(['compare','tools','cancel'].includes(mode));await initLive();
  const evidence=path.join(root,'live-'+mode+'.json');assert.equal(await fs.stat(evidence).then(()=>true,()=>false),false,'no rerun');
  let stages=[];
  if(mode==='compare'){stages.push(await one('compare'));}
+ else if(mode==='cancel'){
+  assert.equal(await fs.stat(path.join(root,'summary-cancel.json')).then(()=>true,()=>false),false,'no repeated cancellation window');
+  for(const boundary of ['before_write','after_write']){if(journal.length>=callLimit){stages.push({stage:'cancel',boundary,status:'not_run',reason:'supplier call budget exhausted'});break;}const result=await one('cancel',{cancelBoundary:boundary});stages.push(result);if(!result.cancelVerified)break;}
+ }
  else{
   const prior=JSON.parse(await fs.readFile(path.join(root,'live-compare.json')));assert.equal(prior.status,'completed','comparison failed; stop');
   for(const stage of ['files','cancel']){if(journal.length>=7){stages.push({stage,status:'not_run',reason:'supplier call budget exhausted'});break;}const result=await one(stage,stage==='cancel'?{cancelBoundary:'before_write'}:{});stages.push(result);if(stage!=='cancel'&&result.status!=='completed')break;}
