@@ -1,0 +1,43 @@
+{
+  "requests": [
+    {
+      "startedAt": "2026-10-06T04:38:34.331Z",
+      "requestId": "243d2165-4b32-4ca9-b45c-f5fc49b0b34f",
+      "stage": null,
+      "maxTokens": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 1302,
+      "usage": {
+        "inputTokens": 762,
+        "outputTokens": 453,
+        "totalTokens": 1215
+      },
+      "elapsedMs": 2077,
+      "truncated": false
+    },
+    {
+      "startedAt": "2026-10-06T04:38:36.463Z",
+      "requestId": "5840a357-264a-4daf-a2ca-73805714cd11",
+      "stage": null,
+      "maxTokens": null,
+      "httpStatus": 502,
+      "status": "PROVIDER_ERROR",
+      "finishReason": "length",
+      "outputLength": 0,
+      "usage": {
+        "inputTokens": 2941,
+        "outputTokens": 2048,
+        "totalTokens": 4989
+      },
+      "elapsedMs": 9592,
+      "truncated": true
+    }
+  ],
+  "blockedSearchCalls": 0,
+  "blockedOtherNetwork": 0,
+  "failed": true,
+  "budget": 24,
+  "previousRequests": 0
+}

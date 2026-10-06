@@ -1,0 +1,156 @@
+{
+  "kind": "historical candidates + real managed model + formal Electron downstream, stopped on truncation",
+  "productBaseline": "064509336db7e9d3f220c53161b9eae3ecbb6f4b",
+  "historicalCandidates": true,
+  "retrievedAt": null,
+  "searchCalls": 0,
+  "applicationRequests": 2,
+  "upstreamAttempts": 2,
+  "providerUsage": {
+    "inputTokens": 3703,
+    "outputTokens": 2501,
+    "totalTokens": 6204
+  },
+  "goal": {
+    "originalRequest": "近期少看剧，每天有一小时，希望学习 AI 产品落地。找两门可跟着动手做产品的具体课程，优先中文或有中文字幕，保留课程链接、课时和费用未知项。",
+    "request": "近期少看剧，每天有一小时，希望学习 AI 产品落地。找两门可跟着动手做产品的具体课程，优先中文或有中文字幕，保留课程链接、课时和费用未知项。",
+    "scope": "session",
+    "objects": [
+      {
+        "contentId": "snippet_0_https://coding.imooc.com/class/1036.html",
+        "title": "FDE必修-AI产品落地指南课",
+        "url": "https://coding.imooc.com/class/1036.html",
+        "source": "慕课网（历史候选）",
+        "publisherSubjectId": "historical_imooc",
+        "summary": "以\"AI客服质检助手\"为案例，带您从模糊需求出发，交付可沟通、可验证、可作品展示的MVP方案，掌握可复用的AI产品落地方法，让技术理解、产品思维与行业经验转化为新职业竞争力。本章介绍： 本章帮助学员建立对AI产品经理岗位的整体认知，厘清岗位定义、职责边界与分类，同时结合行业趋势，分析不同岗位（如技术、运营、传统产品）转型AI产品的路径与可行性，为后续学习打下职业方向基础。第1章 AI产品职业认知 5 节｜81分钟 视频： 1-1 课程介绍与安排 试看 15:20 视频： 1-2 FDE能力模型之AI产品经理的角色和职责 23:12 视频： 1-3 AI产品岗位分类与能力要求 试看 13:57 视频： 1-4 行业趋势分析 12:08 视频： 1-5 职业转型评估：各岗位如何转型成为AI产品经理 试看 15:48 本章介绍： 本章聚焦AI产品经理必须掌握的技术通识，涵盖AI核心技术概念（如机器学习、深度学习、大模型）、大模型的能力边界与风险，以及AI工程化..."
+      },
+      {
+        "contentId": "snippet_1_https://coding.imooc.com/class/chapter/1003.html",
+        "title": "AI大模型微调，从原理剖析到企业级落地实战",
+        "url": "https://coding.imooc.com/class/chapter/1003.html",
+        "source": "慕课网（历史候选）",
+        "publisherSubjectId": "historical_imooc",
+        "summary": "AI大模型微调，从原理剖析到企业级落地实战 10月特惠 截止至10月31日 449 原价￥499.00 已完结 难度 中级 时长 20小时 2分钟 学习人数 66 综合评分 10.00 1 1 章节目录 学习服务 售前咨询 1 用户评价 1 限时优惠￥449 截止至10月31日 ¥499.00 第1章 模型高效微调原理剖析 试看 13 节|139分钟 本模块聚焦大模型微调的底层原理，帮助学员建立完整的训练认知体系。课程将从“什么场景需要微调、什么场景适合 RAG”切入，深入解析预训练、全量微调、LoRA、QLoRA 等核心技术路线，并结合数据并行、模型并行、3D 并行等大规模训练架构进行讲解。通过本模块学习，学员不仅能理解微调为什么有效，更能掌握企业级大模型训. 收起列表 视频：1-1 课程介绍(06:35)试看 视频：1-2 高效微调原理之什么场景需要微调？(12:12)视频：1-3 高效微调原理之什么场景需要RAG？(10:03)视频：1-4 高效微调原理之微调和全量微调的区别(10:06)视频：1-5 ..."
+      }
+    ]
+  },
+  "executions": 0,
+  "artifacts": [],
+  "self": [
+    {
+      "id": "u_b1315c810a12d695",
+      "text": "用户近期希望减少看剧时间，把每天一小时用于学习 AI 产品落地。",
+      "facet": "goals",
+      "status": "needs_ask",
+      "confirmed": false,
+      "provenance": {
+        "origin": "user_statement",
+        "actor": "owner",
+        "statedAt": "2026-10-06T04:38:36.409Z",
+        "excerpt": "近期少看剧，每天有一小时，希望学习 AI 产品落地。"
+      },
+      "updatedAt": "2026-10-06T04:38:36.409Z"
+    },
+    {
+      "id": "u_412f9f711f8c2805",
+      "text": "用户偏好中文或带中文字幕的课程。",
+      "facet": "preferences",
+      "status": "current",
+      "confirmed": true,
+      "provenance": {
+        "origin": "user_statement",
+        "actor": "owner",
+        "statedAt": "2026-10-06T04:38:36.409Z",
+        "excerpt": "优先中文或有中文字幕"
+      },
+      "updatedAt": "2026-10-06T04:38:36.409Z"
+    },
+    {
+      "id": "u_f88c537d7c76e1b1",
+      "text": "用户希望课程能跟着动手做出产品，而不是纯理论。",
+      "facet": "preferences",
+      "status": "current",
+      "confirmed": true,
+      "provenance": {
+        "origin": "user_statement",
+        "actor": "owner",
+        "statedAt": "2026-10-06T04:38:36.409Z",
+        "excerpt": "找两门可跟着动手做产品的具体课程"
+      },
+      "updatedAt": "2026-10-06T04:38:36.409Z"
+    },
+    {
+      "id": "u_2d840a6270d45685",
+      "text": "用户要求保留课程链接、课时和费用等未核实项，不联网、不报名、不付费。",
+      "facet": "boundaries",
+      "status": "needs_ask",
+      "confirmed": false,
+      "provenance": {
+        "origin": "user_statement",
+        "actor": "owner",
+        "statedAt": "2026-10-06T04:38:36.409Z",
+        "excerpt": "保留来源链接，把历史材料与未核实项说清，不要联网、报名或付费。"
+      },
+      "updatedAt": "2026-10-06T04:38:36.409Z"
+    }
+  ],
+  "completed": [
+    "real selection UI",
+    "discover-to-Talk goal binding",
+    "one real Self understanding"
+  ],
+  "failed": "Talk comparison truncated",
+  "notExecuted": [
+    "plan",
+    "independent file read",
+    "weekday30/weekend60 correction",
+    "restart and reuse"
+  ],
+  "providerResults": [
+    {
+      "requestId": "243d2165-4b32-4ca9-b45c-f5fc49b0b34f",
+      "stage": "provider_result",
+      "attempt": 1,
+      "timeoutMs": 89999,
+      "maxTokens": 2048,
+      "thinking": "disabled",
+      "providerHttpStatus": 200,
+      "gatewayHttpStatus": 200,
+      "finishReason": "stop",
+      "outputLength": 1302,
+      "reasoningLength": 0,
+      "inputTokens": 762,
+      "outputTokens": 453,
+      "totalTokens": 1215,
+      "latencyMs": 1697
+    },
+    {
+      "requestId": "5840a357-264a-4daf-a2ca-73805714cd11",
+      "stage": "provider_result",
+      "attempt": 1,
+      "timeoutMs": 89999,
+      "maxTokens": 2048,
+      "thinking": "provider_default",
+      "providerHttpStatus": 200,
+      "gatewayHttpStatus": 502,
+      "finishReason": "length",
+      "outputLength": 0,
+      "reasoningLength": 7294,
+      "reasoningTokens": 2048,
+      "inputTokens": 2941,
+      "outputTokens": 2048,
+      "totalTokens": 4989,
+      "latencyMs": 9575
+    }
+  ],
+  "selfPreviousTest": {
+    "input": "隔离测试样本：这次学习计划改为每天30分钟，仅对当前目标生效。",
+    "durationMinutes": 30,
+    "scope": "current_goal",
+    "weekdayWeekendDifferenceTested": false
+  },
+  "formalUserDataAccess": false,
+  "gemini": false,
+  "modelConfigChanged": false,
+  "productCodeChanged": false
+}
