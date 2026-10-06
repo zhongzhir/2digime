@@ -119,6 +119,7 @@ const SET_EXPECTED_EFFECTS_TOOL: ChatToolDefinition = {
       properties: {
         effects: {
           type: 'array',
+          minItems: 1,
           items: {
             type: 'object',
             properties: {

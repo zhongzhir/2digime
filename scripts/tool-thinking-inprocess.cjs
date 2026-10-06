@@ -66,7 +66,7 @@ async function one(stage,{fixture,deadlineMs=90000,cancelBoundary,denyWrite=fals
 }
 async function fixtures(){
  const recovery=await one('recovery',{fixture:(input,n)=>{
-  if(n===1){const d=input.tools.find(t=>t.function.name==='set_expected_effects');assert.equal(d.function.parameters.properties.effects.minItems,undefined);return fixtureResponse('',[rawTool('set_expected_effects',{effects:[]},'empty')]);}
+  if(n===1){const d=input.tools.find(t=>t.function.name==='set_expected_effects');assert.equal(d.function.parameters.properties.effects.minItems,1);return fixtureResponse('',[rawTool('set_expected_effects',{effects:[]},'empty')]);}
   if(n===2){assert.ok(input.messages.some(m=>m.role==='tool'&&String(m.content).includes('effects 不能为空')));return fixtureResponse('',[rawTool('set_expected_effects',{effects:[{effect:'observation',expectedState:'已完成核验'}]},'corrected')]);}
   return fixtureResponse('已收到空参数错误，修正核验点后完成说明。');}});
  assert.equal(recovery.status,'completed');assert.deepEqual(recovery.events.filter(e=>e.capabilityId==='set_expected_effects').map(e=>e.ok),[false,true]);assert.equal(recovery.stageCalls,4);
