@@ -1,0 +1,64 @@
+{
+  "phase": "courses",
+  "startedAt": "2026-10-06T04:16:38.299Z",
+  "endedAt": "2026-10-06T04:16:40.854Z",
+  "elapsedMs": 2554,
+  "applicationRequests": 1,
+  "searchCalls": 0,
+  "requestId": "4a9e8f41-3dba-4523-bd25-aabaceda6676",
+  "responseMetadata": {
+    "httpStatus": 200,
+    "status": "AVAILABLE",
+    "finishReason": "stop",
+    "outputLength": 950,
+    "usage": {
+      "inputTokens": 2084,
+      "outputTokens": 459,
+      "totalTokens": 2543
+    },
+    "truncated": false
+  },
+  "diagnostic": {
+    "stage": "discover.judgment",
+    "requestId": "4a9e8f41-3dba-4523-bd25-aabaceda6676",
+    "httpStatus": 200,
+    "finishReason": "stop",
+    "outputLength": 950,
+    "parseError": null,
+    "cancellation": null,
+    "failure": null
+  },
+  "validation": {
+    "judged": 2,
+    "expected": 2,
+    "judgments": [
+      [
+        "snippet_0_https://coding.imooc.com/class/1036.html",
+        {
+          "role": "PRIMARY_CONTENT",
+          "medium": "video",
+          "basis": "以“AI客服质检助手”为案例，带学员从模糊需求出发交付可沟通、可验证、可作品展示的MVP方案，符合用户想跟着动手做AI产品落地的需求；课程为中文视频，但课时与费用材料未完整给出。",
+          "summary": "慕课网课程《FDE必修-AI产品落地指南课》，以“AI客服质检助手”为案例，从模糊需求出发交付可沟通、可验证、可作品展示的MVP方案，掌握可复用的AI产品落地方法。第1章为AI产品职业认知，共5节81分钟，含课程介绍、AI产品经理角色职责、岗位分类与能力要求、行业趋势分析、职业转型评估等视频内容。",
+          "conditions": "unconfirmed",
+          "entrance": "full",
+          "channel": "watch"
+        }
+      ],
+      [
+        "snippet_1_https://coding.imooc.com/class/chapter/1003.html",
+        {
+          "role": "PRIMARY_CONTENT",
+          "medium": "video",
+          "basis": "课程聚焦AI大模型微调从原理到企业级落地实战，包含模型高效微调原理、LoRA、QLoRA等技术路线，属于可跟着动手做的AI落地课程；中文视频，时长20小时2分钟，费用449元（限时优惠），但用户要求的“AI产品落地”方向与课程偏技术微调的定位是否完全匹配尚需确认。",
+          "summary": "慕课网课程《AI大模型微调，从原理剖析到企业级落地实战》，已完结，难度中级，时长20小时2分钟，学习人数66，综合评分10.00。第1章为模型高效微调原理剖析，共13节139分钟，讲解什么场景需要微调、什么场景适合RAG，以及预训练、全量微调、LoRA、QLoRA等核心技术路线，并结合数据并行、模型并行、3D并行等大规模训练架构。限时优惠价449元，原价499元。",
+          "conditions": "unconfirmed",
+          "entrance": "full",
+          "channel": "watch"
+        }
+      ]
+    ],
+    "historicalCandidates": true,
+    "retrievedAt": null
+  },
+  "success": true
+}

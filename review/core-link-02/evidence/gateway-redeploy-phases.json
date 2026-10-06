@@ -1,0 +1,21 @@
+{
+  "source": "Workbench terminal operations JSONL and journal",
+  "productPatch": "23da0db8ad97c4582cb6b636418ccb280fb4b63c",
+  "status": "deployed_and_healthy",
+  "scriptStartEpochMs": 1791260192428,
+  "scriptElapsedMs": 248,
+  "phaseElapsedMs": {"baselineBegin":7,"baselineEnd":11,"candidateBegin":13,"candidateEnd":20,"backupComplete":26,"copyEnvironmentComplete":69,"restartBegin":71,"restartEnd":97,"readinessBegin":106,"readinessEnd":245,"scriptEnd":248},
+  "readiness": {"elapsedMs":36,"attempts":1,"port":8787,"healthOk":true},
+  "restartToHealthObservationMs":174,
+  "backup":"/opt/digitalme-review-gateway-20261006/backup-20261006T041632-796292",
+  "environmentPermissions":"0600 root:root",
+  "applicationRequests":2,
+  "upstreamAttempts":2,
+  "searchCalls":0,
+  "providerResults":[
+    {"requestId":"4a9e8f41-3dba-4523-bd25-aabaceda6676","attempt":1,"timeoutMs":89997,"maxTokens":2048,"configuredModel":"deepseek-v4-flash","returnedModel":"deepseek-flash","thinking":"disabled","providerHttpStatus":200,"finishReason":"stop","outputLength":950,"reasoningLength":0,"usageSource":"provider","inputTokens":2084,"outputTokens":459,"totalTokens":2543,"latencyMs":2373},
+    {"requestId":"d9039900-0a3d-40de-a166-c2e0eeadbff9","attempt":1,"timeoutMs":89999,"maxTokens":500,"configuredModel":"deepseek-v4-flash","returnedModel":"deepseek-flash","thinking":"disabled","providerHttpStatus":200,"finishReason":"stop","outputLength":45,"reasoningLength":0,"usageSource":"provider","inputTokens":82,"outputTokens":12,"totalTokens":94,"latencyMs":500}
+  ],
+  "providerStopConfirmed":false,
+  "cancellationTestedThisDeployment":false
+}

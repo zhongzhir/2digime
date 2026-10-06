@@ -19,7 +19,9 @@ def run(sources):
                 source=source.replace('app=/opt/digitalme-v2',f'app={app}').replace('stage=/opt/digitalme-review-gateway-20261006',f'stage={stage}')
                 source=source.replace('/etc/digitalme-relay.env',str(env)).replace('/etc/.digitalme-relay.rollback.env',str(root/'rollback.env'))
                 source=source.replace("dir='/etc'",f"dir='{root}'")
+                if name=='GATEWAY-OPERATIONS.sh':source=source.replace('python3 "$stage/gateway-ready.py"','curl --fail --silent http://fixture/health')
                 (stage/name).write_text(source)
+            (stage/'operations-files.sha256').write_text(''.join(hashlib.sha256((stage/n).read_bytes()).hexdigest()+'  '+n+'\n' for n in sources))
             marker=root/'failed-once';calls=root/'calls'
             wrapper='''#!/usr/bin/env bash
 set -eu
@@ -43,11 +45,12 @@ case "$name" in systemctl|curl) exit 0;; *) exec "$REAL_BIN/$name" "$@";; esac
             if fault=='none':
                 assert p.returncode==0,p.stderr
                 assert 'MANAGED_AI_STRUCTURED_THINKING=disabled' in env.read_text()
-                p=subprocess.run(['bash',str(stage/'ROLLBACK-AFTER-APPROVAL.sh')],env=variables,capture_output=True,text=True)
+                backup=next(stage.glob('backup-*'))
+                p=subprocess.run(['bash',str(stage/'ROLLBACK-AFTER-APPROVAL.sh'),str(backup)],env=variables,capture_output=True,text=True)
                 assert p.returncode==0,p.stderr
             else:assert p.returncode!=0,fault
             if fault!='baseline':assert all((app/f).read_text()==v for f,v in old.items()),fault
-            else:assert not (stage/'backup').exists() and not calls.exists(),fault
+            else:assert not list(stage.glob('backup-*')) and not calls.exists(),fault
             after=env.stat()
             assert env.read_text()=='ORIGINAL=fixture\n',fault
             assert (after.st_mode & 0o777,after.st_uid,after.st_gid)==(before.st_mode & 0o777,before.st_uid,before.st_gid),fault
@@ -56,7 +59,7 @@ case "$name" in systemctl|curl) exit 0;; *) exec "$REAL_BIN/$name" "$@";; esac
 
 if __name__=='__main__':
     base=pathlib.Path(__file__).resolve().parents[1]/'review/core-link-02'
-    sources={n:(base/n).read_text() for n in ('DEPLOY-AFTER-APPROVAL.sh','ROLLBACK-AFTER-APPROVAL.sh')}
+    sources={n:(base/n).read_text() for n in ('DEPLOY-AFTER-APPROVAL.sh','ROLLBACK-AFTER-APPROVAL.sh','GATEWAY-OPERATIONS.sh','gateway-ready.py')}
     if '--emit-runner' in sys.argv or '--emit-command' in sys.argv:
         code=pathlib.Path(__file__).read_text().split("if __name__==")[0]+'\nprint(json.dumps(run('+repr(sources)+')))\n'
         (base/'evidence/gateway-fixture-runner.py').write_text(code)

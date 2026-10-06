@@ -3,31 +3,36 @@
 set -Eeuo pipefail
 app=/opt/digitalme-v2
 stage=/opt/digitalme-review-gateway-20261006
-backup="$stage/backup"
+operation=deploy
+source "$stage/GATEWAY-OPERATIONS.sh"
+backup="$stage/backup-$(date -u +%Y%m%dT%H%M%S)-$$"
 mutation_started=0
 rollback_on_exit() {
   local rc=$?
   trap - EXIT ERR INT TERM
   if (( rc != 0 && mutation_started == 1 )); then
     printf '%s\n' 'Deployment failed; restoring backup.' >&2
-    if bash "$stage/ROLLBACK-AFTER-APPROVAL.sh"; then
+    if GATEWAY_OPERATION_LOG="$operation_log" bash "$stage/ROLLBACK-AFTER-APPROVAL.sh" "$backup"; then
       printf '%s\n' 'Rollback completed.' >&2
     else
       printf '%s\n' 'ROLLBACK FAILED: manual recovery required; backup retained.' >&2
     fi
   fi
+  log_phase script.end "$rc"
   exit "$rc"
 }
 trap rollback_on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 cd "$app"
-sha256sum --check "$stage/deployed-before.sha256"
-(cd "$stage" && sha256sum --check candidate.sha256)
+run_phase baseline sha256sum --check "$stage/deployed-before.sha256"
+run_phase candidate bash -c 'cd "$1" && sha256sum --check candidate.sha256 && sha256sum --check operations-files.sha256' _ "$stage"
 test ! -e "$backup"
 install -d -m 700 "$backup"
 cp -a --parents dist/relay-service/server.js dist/relay-service/ai-inference-gateway.js dist/infrastructure/model-http.js "$backup/"
 cp -a /etc/digitalme-relay.env "$backup/relay.env"
+printf 'BACKUP=%s\n' "$backup"
+log_phase backup.complete
 mutation_started=1
 install -m 644 "$stage/dist/relay-service/server.js" dist/relay-service/server.js
 install -m 644 "$stage/dist/relay-service/ai-inference-gateway.js" dist/relay-service/ai-inference-gateway.js
@@ -47,6 +52,6 @@ os.chown(name,original.st_uid,original.st_gid)
 os.chmod(name,stat.S_IMODE(original.st_mode))
 os.replace(name,p)
 PY
-systemctl restart digitalme-relay.service
-systemctl is-active --quiet digitalme-relay.service
-curl --fail --silent http://127.0.0.1:8787/health
+log_phase copy_and_environment.complete
+run_phase restart systemctl restart digitalme-relay.service
+run_phase readiness check_ready
