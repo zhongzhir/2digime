@@ -1,0 +1,19 @@
+{
+  "fixtureOnly": true,
+  "realServiceCommands": 0,
+  "searchCalls": 0,
+  "tests": [
+    {
+      "fault": "validation",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "interruption",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    }
+  ]
+}

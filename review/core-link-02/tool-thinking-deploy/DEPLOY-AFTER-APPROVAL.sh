@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# REVIEW ONLY. Do not run until Owner authorizes deployment AND structured thinking setting.
+# Owner approved d974a9e; includes validation in the rollback scope.
 set -Eeuo pipefail
 app=/opt/digitalme-v2
 stage=/opt/digitalme-review-tool-thinking-20261006
@@ -54,3 +54,4 @@ PY
 log_phase copy_and_environment.complete
 run_phase restart systemctl restart digitalme-relay.service
 run_phase readiness check_ready
+run_phase validation env NODE_PATH=/opt/digitalme-v2/node_modules node "$stage/validate.cjs"

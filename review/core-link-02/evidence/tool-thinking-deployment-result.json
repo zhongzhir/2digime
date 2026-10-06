@@ -1,0 +1,264 @@
+{
+  "deployment": "deployed",
+  "validation": {
+    "success": true,
+    "results": [
+      {
+        "phase": "historical_comparison",
+        "success": true,
+        "text": "我先比较这两门材料的实际内容，再给结论。\n\n**先说清楚这两条的来源性质**：两条都来自慕课网（coding.imooc.com），标注为\"历史候选\"，是从发现里带进来的候选对象，摘要本身是页面片段的摘录，不是我已经核实过的课程定论。下面所有\"有什么内容\"只以给出的片段为据，课时、价格等保持不变——**未核实项一律按未知保留**。\n\n## 对照\n\n| | FDE必修-AI产品落地指南课 | AI大模型微调，从原理剖析到企业级落地实战 |\n|---|---|---|\n| 链接 | https://coding.imooc.com/class/1036.html | https://coding.imooc.com/class/chapter/1003.html |\n| 定位 | AI 产品岗认知 + 技术通识，以\"AI客服质检助手\"为案例做 MVP | 微调原理到企业级落地 |\n| 片段可见内容 | 第1章职业认知：岗位定义、分类、行业趋势、转型路径（5节｜81分钟）；第2章技术通识：机器学习/深度学习/大模型的概念与能力边界、工程化 | 第1章微调原理：什么场景需要微调、什么场景适合RAG、预训练与全量微调、LoRA/QLoRA、数据并行/模型并行/3D并行；后续章节片段未给出 |\n| 动手产出 | 片段提到交付\"可沟通、可验证、可作品展示的 MVP 方案\"，即以作品为目标 | 片段以原理剖析和训练路线讲解为主，是否含可交付作品片段未体现 |\n| 语言 | 中文（慕课网中文站） | 中文 |\n| 价格 | 片段未给出——**未核实** | 片段显示\"限时优惠￥449，原价￥499，截止10月31日\"——该价格时效性无法确认，**按未核实处理，我不据此做判断** |\n| 课时 | 片段只给了第1章 81 分钟，总课时未知 | 片段显示\"20小时2分钟\" |\n| 难度 | 片段未标注 | 中级 |\n\n## 建议：先学第一门（AI产品落地指南课）\n\n理由基于你的原需求——**每天一小时、要能跟着动手做出产品、中文**：\n\n1. **产出方向对着你的目标**。你的需求是\"AI 产品落地\"而不是\"模型训练\"，第一门的案例路径是模糊需求 → 可验证 MVP → 可展示作品，正好是每天一小时能往前推一格、且能攒出作品的结构。第二门的落点在训练侧，产出更偏\"模型/训练流程能跑通\"，是产品落地里偏工程的一段。\n2. **入口门槛更低**。第一门从岗位认知和技术通识起步，第二门标注中级、直接进微调原理与并行架构。每天一小时的节奏下，先建立起场景判断（什么时候该微调、什么时候该 RAG）再去学微调，顺序更顺，也更容易在早期就有可展示的东西。\n3. **第二门更适合当第二步**。等你在第一门里做到\"需要调模型能力\"的环节，第二门里的场景判断题（微调 vs. RAG、LoRA/QLoRA）就成了直接可用的下一个台阶。所以不是不学它，是排在后面。\n\n**保留的未知**：第一门总课时与费用、第二门后续章节是否有动手交付、两条课程当前是否仍可报名、价格是否仍如片段所示——都没有核验，我不做推断。\n\n**边界说明**：按你的要求，我没有联网、没有报名、没有付费，也没有改动你所选对象之外的目标。\n\n如果你希望我把这份对照整理成一个文件放到电脑上，告诉我放哪儿，我再申请一次该目录的访问权限。",
+        "elapsedMs": 5169
+      },
+      {
+        "phase": "isolated_self",
+        "success": true,
+        "parsed": {
+          "weekdayMinutes": 30,
+          "weekendMinutes": 60,
+          "scope": "current_goal"
+        },
+        "elapsedMs": 674,
+        "formalSubjectRead": false,
+        "formalSubjectWritten": false
+      }
+    ],
+    "applicationRequests": 2,
+    "maxApplicationRequests": 6,
+    "maxUpstreamAttempts": 18,
+    "searchCalls": 0,
+    "rows": [
+      {
+        "requestId": "b448f6a8-7387-477c-9b9d-75fcb09ed2b2",
+        "startedAt": "2026-10-06T09:30:06.418Z",
+        "toolCount": 3,
+        "elapsedMs": 5160,
+        "httpStatus": 200,
+        "status": "AVAILABLE",
+        "finishReason": "stop",
+        "outputLength": 1402,
+        "toolCallCount": 0,
+        "usage": {
+          "inputTokens": 2394,
+          "outputTokens": 810,
+          "totalTokens": 3204
+        }
+      },
+      {
+        "requestId": "fbc35aea-edc0-49db-a058-57846107b8da",
+        "startedAt": "2026-10-06T09:30:11.586Z",
+        "toolCount": 0,
+        "elapsedMs": 674,
+        "httpStatus": 200,
+        "status": "AVAILABLE",
+        "finishReason": "stop",
+        "outputLength": 64,
+        "toolCallCount": 0,
+        "usage": {
+          "inputTokens": 84,
+          "outputTokens": 19,
+          "totalTokens": 103
+        }
+      }
+    ]
+  },
+  "providerAttempts": 2,
+  "providerLogs": [
+    {
+      "ts": "2026-10-06T09:30:06.462Z",
+      "event": "ai_inference",
+      "requestId": "b448f6a8-7387-477c-9b9d-75fcb09ed2b2",
+      "stage": "provider_start",
+      "attempt": 1,
+      "timeoutMs": 89992,
+      "maxTokens": 2048,
+      "model": "deepseek-v4-flash",
+      "thinking": "disabled"
+    },
+    {
+      "ts": "2026-10-06T09:30:11.570Z",
+      "event": "ai_inference",
+      "requestId": "b448f6a8-7387-477c-9b9d-75fcb09ed2b2",
+      "stage": "provider_result",
+      "status": "AVAILABLE",
+      "gatewayHttpStatus": 200,
+      "providerHttpStatus": 200,
+      "providerResponseId": "a159aea5-cb5b-4676-afa9-0b8b9ea35c5e",
+      "returnedModel": "deepseek-flash",
+      "reasoningLength": 0,
+      "finishReason": "stop",
+      "outputLength": 1402,
+      "usageSource": "provider",
+      "principal": "2923e2e5e05235b7c45d325fafe27f0e",
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "inputTokens": 2394,
+      "outputTokens": 810,
+      "totalTokens": 3204,
+      "remaining": 4996796,
+      "latencyMs": 5116
+    },
+    {
+      "ts": "2026-10-06T09:30:11.590Z",
+      "event": "ai_inference",
+      "requestId": "fbc35aea-edc0-49db-a058-57846107b8da",
+      "stage": "provider_start",
+      "attempt": 1,
+      "timeoutMs": 89999,
+      "maxTokens": 2048,
+      "model": "deepseek-v4-flash",
+      "thinking": "disabled"
+    },
+    {
+      "ts": "2026-10-06T09:30:12.258Z",
+      "event": "ai_inference",
+      "requestId": "fbc35aea-edc0-49db-a058-57846107b8da",
+      "stage": "provider_result",
+      "status": "AVAILABLE",
+      "gatewayHttpStatus": 200,
+      "providerHttpStatus": 200,
+      "providerResponseId": "2ed93b9a-4021-4909-bd66-bfdd09390359",
+      "returnedModel": "deepseek-flash",
+      "reasoningLength": 0,
+      "finishReason": "stop",
+      "outputLength": 64,
+      "usageSource": "provider",
+      "principal": "2923e2e5e05235b7c45d325fafe27f0e",
+      "provider": "deepseek",
+      "model": "deepseek-v4-flash",
+      "inputTokens": 84,
+      "outputTokens": 19,
+      "totalTokens": 103,
+      "remaining": 4996693,
+      "latencyMs": 669
+    }
+  ],
+  "usage": {
+    "inputTokens": 2478,
+    "outputTokens": 829,
+    "totalTokens": 3307
+  },
+  "hashes": {
+    "dist/relay-service/server.js": "60c388dd132efda41ff0d9b8c0c1d4448609687752108a8694d995c7505548fb",
+    "dist/relay-service/ai-inference-gateway.js": "96926134e97553f831c29f1987deb673258a5dd418171f38424545c16a778599",
+    "dist/infrastructure/model-http.js": "aa57a97fdaf47ca1db87f2b06784a5bda51826a1aefc5a97c8d04c563f0c77b1"
+  },
+  "environment": {
+    "mode": "0o600",
+    "uid": 0,
+    "gid": 0,
+    "toolSetting": "MANAGED_AI_TOOL_THINKING=disabled"
+  },
+  "phases": [
+    {
+      "operation": "deploy",
+      "phase": "script.begin",
+      "epochMs": 1791279006091,
+      "elapsedMs": 2,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "baseline.begin",
+      "epochMs": 1791279006095,
+      "elapsedMs": 6,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "baseline.end",
+      "epochMs": 1791279006099,
+      "elapsedMs": 10,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "candidate.begin",
+      "epochMs": 1791279006102,
+      "elapsedMs": 13,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "candidate.end",
+      "epochMs": 1791279006109,
+      "elapsedMs": 20,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "backup.complete",
+      "epochMs": 1791279006115,
+      "elapsedMs": 26,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "copy_and_environment.complete",
+      "epochMs": 1791279006155,
+      "elapsedMs": 66,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "restart.begin",
+      "epochMs": 1791279006158,
+      "elapsedMs": 69,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "restart.end",
+      "epochMs": 1791279006195,
+      "elapsedMs": 106,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "readiness.begin",
+      "epochMs": 1791279006199,
+      "elapsedMs": 110,
+      "rc": 0
+    },
+    {
+      "event": "ready",
+      "elapsedMs": 42,
+      "attempts": 1
+    },
+    {
+      "operation": "deploy",
+      "phase": "readiness.end",
+      "epochMs": 1791279006343,
+      "elapsedMs": 254,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "validation.begin",
+      "epochMs": 1791279006346,
+      "elapsedMs": 257,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "validation.end",
+      "epochMs": 1791279012268,
+      "elapsedMs": 6179,
+      "rc": 0
+    },
+    {
+      "operation": "deploy",
+      "phase": "script.end",
+      "epochMs": 1791279012271,
+      "elapsedMs": 6182,
+      "rc": 0
+    }
+  ],
+  "preflight": {
+    "idleAt": 1791278976.5579534,
+    "unresolvedProviderRequests": 0,
+    "establishedPort8787": false,
+    "environmentMode": "0o600",
+    "environmentUid": 0,
+    "environmentGid": 0
+  }
+}
