@@ -1,0 +1,49 @@
+{
+  "fixtureOnly": true,
+  "realServiceCommands": 0,
+  "searchCalls": 0,
+  "tests": [
+    {
+      "fault": "copy1",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "copy2",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "environment",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "restart",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "health",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "baseline",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    },
+    {
+      "fault": "none",
+      "passed": true,
+      "environmentMode": "0640",
+      "ownerPreserved": true
+    }
+  ]
+}

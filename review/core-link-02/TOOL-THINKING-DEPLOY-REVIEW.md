@@ -8,7 +8,7 @@
 - server.js: 60c388dd132efda41ff0d9b8c0c1d4448609687752108a8694d995c7505548fb
 - ai-inference-gateway.js: 96926134e97553f831c29f1987deb673258a5dd418171f38424545c16a778599
 
-部署目录为/opt/digitalme-review-tool-thinking-20261006。不得复用旧暂存目录或旧备份。批准前不上传执行、不重启。部署时重新核对deployed-before.sha256的三项线上基线及candidate/operations清单；不一致停止。就绪与回滚复用已验证的10秒端口+/health机制，备份完整环境权限属主，失败自动回滚。此次只替换2文件，model-http.js仅备份核对不替换。脚本差异是目录、工具开关和删除第三文件替换；改后脚本的Linux故障回归尚待完成，不能据此启动部署。
+部署目录为/opt/digitalme-review-tool-thinking-20261006。不得复用旧暂存目录或旧备份。批准前不上传执行、不重启。部署时重新核对deployed-before.sha256的三项线上基线及candidate/operations清单；不一致停止。就绪与回滚复用已验证的10秒端口+/health机制，备份完整环境权限属主，失败自动回滚。此次只替换2文件，model-http.js仅备份核对不替换。脚本差异是目录、工具开关和删除第三文件替换；改后脚本Linux故障回归7项全部通过，证据见evidence/tool-thinking-deploy-fixtures.json；使用模拟systemctl与health，不触碰真实服务。原就绪助手未改，延迟监听、退出、持续健康失败与回滚延迟启动沿用0645093已验证范围，不重复执行。仍须Owner复审才能启动部署。
 
 复审拟授权范围：完成脚本故障回归后空闲窗口执行如下命令，模型验证任一失败立即停止并运行本次备份回滚，不能把HTTP200当成功：
 ```bash
