@@ -1,0 +1,48 @@
+{
+  "kind": "single real managed judgment; historical candidates; no search",
+  "startedAt": "2026-10-06T01:27:46.238Z",
+  "clientRequests": 1,
+  "searchCalls": 0,
+  "wire": {
+    "maxTokens": 2048,
+    "temperature": 0,
+    "responseFormat": {
+      "type": "json_object"
+    },
+    "thinkingSent": false,
+    "modelSent": null
+  },
+  "responseMetadata": {
+    "httpStatus": 200,
+    "status": "AVAILABLE",
+    "usage": {
+      "inputTokens": 1023,
+      "outputTokens": 0,
+      "totalTokens": 1023
+    },
+    "finishReason": "length",
+    "outputLength": 0,
+    "truncated": true
+  },
+  "result": {
+    "diagnostic": {
+      "stage": "discover.judgment",
+      "requestId": "8d5dc888-170f-4771-b3f4-ded5a89d7406",
+      "httpStatus": 200,
+      "finishReason": "length",
+      "outputLength": 0,
+      "parseError": null,
+      "cancellation": null,
+      "failure": "truncated"
+    },
+    "usage": {
+      "inputTokens": 1023,
+      "outputTokens": 0,
+      "totalTokens": 1023
+    },
+    "judged": 0,
+    "status": "TRUNCATED_FAILURE"
+  },
+  "retainedCandidates": 2,
+  "retrievedAt": null
+}

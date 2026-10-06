@@ -1,0 +1,169 @@
+diff --git a/src/infrastructure/model-http.ts b/src/infrastructure/model-http.ts
+index 66ab694..130d7a2 100644
+--- a/src/infrastructure/model-http.ts
++++ b/src/infrastructure/model-http.ts
+@@ -84,0 +85,2 @@ export interface ChatCompleteResult {
++  /** Provider transport metadata only; never includes reasoning or response bodies. */
++  providerMeta?: { httpStatus: number; responseId?: string; model?: string; reasoningLength: number; reasoningTokens?: number };
+@@ -125 +127,4 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
+-  const body = JSON.parse(await requestCompletion(options, false)) as {
++  const response = await requestCompletion(options, false);
++  const body = JSON.parse(response.text) as {
++    model?: string;
++    id?: string;
+@@ -137,0 +143 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
++      completion_tokens_details?: { reasoning_tokens?: number };
+@@ -149,0 +156,6 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
++  const usage = parseChatUsage(body.usage);
++  const reasoningTokens = body.usage?.completion_tokens_details?.reasoning_tokens;
++  const providerMeta = { httpStatus: response.httpStatus, reasoningLength: typeof message?.reasoning_content === 'string' ? message.reasoning_content.length : 0,
++    ...(typeof body.id === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(body.id) ? { responseId: body.id } : {}),
++    ...(typeof body.model === 'string' && /^[A-Za-z0-9._/-]{1,80}$/.test(body.model) ? { model: body.model } : {}),
++    ...(typeof reasoningTokens === 'number' && Number.isFinite(reasoningTokens) ? { reasoningTokens } : {}) };
+@@ -156,0 +169,2 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
++        ...(usage ? { usage } : {}),
++        providerMeta,
+@@ -165,0 +180 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
++    providerMeta,
+@@ -170 +184,0 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
+-  const usage = parseChatUsage(body.usage);
+@@ -182 +196 @@ export async function chatCompleteStream(
+-  for (const line of raw.split('\n')) {
++  for (const line of raw.text.split('\n')) {
+@@ -219 +233 @@ export async function chatCompleteStream(
+-async function requestCompletion(options: ChatCompleteOptions, stream: boolean): Promise<string> {
++async function requestCompletion(options: ChatCompleteOptions, stream: boolean): Promise<{ text: string; httpStatus: number }> {
+@@ -264 +278 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
+-      return await response.text();
++      return { text: await response.text(), httpStatus: response.status };
+diff --git a/src/relay-service/ai-inference-gateway.ts b/src/relay-service/ai-inference-gateway.ts
+index 7f6972a..620208e 100644
+--- a/src/relay-service/ai-inference-gateway.ts
++++ b/src/relay-service/ai-inference-gateway.ts
+@@ -0,0 +1 @@
++import { randomUUID } from 'node:crypto';
+@@ -80,0 +82 @@ export interface ManagedAiGatewayOptions {
++  structuredThinking?: ChatCompleteOptions['thinking'];
+@@ -362,0 +365,3 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
++    const rawId = String(input.requestId || (input.body as { idempotencyKey?: string })?.idempotencyKey || '');
++    const correlationId = /^[A-Za-z0-9._:-]{1,128}$/.test(rawId) ? rawId : randomUUID();
++    const requestLog = (event: string, fields: Record<string, string | number | boolean | undefined>) => log(event, { requestId: correlationId, stage: 'gateway', ...fields });
+@@ -368 +373 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-      log('ai_inference', { status: 'TEMPORARY_UNAVAILABLE', reason: 'provider_unconfigured' });
++      requestLog('ai_inference', { status: 'TEMPORARY_UNAVAILABLE', reason: 'provider_unconfigured' });
+@@ -378,0 +384 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
++      requestLog('ai_inference', { status, stage: 'validation', reason: 'payload_rejected', httpStatus: httpStatusOf(status) });
+@@ -389 +395 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-          statusCode: 200,
++          statusCode: cached.result.truncated || cached.result.finishReason === 'length' ? 502 : 200,
+@@ -391,2 +397,3 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-            ok: true,
+-            status: 'AVAILABLE',
++            ok: !(cached.result.truncated || cached.result.finishReason === 'length'),
++            status: cached.result.truncated || cached.result.finishReason === 'length' ? 'PROVIDER_ERROR' : 'AVAILABLE',
++            ...(cached.result.truncated || cached.result.finishReason === 'length' ? { error: 'truncated' } : {}),
+@@ -424 +431 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-      log('ai_inference', {
++      requestLog('ai_inference', {
+@@ -454 +461 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-        log('ai_inference', { status: 'CONCURRENCY_BUSY', principal: principalId, inFlight, limitType: 'concurrency' });
++        requestLog('ai_inference', { status: 'CONCURRENCY_BUSY', principal: principalId, inFlight, limitType: 'concurrency' });
+@@ -460,0 +468,14 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
++      const thinking = parsed.responseFormat?.type === 'json_object' && !parsed.tools?.length ? options.structuredThinking : undefined;
++      const deadlineAt = started + timeoutMs;
++      const requestAbort = new AbortController();
++      const onCallerAbort = () => requestAbort.abort('caller');
++      if (input.signal?.aborted) onCallerAbort();
++      else input.signal?.addEventListener('abort', onCallerAbort, { once: true });
++      const deadlineTimer = setTimeout(() => requestAbort.abort('deadline'), Math.max(0, deadlineAt - now()));
++      const checkRequest = () => {
++        if (now() >= deadlineAt || requestAbort.signal.reason === 'deadline') {
++          requestAbort.abort('deadline');
++          throw new ModelHttpError('timeout', 'request deadline');
++        }
++        if (requestAbort.signal.aborted) throw new ModelHttpError('aborted', 'request aborted by caller');
++      };
+@@ -469 +490 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-        log('ai_inference', {
++        requestLog('ai_inference', {
+@@ -489 +510 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-        log('ai_inference', {
++        requestLog('ai_inference', {
+@@ -512,3 +533 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-            if (input.signal?.aborted) {
+-              throw new ModelHttpError('aborted', 'request aborted by caller');
+-            }
++            checkRequest();
+@@ -516 +535,2 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-              return await complete({
++              requestLog('ai_inference', { stage: 'provider_start', attempt: attempt + 1, timeoutMs: deadlineAt - now(), maxTokens: parsed.maxTokens, model: provider.model, thinking: thinking?.type || 'provider_default' });
++              const completed = await complete({
+@@ -522,2 +542,3 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-                timeoutMs,
+-                ...(input.signal ? { signal: input.signal } : {}),
++                timeoutMs: Math.max(1, deadlineAt - now()),
++                signal: requestAbort.signal,
++                ...(thinking ? { thinking } : {}),
+@@ -528,0 +550,2 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
++              checkRequest();
++              return completed;
+@@ -535 +558 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-              log('ai_inference', {
++              requestLog('ai_inference', {
+@@ -541 +564,3 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-              await sleep(retryBackoffMs * 4 ** attempt, input.signal);
++              checkRequest();
++              await sleep(Math.min(retryBackoffMs * 4 ** attempt, Math.max(0, deadlineAt - now())), requestAbort.signal);
++              checkRequest();
+@@ -548 +573 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-        log('ai_inference', {
++        requestLog('ai_inference', {
+@@ -552,0 +578,6 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
++          stage: 'provider_failure',
++          gatewayHttpStatus: httpStatusOf(mapped.status),
++          providerHttpStatus: err instanceof ModelHttpError ? err.status : undefined,
++          cancellation: requestAbort.signal.aborted ? String(requestAbort.signal.reason) : mapped.message === 'timeout' ? 'deadline' : undefined,
++          cancelSent: requestAbort.signal.aborted,
++          supplierStopConfirmed: false,
+@@ -577,2 +608,14 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-      log('ai_inference', {
+-        status: 'AVAILABLE',
++      const truncated = !!result.truncated || result.finishReason === 'length';
++      requestLog('ai_inference', {
++        status: truncated ? 'PROVIDER_ERROR' : 'AVAILABLE',
++        stage: 'provider_result',
++        gatewayHttpStatus: truncated ? 502 : 200,
++        providerHttpStatus: result.providerMeta?.httpStatus,
++        providerResponseId: result.providerMeta?.responseId,
++        returnedModel: result.providerMeta?.model,
++        reasoningLength: result.providerMeta?.reasoningLength,
++        reasoningTokens: result.providerMeta?.reasoningTokens,
++        reason: truncated ? 'truncated' : undefined,
++        finishReason: /^[a-z_]{1,40}$/.test(result.finishReason || '') ? result.finishReason : undefined,
++        outputLength: result.text.length,
++        usageSource: result.usage ? 'provider' : 'estimated',
+@@ -589 +632 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-        statusCode: 200,
++        statusCode: truncated ? 502 : 200,
+@@ -591,2 +634,3 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
+-          ok: true,
+-          status: 'AVAILABLE',
++          ok: !truncated,
++          status: truncated ? 'PROVIDER_ERROR' : 'AVAILABLE',
++          ...(truncated ? { error: 'truncated' } : {}),
+@@ -602,0 +647,2 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
++        clearTimeout(deadlineTimer);
++        input.signal?.removeEventListener('abort', onCallerAbort);
+diff --git a/src/relay-service/server.ts b/src/relay-service/server.ts
+index b133bdf..d297449 100644
+--- a/src/relay-service/server.ts
++++ b/src/relay-service/server.ts
+@@ -255,0 +256 @@ export function resolveManagedAiGateway(
++    ...(env.MANAGED_AI_STRUCTURED_THINKING === 'disabled' ? { structuredThinking: { type: 'disabled' as const } } : {}),
+@@ -411,0 +413 @@ export function createRelayServer(options: {
++        res.once('close', abortIfClientGone);
+@@ -419 +421 @@ export function createRelayServer(options: {
+-          if (!res.headersSent) sendJson(res, result.statusCode, result.body);
++          if (!res.headersSent && !res.destroyed && !ac.signal.aborted) sendJson(res, result.statusCode, result.body);
+@@ -421,0 +424 @@ export function createRelayServer(options: {
++          res.off('close', abortIfClientGone);

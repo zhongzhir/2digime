@@ -1,0 +1,21 @@
+{
+  "kind": "read-only process config and deployed source inspected using ECS Workbench",
+  "checkedCST": "2026-10-06 09:30",
+  "provider": "deepseek",
+  "configuredModel": "deepseek-v4-flash",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "effectiveMaxTokens": 2048,
+  "effectiveTimeoutMs": 90000,
+  "thinkingSent": false,
+  "providerDefaultThinking": "enabled per official docs, response reasoning not captured in historical run",
+  "maxProviderRetries": 2,
+  "cwd": "/opt/digitalme-v2",
+  "node": "/usr/bin/node",
+  "port": 8787,
+  "usageWarning": "Empty truncated parser drops provider usage; gateway 1023/0/1023 is estimated, not provider usage.",
+  "deployedHashes": {
+    "dist/relay-service/server.js": "2d27807971a80fa3e7934dd1bd7672f5e60c679f4570308c3083c1c31063ade8",
+    "dist/relay-service/ai-inference-gateway.js": "45824ee067a696c8210cb89bc8b093d5beb4528807278ba52276d4170f06a161",
+    "dist/infrastructure/model-http.js": "42329bc86731ae2f68b8c17931599a92ac1d3bb079e9fe2859f1c1d70fa82fff"
+  }
+}

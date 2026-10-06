@@ -253,6 +253,7 @@ export function resolveManagedAiGateway(
     maxInputChars: Number.isFinite(maxInputChars) ? maxInputChars : 100_000,
     concurrency: Number.isFinite(concurrency) ? concurrency : 8,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 90_000,
+    ...(env.MANAGED_AI_STRUCTURED_THINKING === 'disabled' ? { structuredThinking: { type: 'disabled' as const } } : {}),
     log: logSafe,
   });
 }
@@ -409,6 +410,7 @@ export function createRelayServer(options: {
           if (!res.writableEnded) ac.abort();
         };
         req.once('aborted', abortIfClientGone);
+        res.once('close', abortIfClientGone);
         try {
           const result = await aiInference.infer({
             body,
@@ -416,9 +418,10 @@ export function createRelayServer(options: {
             signal: ac.signal,
             ...(requestId ? { requestId } : {}),
           });
-          if (!res.headersSent) sendJson(res, result.statusCode, result.body);
+          if (!res.headersSent && !res.destroyed && !ac.signal.aborted) sendJson(res, result.statusCode, result.body);
         } finally {
           req.off('aborted', abortIfClientGone);
+          res.off('close', abortIfClientGone);
         }
         return;
       }
