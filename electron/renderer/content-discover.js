@@ -612,10 +612,11 @@
     renderLater();
   }
 
-  function applyView(view) {
+  function applyView(view, action) {
     hydrateLater(view);
     if (!shouldApplyView(view)) return;
-    if (lastView && view && (view.searchQuery || '') !== (lastView.searchQuery || '')) selectedForTalk.clear();
+    // Paging may omit query metadata; loading more must preserve objects the user selected.
+    if (action !== 'more' && lastView && view && (view.searchQuery || '') !== (lastView.searchQuery || '')) selectedForTalk.clear();
     renderSelection();
     const scroller = feedScroller();
     const sameSearch =
