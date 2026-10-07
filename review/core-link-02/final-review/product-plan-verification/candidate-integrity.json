@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "buildId": "v2-tujimi-20261007T100528Z-54adc4ad",
+  "sourceSha": "54adc4adcb0c1c55941837625a6a37dd05453ca2",
+  "artifacts": {
+    "setup": {
+      "path": "release-staging\\v2-tujimi-20261007T100528Z-54adc4ad\\兔机米-0.2.0-public-alpha-win-x64-setup.exe",
+      "sha256": "01747163710956cdb12c4096badf3bee8a58c659313fb7a3f9a7c46f598c5113",
+      "bytes": 84235053,
+      "verified": true
+    },
+    "zip": {
+      "path": "release-staging\\v2-tujimi-20261007T100528Z-54adc4ad\\兔机米-0.2.0-public-alpha-win-x64.zip",
+      "sha256": "626c90213a0631cb2c8a434bd4f3c69003333cba8594f739849981372194c35d",
+      "bytes": 116189560,
+      "verified": true
+    },
+    "exe": {
+      "path": "release-staging\\v2-tujimi-20261007T100528Z-54adc4ad\\win-unpacked\\兔机米.exe",
+      "sha256": "f121d211d41091b3b340b6af058d2b344cc020aaf45eca427e6542d4b57654cc",
+      "bytes": 186300416,
+      "verified": true
+    },
+    "asar": {
+      "path": "release-staging\\v2-tujimi-20261007T100528Z-54adc4ad\\win-unpacked\\resources\\app.asar",
+      "sha256": "29d523cf0f8b9c26659e98291d394d9423d02afb5ce3ae52bc0e1e9ec015f044",
+      "bytes": 29150149,
+      "verified": true
+    }
+  },
+  "sourceMatches": {
+    "dist/intelligence/service.js": true,
+    "dist/intelligence/store.js": true,
+    "dist/intelligence/loop.js": true,
+    "dist/subject-core/digital-self/interpret.js": true,
+    "dist/subject-core/digital-self/store.js": true,
+    "dist/infrastructure/fs-atomic.js": true,
+    "electron/renderer/content-discover.js": true
+  },
+  "sensitiveFindings": 0
+}

@@ -1,3 +1,7 @@
+# 当前候选交付（2026-10-07）
+
+最新体验候选54adc4a；完整结果见[最终交付报告](final-review/FINAL-DELIVERY-20261007.md)。产品自行分次计划已真实读写回读，人工稿仅对照；实时搜索未验收。下文保留旧检查点。
+
 # 当前交付状态（2026-10-07）
 
 现行候选为 `v2-tujimi-20261007T085929Z-10724f0a`，源码 `10724f0aea093f7eab19491b9b06c75f041fbd22`。完整审查见 [FINAL-REVIEW.md](final-review/FINAL-REVIEW.md)，发布材料见 [GITHUB-CANDIDATE-MATERIALS-DRAFT.md](GITHUB-CANDIDATE-MATERIALS-DRAFT.md)。

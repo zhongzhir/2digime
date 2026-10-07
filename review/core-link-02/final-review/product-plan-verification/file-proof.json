@@ -1,0 +1,74 @@
+{
+  "path": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+  "bytes": 5126,
+  "sha256": "ecca321d0ceff927daf92aa5c3dacb922c30fa9ae535e4daa5bb77162c94fd9d",
+  "text": "# 两周分次学习计划（AI 产品落地）\n\n## 采用条件\n- 工作日每天 30 分钟（观看 20 + 笔记 5 + 练习 5），周末每天 60 分钟（观看 40 + 笔记 10 + 练习 10）；观看 + 笔记 + 练习合计不超过当天额度。\n- 第 2 天起，每行先做续学：**先从上一学习日实际停点继续未完成章节**；只有该章完成、且当日观看时间仍有剩余，才进入建议新章节。\n- 建议新章节顺序只是队列，不保证当天完成；章节总时长超过当天观看额度时分次学习，次日先接续未完成内容。\n- 不编造观看片段起止秒数；不依据未知片段时长安排虚构秒数。实际停点只能由学习时播放器确认后记录。\n- 无可靠时长的章节按时间盒推进，不承诺一日学完。\n- 计划记录字段（实际停点、是否学完、下次接续）待实际学习后填写；本计划不声称已观看。\n- 仅用已保存两门课程，不比较、不搜索、不联网报名、不付费。\n- 本时间条件仅适用当前 Goal，不写为长期本人事实。\n\n## 来源（历史候选）\n- 课程 A：FDE必修-AI产品落地指南课 — https://coding.imooc.com/class/1036.html\n- 课程 B：AI大模型微调，从原理剖析到企业级落地实战 — https://coding.imooc.com/class/chapter/1003.html\n\n## 14 天计划\n\n| 天 | 星期 | 观看 | 笔记 | 练习 | 总分钟 | 续学优先（先接续上一学习日停点） | 建议新章节（队列，不保证当天完成） | 实际停点 | 是否学完 | 下次接续 |\n|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | 周一 | 20 | 5 | 5 | 30 | 无上一学习日，直接开始 | A 第1章 1-1 课程介绍与安排 | 播放器确认后填 | 待填 | 待填 |\n| 2 | 周二 | 20 | 5 | 5 | 30 | 先接续第1天未完成章节；该章完成且观看时间有剩余才进入新章节 | A 第1章 1-2 角色和职责 | 播放器确认后填 | 待填 | 待填 |\n| 3 | 周三 | 20 | 5 | 5 | 30 | 先接续第2天未完成章节；该章完成且观看时间有剩余才进入新章节 | A 第1章 1-3 岗位分类与能力要求 | 播放器确认后填 | 待填 | 待填 |\n| 4 | 周四 | 20 | 5 | 5 | 30 | 先接续第3天未完成章节；该章完成且观看时间有剩余才进入新章节 | A 第1章 1-4 行业趋势分析 | 播放器确认后填 | 待填 | 待填 |\n| 5 | 周五 | 20 | 5 | 5 | 30 | 先接续第4天未完成章节；该章完成且观看时间有剩余才进入新章节 | A 第1章 1-5 职业转型评估 | 播放器确认后填 | 待填 | 待填 |\n| 6 | 周六 | 40 | 10 | 10 | 60 | 先接续第5天未完成章节；该章完成且观看时间有剩余才进入新章节 | A 第2章 技术通识（时间盒推进） | 播放器确认后填 | 待填 | 待填 |\n| 7 | 周日 | 40 | 10 | 10 | 60 | 先接续第6天未完成章节；该章完成且观看时间有剩余才进入新章节 | A 第2章 续 + 模糊需求初稿 | 播放器确认后填 | 待填 | 待填 |\n| 8 | 周一 | 20 | 5 | 5 | 30 | 先接续第7天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 1-1 课程介绍 | 播放器确认后填 | 待填 | 待填 |\n| 9 | 周二 | 20 | 5 | 5 | 30 | 先接续第8天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 1-2 什么场景需要微调 | 播放器确认后填 | 待填 | 待填 |\n| 10 | 周三 | 20 | 5 | 5 | 30 | 先接续第9天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 1-3 什么场景需要 RAG | 播放器确认后填 | 待填 | 待填 |\n| 11 | 周四 | 20 | 5 | 5 | 30 | 先接续第10天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 1-4 微调与全量微调区别 | 播放器确认后填 | 待填 | 待填 |\n| 12 | 周五 | 20 | 5 | 5 | 30 | 先接续第11天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 第1章 收尾 + 方案选型笔记 | 播放器确认后填 | 待填 | 待填 |\n| 13 | 周六 | 40 | 10 | 10 | 60 | 先接续第12天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 企业级落地（时间盒）+ MVP 文档 | 播放器确认后填 | 待填 | 待填 |\n| 14 | 周日 | 40 | 10 | 10 | 60 | 先接续第13天未完成章节；该章完成且观看时间有剩余才进入新章节 | B 续 + 最小原型与作品展示页 | 播放器确认后填 | 待填 | 待填 |\n\n## 每日成果\n- 第1–5天：职业认知笔记，各 1 条要点。\n- 第6–7天：技术通识笔记 + 模糊需求初稿。\n- 第8–12天：微调/RAG 判断笔记 + 方案选型。\n- 第13–14天：MVP 文档 + 最小原型 + 作品展示页。\n\n## 未核实项（历史记录，非现价）\n- 两门课课时、章节编号以页面为准；课程 A 费用未知。\n- 课程 B 页面曾显示限时价 ¥449（原价 ¥499，截止 10月31日）——此为历史记录，非现价；是否可试看、是否需付费解锁、是否含中文字幕均未核实。\n- 不假设已购买课程；练习用公开工具与示例数据。\n- 各章节实际时长未核实，超预算即分次，次日先接续。\n",
+  "executions": [
+    {
+      "id": "run_60b014f2-ea10-4c9f-991e-d33dce497b4d",
+      "at": "2026-10-07T09:59:00.996Z",
+      "turnId": "turn_eff5805f-48bd-4236-aff9-233fd9b7cc23",
+      "capabilityId": "write_file",
+      "instruction": "learning-plan-product-split.md",
+      "ok": true,
+      "summary": "已写入 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md。回读全文 1727 字。",
+      "producedOutputs": [
+        "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md"
+      ],
+      "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "observedEffect": {
+        "kind": "file_created",
+        "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+        "mutated": true
+      }
+    },
+    {
+      "id": "run_1018f9b5-c3a1-4441-9f4c-4b6a62e1fbda",
+      "at": "2026-10-07T10:03:28.978Z",
+      "turnId": "turn_e8cd64a4-89f7-4977-9246-eaa26d8062d6",
+      "capabilityId": "read_file",
+      "instruction": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "ok": true,
+      "summary": "已读取 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "observedEffect": {
+        "kind": "file_read",
+        "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+        "mutated": false
+      }
+    },
+    {
+      "id": "run_78d5025a-32f5-48df-9a4d-b7359914651a",
+      "at": "2026-10-07T10:03:28.978Z",
+      "turnId": "turn_e8cd64a4-89f7-4977-9246-eaa26d8062d6",
+      "capabilityId": "write_file",
+      "instruction": "learning-plan-product-split.md",
+      "ok": true,
+      "summary": "已写入 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md。回读前 2000 字，文件共 2442 字。",
+      "producedOutputs": [
+        "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md"
+      ],
+      "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "observedEffect": {
+        "kind": "content_modified",
+        "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+        "mutated": true
+      }
+    },
+    {
+      "id": "run_988bb19a-9651-48a4-b7ae-8c3fda84af42",
+      "at": "2026-10-07T10:03:28.978Z",
+      "turnId": "turn_e8cd64a4-89f7-4977-9246-eaa26d8062d6",
+      "capabilityId": "read_file",
+      "instruction": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "ok": true,
+      "summary": "已读取 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+      "observedEffect": {
+        "kind": "file_read",
+        "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\product-split-plan-20261007\\artifacts\\learning-plan-product-split.md",
+        "mutated": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,188 @@
+{
+  "success": true,
+  "productSourceSha": "54adc4adcb0c1c55941837625a6a37dd05453ca2",
+  "liveExecution": "10724f0 packaged initial + repaired desktop source same Electron main/domain/tools; final package click+hash checks zero models",
+  "plan": {
+    "runtimeGenerated": true,
+    "manuallyEdited": false,
+    "sha256": "ecca321d0ceff927daf92aa5c3dacb922c30fa9ae535e4daa5bb77162c94fd9d",
+    "bytes": 5126,
+    "daily": [
+      {
+        "day": 1,
+        "weekday": "周一",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "initial"
+      },
+      {
+        "day": 2,
+        "weekday": "周二",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第1天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 3,
+        "weekday": "周三",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第2天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 4,
+        "weekday": "周四",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第3天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 5,
+        "weekday": "周五",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第4天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 6,
+        "weekday": "周六",
+        "view": 40,
+        "notes": 10,
+        "practice": 10,
+        "total": 60,
+        "budget": 60,
+        "continuation": "先接续第5天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 7,
+        "weekday": "周日",
+        "view": 40,
+        "notes": 10,
+        "practice": 10,
+        "total": 60,
+        "budget": 60,
+        "continuation": "先接续第6天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 8,
+        "weekday": "周一",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第7天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 9,
+        "weekday": "周二",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第8天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 10,
+        "weekday": "周三",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第9天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 11,
+        "weekday": "周四",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第10天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 12,
+        "weekday": "周五",
+        "view": 20,
+        "notes": 5,
+        "practice": 5,
+        "total": 30,
+        "budget": 30,
+        "continuation": "先接续第11天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 13,
+        "weekday": "周六",
+        "view": 40,
+        "notes": 10,
+        "practice": 10,
+        "total": 60,
+        "budget": 60,
+        "continuation": "先接续第12天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      },
+      {
+        "day": 14,
+        "weekday": "周日",
+        "view": 40,
+        "notes": 10,
+        "practice": 10,
+        "total": 60,
+        "budget": 60,
+        "continuation": "先接续第13天未完成章节；该章完成且观看时间有剩余才进入新章节"
+      }
+    ],
+    "totalMinutes": 540,
+    "stopPoints": "reserved for actual player observation; no fabricated viewing evidence"
+  },
+  "batch": {
+    "applicationRequests": 10,
+    "supplierAttempts": 10,
+    "retries": 0,
+    "usage": {
+      "inputTokens": 76957,
+      "outputTokens": 6861,
+      "totalTokens": 83818
+    },
+    "stageCalls": {
+      "initialPlan": 3,
+      "failedRevision": 2,
+      "repairedReadWriteRead": 5
+    },
+    "processElapsedMs": 43733,
+    "continuousRun": false,
+    "modelElapsedMs": 28262
+  },
+  "sharedWindow": {
+    "applicationRequests": 18,
+    "applicationLimit": 22,
+    "supplierAttempts": 18,
+    "supplierAttemptLimit": 66,
+    "usage": {
+      "inputTokens": 102122,
+      "outputTokens": 9817,
+      "totalTokens": 111939
+    }
+  },
+  "searchRequests": 0,
+  "onlineChanges": 0,
+  "unusedApplications": 4,
+  "known": "one controlled task after general receipt clarification; not a guarantee of all free-form requests"
+}
