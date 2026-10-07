@@ -269,7 +269,7 @@
       Object.assign({ action: action, searchGenerationId: activeSearchGenerationId }, extra || {}),
     );
     if (opts && opts.skipRender) return result;
-    applyView(result && result.view);
+    applyView(result && result.view, action);
     if (action === 'later') showSection('later');
     if (action === 'reverse') showSection('prefs');
     if (action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') showSection('for-you');
