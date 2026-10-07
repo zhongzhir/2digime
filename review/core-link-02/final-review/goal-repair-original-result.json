@@ -1,0 +1,25 @@
+{
+  "success": false,
+  "maxApplicationRequests": 4,
+  "maxUpstreamAttempts": 12,
+  "previousWindowRequests": 2,
+  "stages": [
+    {
+      "name": "correction",
+      "calls": 2,
+      "persisted": true
+    }
+  ],
+  "buildId": "v2-tujimi-20261007T083847Z-e95966ea",
+  "sourceSha": "e95966ea781c5f17f5986312acf4d951b6a3b3cc",
+  "failedStage": "discover",
+  "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n... Skipped lines\n\n  [\n    {\n      confirmed: false,\n      facet: 'goals',\n      id: 'u_b1315c810a12d695',\n...\n      confirmed: true,\n+     facet: 'goals',\n-     facet: 'preferences',\n      id: 'u_9a9afa0795622e5a',\n      provenance: {\n        actor: 'owner',\n        excerpt: '保留原学习方向和两门课程',\n        origin: 'user_statement',\n...\n      status: 'current',\n+     text: '用户希望学习 AI 产品落地，并保留已选的两门历史课程及其来源。',\n+     updatedAt: '2026-10-07T08:41:19.759Z'\n-     text: '用户要求保留原学习方向和已保存的两门课程。',\n-     updatedAt: '2026-10-06T09:54:12.105Z'\n    },\n+   {\n+     confirmed: false,\n+     facet: 'boundaries',\n+     id: 'u_a07fe34dbba21eab',\n+     provenance: {\n+       actor: 'owner',\n+       excerpt: '无可靠时间戳时不编造观看片段或起止秒数',\n+       origin: 'user_statement',\n+       statedAt: '2026-10-07T08:41:19.759Z'\n+     },\n+     status: 'needs_ask',\n+     text: '用户要求无可靠时间戳时不编造观看片段或起止秒数。',\n+     updatedAt: '2026-10-07T08:41:19.759Z'\n+   }\n  ]\n",
+  "elapsedMs": 17928,
+  "applicationRequests": 3,
+  "usage": {
+    "inputTokens": 9385,
+    "outputTokens": 1239,
+    "totalTokens": 10624
+  },
+  "blockedSearch": 0
+}

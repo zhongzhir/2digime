@@ -1,3 +1,13 @@
+# 当前交付状态（2026-10-07）
+
+现行候选为 `v2-tujimi-20261007T085929Z-10724f0a`，源码 `10724f0aea093f7eab19491b9b06c75f041fbd22`。完整审查见 [FINAL-REVIEW.md](final-review/FINAL-REVIEW.md)，发布材料见 [GITHUB-CANDIDATE-MATERIALS-DRAFT.md](GITHUB-CANDIDATE-MATERIALS-DRAFT.md)。
+
+纠正落盘、Talk/Discover消费与重启已有真实证据，最终包双对象交接与成果打开已复验；Self作用范围补修仍未真实托管验收，产品分次计划质量与实时搜索也未闭合。不push、不发布。
+
+---
+
+以下保留2026-10-06阶段记录，其候选与局部“无长期本人事实”结论不作为最新整体验收结论；随后发现的Self范围问题以最新报告为准。
+
 # 新版候选交付记录
 
 ## 结果

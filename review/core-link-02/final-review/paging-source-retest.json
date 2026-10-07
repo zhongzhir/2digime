@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "buildId": "v2-tujimi-20261007T085449Z-2992d3cd",
+  "sourceSha": "2992d3cdbacfd8cf1e1b81dbc65114beda3d2be7",
+  "modelCalls": 0,
+  "searchCalls": 0,
+  "results": [
+    {
+      "mode": "restored",
+      "packaged": false,
+      "appPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\electron",
+      "userData": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\goal-persistence-handoff-final-20261007-dev\\restored-user-data",
+      "goal": {
+        "originalRequest": "近期少看剧，每天有一小时，希望学习 AI 产品落地。找两门可跟着动手做产品的具体课程，优先中文或有中文字幕，保留课程链接、课时和费用未知项。",
+        "request": "保留学习 AI 产品落地的方向、已选两门历史课程（FDE必修-AI产品落地指南课 https://coding.imooc.com/class/1036.html ；AI大模型微调，从原理剖析到企业级落地实战 https://coding.imooc.com/class/chapter/1003.html）及来源；工作日每天30分钟、周末每天60分钟；章节超出当天预算时分次学习，观看、笔记、练习合计不超过当天时间；到时记录实际章节与停点，下次接续；无可靠时间戳时不编造观看片段或起止秒数；不重做比较、不生成或写入计划、不联网、不付费。",
+        "scope": "session",
+        "objects": [
+          {
+            "contentId": "snippet_0_https://coding.imooc.com/class/1036.html",
+            "title": "FDE必修-AI产品落地指南课",
+            "url": "https://coding.imooc.com/class/1036.html",
+            "source": "慕课网（历史候选）",
+            "publisherSubjectId": "historical_imooc",
+            "summary": "以\"AI客服质检助手\"为案例，带您从模糊需求出发，交付可沟通、可验证、可作品展示的MVP方案，掌握可复用的AI产品落地方法，让技术理解、产品思维与行业经验转化为新职业竞争力。本章介绍： 本章帮助学员建立对AI产品经理岗位的整体认知，厘清岗位定义、职责边界与分类，同时结合行业趋势，分析不同岗位（如技术、运营、传统产品）转型AI产品的路径与可行性，为后续学习打下职业方向基础。第1章 AI产品职业认知 5 节｜81分钟 视频： 1-1 课程介绍与安排 试看 15:20 视频： 1-2 FDE能力模型之AI产品经理的角色和职责 23:12 视频： 1-3 AI产品岗位分类与能力要求 试看 13:57 视频： 1-4 行业趋势分析 12:08 视频： 1-5 职业转型评估：各岗位如何转型成为AI产品经理 试看 15:48 本章介绍： 本章聚焦AI产品经理必须掌握的技术通识，涵盖AI核心技术概念（如机器学习、深度学习、大模型）、大模型的能力边界与风险，以及AI工程化..."
+          },
+          {
+            "contentId": "snippet_1_https://coding.imooc.com/class/chapter/1003.html",
+            "title": "AI大模型微调，从原理剖析到企业级落地实战",
+            "url": "https://coding.imooc.com/class/chapter/1003.html",
+            "source": "慕课网（历史候选）",
+            "publisherSubjectId": "historical_imooc",
+            "summary": "AI大模型微调，从原理剖析到企业级落地实战 10月特惠 截止至10月31日 449 原价￥499.00 已完结 难度 中级 时长 20小时 2分钟 学习人数 66 综合评分 10.00 1 1 章节目录 学习服务 售前咨询 1 用户评价 1 限时优惠￥449 截止至10月31日 ¥499.00 第1章 模型高效微调原理剖析 试看 13 节|139分钟 本模块聚焦大模型微调的底层原理，帮助学员建立完整的训练认知体系。课程将从“什么场景需要微调、什么场景适合 RAG”切入，深入解析预训练、全量微调、LoRA、QLoRA 等核心技术路线，并结合数据并行、模型并行、3D 并行等大规模训练架构进行讲解。通过本模块学习，学员不仅能理解微调为什么有效，更能掌握企业级大模型训. 收起列表 视频：1-1 课程介绍(06:35)试看 视频：1-2 高效微调原理之什么场景需要微调？(12:12)视频：1-3 高效微调原理之什么场景需要RAG？(10:03)视频：1-4 高效微调原理之微调和全量微调的区别(10:06)视频：1-5 ..."
+          }
+        ]
+      },
+      "blockedRequests": 2
+    }
+  ],
+  "sourceMode": "dev",
+  "sourceState": "2992d3c plus uncommitted paging caller argument fix; not packaged acceptance"
+}

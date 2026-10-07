@@ -1,0 +1,25 @@
+{
+  "success": false,
+  "stages": [
+    {
+      "stage": "discover-to-talk",
+      "objectsSelected": 2,
+      "comparisonSent": false
+    }
+  ],
+  "maxApplicationRequests": 6,
+  "maxUpstreamAttempts": 18,
+  "searchCalls": 0,
+  "failedStage": "same-goal-correction",
+  "error": "The input did not match the regular expression /分次|分段/. Input:\n\n'近期少看剧，希望学习 AI 产品落地。工作日每天只有半小时，周末每天一小时。找两门可跟着动手做产品的具体课程，优先中文或有中文字幕，保留课程链接、课时和费用未知项。保留原学习方向和已保存的两门课程（FDE必修-AI产品落地指南课 https://coding.imooc.com/class/1036.html ；AI大模型微调，从原理剖析到企业级落地实战 https://coding.imooc.com/class/chapter/1003.html）。不联网、不报名、不付费。此时间约束仅适用于当前目标，不是长期本人事实。'\n",
+  "elapsedMs": 10263,
+  "applicationRequests": 2,
+  "usage": {
+    "inputTokens": 6328,
+    "outputTokens": 1092,
+    "totalTokens": 7420
+  },
+  "clientObserverMissedBootstrapBoundFetch": true,
+  "upstreamAttempts": 2,
+  "usageSource": "provider journal window and matching final response length"
+}

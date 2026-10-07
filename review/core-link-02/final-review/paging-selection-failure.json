@@ -1,0 +1,42 @@
+{
+  "trace": [
+    {
+      "operation": "set",
+      "key": "snippet_0_https://coding.imooc.com/class/1036.html"
+    },
+    {
+      "operation": "set",
+      "key": "snippet_1_https://coding.imooc.com/class/chapter/1003.html"
+    },
+    {
+      "operation": "set",
+      "key": "snippet_0_https://coding.imooc.com/class/1036.html"
+    },
+    {
+      "operation": "clear",
+      "keys": [
+        "snippet_0_https://coding.imooc.com/class/1036.html"
+      ],
+      "stack": "Error\n    at Map.clear (eval at evaluate (:234:30), <anonymous>:1:239)\n    at applyView (file:///D:/Projects/Digital%20Me/.task-worktrees/core-link-01/release-staging/v2-tujimi-20261007T084611Z-6549501d/win-unpacked/resources/app.asar/electron/renderer/content-discover.js:618:104)\n    at act (file:///D:/Projects/Digital%20Me/.task-worktrees/core-link-01/release-staging/v2-tujimi-20261007T084611Z-6549501d/win-unpacked/resources/app.asar/electron/renderer/content-discover.js:272:5)\n    at async loadMore (file:///D:/Projects/Digital%20Me/.task-worktrees/core-link-01/release-staging/v2-tujimi-20261007T084611Z-6549501d/win-unpacked/resources/app.asar/electron/renderer/content-discover.js:931:22)"
+    },
+    {
+      "operation": "set",
+      "key": "snippet_0_https://coding.imooc.com/class/1036.html"
+    },
+    {
+      "operation": "set",
+      "key": "snippet_1_https://coding.imooc.com/class/chapter/1003.html"
+    },
+    {
+      "operation": "set",
+      "key": "snippet_1_https://coding.imooc.com/class/chapter/1003.html"
+    },
+    {
+      "operation": "set",
+      "key": [
+        "snippet_0_https://coding.imooc.com/class/1036.html"
+      ]
+    }
+  ],
+  "selection": "已选 1 个对象：AI大模型微调，从原理剖析到企业级落地实战一起比较取消选择"
+}

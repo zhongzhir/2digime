@@ -1,0 +1,27 @@
+10724f0 fix: pass paging action through discovery view updates
+2992d3c fix: preserve selected discovery objects when loading more
+6549501 fix: validate self and current-goal proposal scope separately
+e95966e fix: persist same-goal corrections before confirming success
+77079ca docs: deliver verified Windows candidate and release materials
+229d092 test: verify historical goal chain across restart
+b89e7a9 docs: bound one continuous historical learning validation
+b38f16f ops: deploy tool thinking with bounded validation and automatic rollback
+cb7dc7d test: verify tool gateway deployment rollback fixtures
+d974a9e fix: isolate managed tool thinking configuration and verify gateway contract
+b928151 test: verify real tool cancellation boundaries within bounded window
+d26bf85 test: verify real nonthinking comparison and file tools
+456c08c fix: require nonempty expected effects in tool schema
+ab9c54c test: automate isolated tool thinking harness fixtures
+e4cb020 test: record isolated tool thinking comparison stop
+900e390 docs: propose isolated tool thinking comparison
+cf32734 test(core-link): record historical downstream Talk truncation
+0645093 fix(gateway): bound deployment and rollback readiness checks
+23da0db fix(review): roll back failed gateway updates and stop truncation retries
+aa33c9a fix(relay): bound inference retries and reject truncated results
+93b6bc5 fix: restore managed gateway request contract and record live diagnosis
+cb84ea4 fix: preserve discovery diagnostics and shared deadline
+b9cf67f fix(core-link): preserve scoped learning caches and source boundaries
+e338606 fix(talk): honor cancellation before file effects and retain completed writes
+691bb00 Link Discover objects and scoped goal corrections to Talk
+8b281a3 Record QUALITY-09 as the current trial package and switch Discover to usage-feedback observation.
+5f4fe7a Record the QUALITY-09 merge-candidate path, matching gitHead, and packaged block/more checks.
