@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "maxApplicationRequests": 5,
+  "maxUpstreamAttempts": 15,
+  "previousWindowRequests": 5,
+  "sharedApplicationLimit": 10,
+  "stages": [
+    {
+      "name": "correction",
+      "calls": 2,
+      "persisted": true
+    },
+    {
+      "name": "restart",
+      "calls": 0,
+      "goalEqual": true
+    },
+    {
+      "name": "discover",
+      "calls": 1,
+      "usesNewGoal": true
+    }
+  ],
+  "buildId": "v2-tujimi-20261007T085929Z-10724f0a",
+  "sourceSha": "10724f0aea093f7eab19491b9b06c75f041fbd22",
+  "productGeneratedSplitPlanVerified": false,
+  "productPlanGap": "独立缺口，未重跑计划生成",
+  "sharedApplicationRequests": 8,
+  "resumedWithoutRepeatingCorrection": true,
+  "elapsedMs": 9332,
+  "applicationRequests": 3,
+  "usage": {
+    "inputTokens": 9452,
+    "outputTokens": 625,
+    "totalTokens": 10077
+  },
+  "blockedSearch": 0
+}

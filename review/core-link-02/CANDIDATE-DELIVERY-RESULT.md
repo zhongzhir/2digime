@@ -2,7 +2,7 @@
 
 现行候选为 `v2-tujimi-20261007T085929Z-10724f0a`，源码 `10724f0aea093f7eab19491b9b06c75f041fbd22`。完整审查见 [FINAL-REVIEW.md](final-review/FINAL-REVIEW.md)，发布材料见 [GITHUB-CANDIDATE-MATERIALS-DRAFT.md](GITHUB-CANDIDATE-MATERIALS-DRAFT.md)。
 
-纠正落盘、Talk/Discover消费与重启已有真实证据，最终包双对象交接与成果打开已复验；Self作用范围补修仍未真实托管验收，产品分次计划质量与实时搜索也未闭合。不push、不发布。
+纠正落盘、Talk/Discover消费与重启已有真实证据，最终包双对象交接与成果打开已复验；Self作用范围补修已完成真实托管验收：3应用/3供应商尝试、usage10077，Self认识不新增不覆盖，Goal/Talk/发现/重启一致；产品分次计划质量与实时搜索仍未闭合。不push、不发布。
 
 ---
 
