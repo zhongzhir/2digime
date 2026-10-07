@@ -58,7 +58,7 @@ export async function writeDigitalSelf(
 ): Promise<void> {
   const file = digitalSelfFilePath(packageRoot);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await atomicWriteFile(file, `${JSON.stringify(self, null, 2)}\n`);
+  await atomicWriteFile(file, `${JSON.stringify(self, null, 2)}\n`, { allowUnlinkFallback: false });
 }
 
 export async function writeSourceCopy(

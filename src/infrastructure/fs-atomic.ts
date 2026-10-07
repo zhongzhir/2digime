@@ -5,6 +5,8 @@ import { randomBytes } from 'node:crypto';
 export type AtomicRenameErrorCode = 'EPERM' | 'EACCES' | 'EBUSY' | 'EEXIST' | string;
 
 export interface AtomicWriteOptions {
+  /** authority 写入失败时禁止先删除旧文件。 */
+  allowUnlinkFallback?: boolean;
   /** Windows rename 短暂占用时的最大重试次数(含首次)。 */
   renameRetries?: number;
   /** 首次退避毫秒。 */
@@ -73,11 +75,13 @@ export async function replaceFile(
       lastError = error;
       const code = (error as NodeJS.ErrnoException).code as AtomicRenameErrorCode | undefined;
       if (code === 'EEXIST') {
+        if (options.allowUnlinkFallback === false) throw classifyAtomicError(error);
         await fs.unlink(toPath).catch(() => undefined);
         continue;
       }
       if (code === 'EPERM' || code === 'EACCES' || code === 'EBUSY') {
         if (attempt >= maxAttempts) {
+          if (options.allowUnlinkFallback === false) throw classifyAtomicError(error);
           // 最后一次:尝试释放目标后再 rename
           await fs.unlink(toPath).catch(() => undefined);
           try {

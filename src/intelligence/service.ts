@@ -9,6 +9,7 @@ import {
 } from '../subject-core/conversation-sessions';
 import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
+import { persistDiscoveryGoalUpdate } from './store';
 import { randomUUID } from 'node:crypto';
 import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
@@ -98,6 +99,7 @@ export interface TalkPackageRef {
 export type TalkLearnResult = {
   asked: boolean;
   askHint?: string;
+  goalUpdate?: { request?: string; revoke?: boolean } | undefined;
 };
 
 export class TalkService {
@@ -200,15 +202,33 @@ export class TalkService {
       return { view: projectView(thread, NO_MODEL_NOTICE) };
     }
     let confirmHint: string | undefined;
+    let goalReceipt: string | undefined;
+    let learnedGoalUpdate: TalkLearnResult['goalUpdate'];
     // DIGITAL_SELF_LEARNING_BLOCKS_TALK = YES
     // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
     if (spoken && this.learnFromUtterance) {
       try {
         const learned = await this.learnFromUtterance(spoken, thread.discoveryGoal
           ? JSON.stringify({ originalRequest: thread.discoveryGoal.originalRequest, currentRequest: thread.discoveryGoal.request, scope: thread.discoveryGoal.scope }) : undefined);
+        learnedGoalUpdate = learned.goalUpdate;
         if (learned.asked && learned.askHint) confirmHint = learned.askHint;
       } catch {
-        /* 学习失败不得阻断交流 */
+        if (thread.discoveryGoal) {
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '本轮理解或保存失败，当前目标的新条件未能确认保存。' });
+          return { view: projectView(thread, '本轮理解或保存失败。', 'FAILED') };
+        }
+      }
+    }
+    if (learnedGoalUpdate && thread.discoveryGoal) {
+      if (externalSignal?.aborted) return { view: projectView(thread, '已取消，目标未更新。', 'CANCELLED') };
+      try {
+        await persistDiscoveryGoalUpdate(pkg.rootDir, thread, learnedGoalUpdate, now);
+        goalReceipt = '本轮模型理解提议的目标更新已经原子写入当前Thread并回读核实：' + JSON.stringify(thread.discoveryGoal || null);
+      } catch {
+        thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
+        thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '当前目标条件保存失败，未能确认落盘。不能按已保存的新条件继续；已有文件和目标仍可查看。' });
+        return { view: projectView(thread, '当前目标条件保存失败，未能确认落盘。', 'FAILED') };
       }
     }
     let selfContext = '当前还没有已写入的数字之我认识。读取失败不得假装了解用户。';
@@ -270,6 +290,13 @@ export class TalkService {
         thread,
         userText: text,
         selfContext,
+        goalReceipt,
+        persistGoalUpdate: async (target, update) => {
+          if (ac.signal.aborted) throw new Error('当前回合已取消');
+          await persistDiscoveryGoalUpdate(pkg.rootDir, target, update, now);
+          if (target.discoveryGoal) thread.discoveryGoal = target.discoveryGoal;
+          else delete thread.discoveryGoal;
+        },
         agents: this.resolveAgents(pkg, turnCtx),
         chat: boundedChat,
         workRoot: pkg.rootDir,
@@ -351,14 +378,17 @@ export class TalkService {
         outcome = stoppedOutcome;
         next = thread;
       };
-      if (isTalkCancelled(err)) {
+      if ((err as Error).name === 'DiscoveryGoalSaveFailed') {
+        pushStopped('当前目标条件保存失败，未能确认落盘。不能宣称更新成功。', 'FAILED', '当前目标条件保存失败。');
+        return { view: projectView(thread, timeoutNotice, 'FAILED') };
+      } else if (isTalkCancelled(err)) {
         const writes = turnExecutions.filter(
           (item) => item.ok && (MUTATING_CAPS.has(item.capabilityId) || item.observedEffect?.mutated === true),
         );
         const written = [...writes].reverse().find((item) => item.outputPath);
         const text = written?.outputPath
           ? `已取消。已经写入的文件还在：${path.basename(written.outputPath)}`
-          : '已取消。';
+          : turnExecutions.some(e => e.ok && e.capabilityId === 'update_discovery_goal') ? '已取消。当前目标条件已经保存。' : '已取消。';
         pushStopped(text, 'CANCELLED', '已取消。', written?.outputPath ? { title: path.basename(written.outputPath), path: written.outputPath } : undefined);
       } else if (turnExecutions.length && isManagedAiUserNotice(err)) {
         const fromExec = assistantFromTurnExecutions(turnExecutions, 'undeliverable_final');

@@ -70,7 +70,10 @@ export interface ModelUnderstandingProposal {
   replacesId?: string;
 }
 
+export interface CurrentGoalUpdate { request?: string; revoke?: boolean; }
+
 export interface ModelInterpretResult {
+  goalUpdate?: CurrentGoalUpdate;
   understandings: ModelUnderstandingProposal[];
   notice?: string;
 }
@@ -116,5 +119,7 @@ export interface DigitalSelfCommandInput {
 }
 
 export interface DigitalSelfCommandOutput {
+  /** 本轮模型提议；不写 self，交由同一 Thread 持久化。 */
+  goalUpdate?: CurrentGoalUpdate;
   view: DigitalSelfView;
 }

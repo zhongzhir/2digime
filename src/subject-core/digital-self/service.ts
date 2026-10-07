@@ -117,6 +117,7 @@ export class DigitalSelfService {
       await writeDigitalSelf(pkg.rootDir, result.self);
       const notice = interpreted.notice || result.notice;
       return {
+        ...(taskContext && interpreted.goalUpdate ? { goalUpdate: interpreted.goalUpdate } : {}),
         view: projectDigitalSelfView(result.self, {
           ...(notice ? { notice } : {}),
           ...(result.asked ? { asked: true } : {}),

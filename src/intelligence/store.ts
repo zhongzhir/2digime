@@ -121,5 +121,26 @@ export async function readThread(
 export async function writeThread(packageRoot: string, thread: TalkThread): Promise<void> {
   const file = talkThreadFilePath(packageRoot, thread.threadId);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await atomicWriteFile(file, `${JSON.stringify(thread, null, 2)}\n`);
+  await atomicWriteFile(file, `${JSON.stringify(thread, null, 2)}\n`, { allowUnlinkFallback: false });
+}
+
+/** 同一Thread的目标动作：先原子保存并回读，成功事实不早于落盘。 */
+export async function persistDiscoveryGoalUpdate(
+  packageRoot: string, thread: TalkThread, update: { request?: string; revoke?: boolean }, now: string,
+): Promise<void> {
+  if (!thread.discoveryGoal) throw new Error('没有当前目标');
+  const next = structuredClone(thread);
+  if (update.revoke) delete next.discoveryGoal;
+  else {
+    const request = String(update.request || '').trim();
+    if (!request || request.length > 4000) throw new Error('完整请求为空或过长');
+    next.discoveryGoal!.request = request;
+  }
+  next.updatedAt = now;
+  await writeThread(packageRoot, next);
+  const stored = await readThread(packageRoot, now, thread.threadId);
+  if (JSON.stringify(stored.discoveryGoal) !== JSON.stringify(next.discoveryGoal)) throw new Error('当前目标回读核对失败');
+  if (next.discoveryGoal) thread.discoveryGoal = next.discoveryGoal;
+  else delete thread.discoveryGoal;
+  thread.updatedAt = now;
 }

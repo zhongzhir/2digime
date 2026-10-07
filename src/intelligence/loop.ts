@@ -422,6 +422,8 @@ export async function runTalkTurn(input: {
   deadlineAt?: number;
   subjectCollab?: SubjectCollabPort;
   confirmHint?: string;
+  goalReceipt?: string | undefined;
+  persistGoalUpdate?: (thread: TalkThread, update: { request?: string; revoke?: boolean }) => Promise<void>;
   contextPaths?: string[];
   /** 已授权可写文件夹。不是已附材料，不得当作可随意翻阅的文稿目录。 */
   writeFolders?: string[];
@@ -497,6 +499,7 @@ export async function runTalkTurn(input: {
       ? 'news_search 是已接上的新闻来源。发布时间、来源和链接以它的字段为准。没有 publishedAt 就不能说是当天报道。bodyRead 为 false 就不是读过正文。综述可以当背景，不能当成当天报道已经完成。它失败时可以改用 web_search，不要为了凑一个日期反复换词。'
       : '',
     '能够回答时就回答，不要无意义地继续调用工具。',
+    input.goalReceipt || '本轮没有已核实的目标保存回执；需要保存时先执行更新工具，没有成功回执不能声称已经保存。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
     '工具回读是文件和执行的机械事实。完成与否由你对照用户要求和这些事实判断，不要另造验收句子去否定已经写对的文件，也不要把没发生的读取、修改或保存说成已经发生。',
@@ -589,7 +592,6 @@ export async function runTalkTurn(input: {
   };
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
-  const first = await chat({ messages, tools });
 
   const executionIds: string[] = [];
   const exchangeIds: string[] = [];
@@ -605,6 +607,9 @@ export async function runTalkTurn(input: {
     executionIds.push(rec.id);
     input.onExecution?.(rec);
   };
+
+  if (input.goalReceipt) recordExec({ id: 'run_' + randomUUID(), at: input.now, turnId: userTurn.id, capabilityId: 'update_discovery_goal', instruction: input.userText, ok: true, summary: '模型理解提议的当前目标已原子保存并回读核实', safeDetail: JSON.stringify({ origin: 'utterance_interpretation' }), observedEffect: { kind: 'content_modified', target: 'current_discovery_goal', mutated: true } });
+  const first = await chat({ messages, tools });
 
   const runRequestFolderAccess = async (rawArgs: string): Promise<string> => {
     const asked = parseFolderAccessArgs(rawArgs);
@@ -1004,15 +1009,16 @@ export async function runTalkTurn(input: {
     if (call.name === 'update_discovery_goal') {
       const args = JSON.parse(call.arguments) as { request?: string; revoke?: boolean };
       if (!thread.discoveryGoal) return JSON.stringify({ actualSuccess: false, reason: '没有当前目标' });
-      if (args.revoke === true) delete thread.discoveryGoal;
-      else {
-        const request = String(args.request || '').trim();
-        if (!request || request.length > 4000) return JSON.stringify({ actualSuccess: false, reason: '完整请求为空或过长' });
-        thread.discoveryGoal.request = request;
-      }
+      if (input.persistGoalUpdate) {
+        try { await input.persistGoalUpdate(thread, args); }
+        catch {
+          recordExec({ id: `run_${randomUUID()}`, at: input.now, turnId: userTurn.id, capabilityId: 'update_discovery_goal', instruction: input.userText, ok: false, summary: '当前目标保存失败，未能确认落盘' });
+          throw Object.assign(new Error('当前目标保存失败，未能确认落盘。'), { name: 'DiscoveryGoalSaveFailed' });
+        }
+      } else return JSON.stringify({ actualSuccess: false, reason: '当前环境没有目标持久化能力，不能宣称已保存' });
       recordExec({ id: `run_${randomUUID()}`, at: input.now, turnId: userTurn.id,
         capabilityId: 'update_discovery_goal', instruction: input.userText, ok: true,
-        summary: args.revoke ? '已撤销当前目标' : '已保存本目标的最新条件' });
+        summary: args.revoke ? '已撤销当前目标' : '已保存本目标的最新条件', observedEffect: { kind: 'content_modified', target: 'current_discovery_goal', mutated: true } });
       return JSON.stringify({ actualSuccess: true, currentGoal: thread.discoveryGoal || null,
         note: '发现和后续做事读取同一个 thread 目标；未写长期数字之我。' });
     }
