@@ -205,3 +205,20 @@ test('多个授权根时必须显式选择列出的 root，不做语义路由', 
   const wrong = resolveAuthorizedWritePath(auth, 'note.txt', path.join(os.tmpdir(), 'not-authorized'));
   assert.equal(wrong.ok, false);
 });
+
+
+test('goal save receipt is scoped before the model writes and reads a commissioned file', async () => {
+  const folder = await tempDir('goal-receipt-file');
+  let step = 0;
+  const result = await runTalkTurn({ thread:emptyThread(new Date().toISOString()), userText:'修改文件并回读', selfContext:'', agents:[], workRoot:folder, writeFolders:[folder], now:new Date().toISOString(), goalReceipt:'当前目标已保存',
+    chat:async ({ messages }) => {
+      if (step++ === 0) {
+        assert.match(String(messages[0]?.content), /此回执只证明当前目标条件保存/);
+        assert.match(String(messages[0]?.content), /不证明任何文件已创建、修改或读取/);
+        return { text:'', toolCalls:[{id:'w',name:'write_file',arguments:JSON.stringify({relativePath:'result.md',content:'updated actual content'})},{id:'r',name:'read_file',arguments:JSON.stringify({path:path.join(folder,'result.md')})}] };
+      }
+      return { text:'已按本轮文件执行结果交付。' };
+    }});
+  assert.deepEqual(result.thread.executions.map(x=>x.capabilityId), ['update_discovery_goal','write_file','read_file']);
+  assert.equal(await fs.readFile(path.join(folder,'result.md'),'utf8'),'updated actual content');
+});
