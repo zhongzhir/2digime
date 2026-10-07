@@ -7285,3 +7285,8 @@ CUA和Node REPL沙箱仍失败、默认SSH认证失败，但找到既有C:/Aliyu
 ## 2026-10-07 最终候选54adc4a与产品分次学习验收
 
 产品真实生成初稿3调用；修订2调用出现无write_file却报覆盖成功，查明只有Goal保存回执。54adc4a明确回执作用范围，定向真实5调用完成read/write/read，2442字符最终稿14天分钟合计540、每日30/60且跨日先续学，实际停点留待真实观看。共10应用/10供应商、usage83818网关核实；共享18/22应用、18/66尝试，usage111939。不搜索、不部署。编译与相关6回归通过，因代码改变重建一次最终NSIS/ZIP，包内7关键文件一致、0模型打开成果成功。最终报告FINAL-DELIVERY-20261007.md，人工稿单独标记，实时搜索/干净Windows/Owner验收仍未闭合。准备GitHub材料，不push、不发布。
+
+
+## 2026-10-07 GitHub限定试用发布完成
+
+Owner明确授权push及Pre-release。源码/交付记录推送codex/core-link-01；tag v0.2.0-core-link-trial-win-x64-54adc4a固定产品54adc4adcb0c1c55941837625a6a37dd05453ca2，未动main。Release https://github.com/zhongzhir/2digime/releases/tag/v0.2.0-core-link-trial-win-x64-54adc4a，isDraft=false/prerelease=true，三附件重新下载校验SHA256及ZIP内gitHead通过。仅安装包、ZIP、清单，未传私有主体/凭据。实时搜索/实际停点/干净Windows未验收、未签名已公开标明，无整产品/95分位达标宣称。此次0模型0搜索0线上变更。详情GITHUB-PUBLISHED-RESULT.md。

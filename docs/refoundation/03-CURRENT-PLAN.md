@@ -8,7 +8,11 @@
 
 ---
 
-## 2026-10-07 Owner授权GitHub限定试用Pre-release
+## 2026-10-07 GitHub限定试用已发布
+
+Owner授权已执行：v0.2.0-core-link-trial-win-x64-54adc4a为Pre-release，tag/包内gitHead固定54adc4adcb0c1c55941837625a6a37dd05453ca2。源码/记录推送codex/core-link-01；三附件重新下载哈希和ZIP内gitHead一致。未动main/服务配置/付费搜索。公开限制保留。结果：review/core-link-02/final-review/GITHUB-PUBLISHED-RESULT.md。
+
+## 2026-10-07 Owner发布授权记录
 
 Owner已明确授权push本轮源码与交付记录，发布tag固定产品提交54adc4adcb0c1c55941837625a6a37dd05453ca2；仅发布安装包、ZIP和SHA256清单，重新下载核对。实时搜索/实际观看停点/干净Windows安装未验收、未签名，不宣称整产品或95分位验收。无线上服务配置/付费搜索变更。既有不push、不发布约束由本次明确授权覆盖。
 
