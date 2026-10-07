@@ -20,7 +20,7 @@ test('mixed lasting self expression and task correction still reach the existing
    const prompt=messages.map(m=>m.content).join('\n');
    if(prompt.includes('本人持续信息')){
     assert.match(prompt,/TASK_CONTEXT_NOT_SELF_FACTS/);assert.match(prompt,/每天一小时/);scoped=true;
-    return {text:JSON.stringify({understandings:[{text:'用户长期从事产品设计工作',facet:'context',aboutUser:true,origin:'user_statement',lasting:true},{text:'本目标工作日半小时',facet:'goals',aboutUser:true,origin:'user_statement',lasting:false}]})};
+    return {text:JSON.stringify({understandings:[{text:'用户长期从事产品设计工作',facet:'context',aboutUser:true,origin:'user_statement',lasting:true,scope:'self'},{text:'本目标工作日半小时',facet:'goals',aboutUser:true,origin:'user_statement',lasting:false}]})};
    }
    return {text:'{"understandings":[]}'};
   }});
