@@ -50,6 +50,7 @@ let bus = null;
 let mainWindow = null;
 const activeTalkAborts = new Set();
 const pendingFolderAccess = new Map();
+let activeTalkProgressRequestId = "";
 
 function currentTalkTurnSignal() {
   try {
@@ -100,6 +101,14 @@ function askFolderAccessInPage(folderPath, label) {
     const onAbort = () => finish(false, true);
     pendingFolderAccess.set(id, finish);
     if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    if (activeTalkProgressRequestId) {
+      win.webContents.send("shell:capability-progress", {
+        surface: "talk",
+        requestId: activeTalkProgressRequestId,
+        stage: "waiting_permission",
+        elapsedMs: 0,
+      });
+    }
     win.webContents.send("shell:folder-access", { id, path: folderPath, label: label || folderPath });
   });
 }
@@ -560,6 +569,11 @@ async function bootstrapRuntime() {
   }
 
   options.autonomousCollabReceive = true;
+  options.capabilityEventSink = (event) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("shell:capability-progress", event);
+    }
+  };
   options.requestFolderAccess = isElectronTestHarness()
     ? async () => false
     : async ({ path: folderPath, label }) => askFolderAccessInPage(folderPath, label);
@@ -822,11 +836,15 @@ function registerIpc() {
       if (name === "talk" && runtime && typeof runtime.setTalkAbortSignal === "function") {
         const ac = new AbortController();
         activeTalkAborts.add(ac);
+        const requestId = input && input.requestId ? String(input.requestId) : "";
+        const previousProgressRequestId = activeTalkProgressRequestId;
+        activeTalkProgressRequestId = requestId;
         runtime.setTalkAbortSignal(ac.signal);
         try {
           return await bus.invoke(name, input || {});
         } finally {
           activeTalkAborts.delete(ac);
+          if (activeTalkProgressRequestId === requestId) activeTalkProgressRequestId = previousProgressRequestId;
           if (runtime && typeof runtime.setTalkAbortSignal === "function") {
             runtime.setTalkAbortSignal(activeTalkAborts.size ? [...activeTalkAborts].at(-1).signal : null);
           }

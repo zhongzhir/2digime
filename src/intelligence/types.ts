@@ -17,6 +17,8 @@ export interface TalkTurn {
   /** 本回合实际发生的 Subject ↔ Subject 交换，不是协作阶段。 */
   exchangeIds?: string[];
   result?: { title: string; path?: string };
+  /** Provider execution facts only; never prompt, key, reasoning text or page body. */
+  capabilityTrace?: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace[];
 }
 
 /** 模型声明的目标可观察结果；不是对用户原句的关键词分类。 */
@@ -88,6 +90,7 @@ export interface TalkView {
 export interface TalkChatResult {
   text: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+  capabilityTrace?: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace;
 }
 
 export type TalkChatFn = (input: {

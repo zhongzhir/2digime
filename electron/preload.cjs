@@ -54,6 +54,17 @@ contextBridge.exposeInMainWorld("digitalMe", {
     ipcRenderer.on("domain:event", handler);
     return () => ipcRenderer.removeListener("domain:event", handler);
   },
+  onCapabilityProgress(listener) {
+    const handler = (_evt, event) => {
+      try {
+        listener(event || {});
+      } catch {
+        /* renderer listener faults must not break bridge */
+      }
+    };
+    ipcRenderer.on("shell:capability-progress", handler);
+    return () => ipcRenderer.removeListener("shell:capability-progress", handler);
+  },
   onBoot(listener) {
     const handler = (_evt, info) => listener(info);
     ipcRenderer.on("shell:boot", handler);

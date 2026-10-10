@@ -13,6 +13,11 @@ import {
   createOpenAiCompatibleAdapterStub,
   type OpenAiCompatibleAdapterConfig,
 } from '../capability/adapters/openai-compatible';
+import {
+  runResponsesTurn,
+  supportsResponsesToolLoop,
+  type UnifiedCapabilityEvent,
+} from '../capability/adapters/responses-tool-loop';
 import { createDeterministicCodeAnalysisAdapter } from '../capability/adapters/deterministic-code-analysis';
 import {
   createCodeRepoAnalysisAdapter,
@@ -175,7 +180,12 @@ import {
   resolveCurrentAcceptance,
 } from '../work-runtime/artifact-acceptance';
 import type { OwnerAcceptanceSummary } from '../execution/acceptance-summary';
-import { chatComplete, ModelHttpError, type ChatMessage } from '../infrastructure/model-http';
+import {
+  chatComplete,
+  ModelHttpError,
+  type ChatMessage,
+  type ChatToolDefinition,
+} from '../infrastructure/model-http';
 import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 import { DigitalSelfService } from '../subject-core/digital-self';
@@ -189,7 +199,7 @@ import { readThread, writeThread } from '../intelligence/store';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
-import { type DiscoverView } from '../subject-comm/content-discover';
+import { type DiscoverCard, type DiscoverView } from '../subject-comm/content-discover';
 import {
   formatSeekContext,
   seekContent,
@@ -294,6 +304,10 @@ export interface DigitalMeRuntimeOptions {
   documentCapability?: 'none' | 'fake' | 'openai-compatible' | 'both';
   openaiCompatible?: OpenAiCompatibleAdapterConfig;
   secrets?: SecretAccessor;
+  /** Real provider events only; UI must not infer stages from elapsed time. */
+  capabilityEventSink?: (
+    event: UnifiedCapabilityEvent & { surface: 'talk' | 'discover'; requestId: string },
+  ) => void;
   /**
    * P2.1/P2.2 代码分析能力:
    * - none:不注册
@@ -466,6 +480,7 @@ export class DigitalMeRuntime {
   private readonly ctoReviewInflight = new Set<Promise<void>>();
   private converseAbortSignal: AbortSignal | null = null;
   private talkAbortSignal: AbortSignal | null = null;
+  private activeTalkRequestId = '';
   private digitalSelfService: DigitalSelfService | null = null;
   private talkService: TalkService | null = null;
   private detachSubjectNetwork: (() => void) | null = null;
@@ -535,6 +550,10 @@ export class DigitalMeRuntime {
     input: CommandMap['talk']['input'],
     externalSignal?: AbortSignal | null,
   ): Promise<CommandMap['talk']['output']> {
+    const requestId = String(input.requestId || '').trim();
+    const previousRequestId = this.activeTalkRequestId;
+    this.activeTalkRequestId = requestId;
+    try {
     const pkg = this.subject.getActive();
     if (!pkg) return this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
     if (!input.contentIds?.length) {
@@ -573,6 +592,9 @@ export class DigitalMeRuntime {
     // 关联后不让旧 steer 成为另一份有效条件。
     await this.reverseSteerPreference(pkg.rootDir);
     return this.getTalkService().invoke({ ...input, discoveryGoal }, externalSignal || this.talkAbortSignal);
+    } finally {
+      if (this.activeTalkRequestId === requestId) this.activeTalkRequestId = previousRequestId;
+    }
   }
 
   async content(
@@ -608,7 +630,12 @@ export class DigitalMeRuntime {
       if (!query) {
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
-      return { view: await this.withAdjustment(pkg.rootDir, await this.runContentSeek(pkg.rootDir, query, input.relayUrl, started!)) };
+      return {
+        view: await this.withAdjustment(
+          pkg.rootDir,
+          await this.runUnifiedContentSeek(pkg.rootDir, pkg.id, query, started!),
+        ),
+      };
     }
 
     if (action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') {
@@ -1195,6 +1222,279 @@ export class DigitalMeRuntime {
       },
       generationAtStart,
     );
+  }
+
+  private async runUnifiedContentSeek(
+    packageRoot: string,
+    subjectId: string,
+    query: string,
+    started: { generationId: string; abort: AbortController },
+  ): Promise<DiscoverView> {
+    const generationId = started.generationId;
+    const preferenceDirectives = await listContentPreferences(packageRoot);
+    const preferences = preferenceDirectives.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      text: row.text,
+    }));
+    const base = (notice: string, extra?: Partial<DiscoverView>): DiscoverView =>
+      this.stampSearchGeneration({
+        headline: '发现',
+        lead: '根据你刚说的话找「' + query + '」，由同一模型自主搜索、读源并判断。',
+        feedTitle: '关于「' + query.slice(0, 36) + '」',
+        cards: [],
+        relatedCards: [],
+        preferences,
+        laterCards: this.pendingLaterCards,
+        notice,
+        reasonCode: 'UNIFIED_RESPONSES',
+        feedMode: 'intent',
+        searchQuery: query,
+        searchGenerationId: generationId,
+        replenishing: false,
+        ...extra,
+      }, generationId);
+    const commitView = (view: DiscoverView): DiscoverView => {
+      if (this.currentSearchGenerationId === generationId) this.lastIntentView = view;
+      return view;
+    };
+
+    const config = this.options.openaiCompatible;
+    if (!config || !this.options.secrets || !supportsResponsesToolLoop(config)) {
+      const unavailable = base('当前没有可用的统一搜索与正文读取能力；未退回旧 RSS 或候选兜底链。');
+      return commitView(unavailable);
+    }
+    const apiKey = await this.options.secrets.get(
+      providerCredentialKey(config.providerId || 'openai-compatible'),
+    );
+    if (!apiKey) {
+      const unavailable = base('当前模型凭据不可用；未发起搜索，也未退回旧链。');
+      return commitView(unavailable);
+    }
+
+    const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
+    const selfContext = formatSelfContext(selectSelfContext(self, query));
+    const preferenceContext = formatPreferenceDirectives(preferenceDirectives) ||
+      '当前没有主人明确设置的内容偏好。';
+    const presentResultsTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'present_results',
+        description: '把你已经搜索、核对并判断合格的结果交给发现页。只负责交付，不负责替你搜索、评分或排序。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['summary', 'results'],
+          properties: {
+            summary: {
+              type: 'string',
+              description: '对本轮结果的简短结论；无合格结果时如实说明。',
+            },
+            results: {
+              type: 'array',
+              maxItems: 12,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['title', 'url', 'summary', 'why', 'readStatus'],
+                properties: {
+                  title: { type: 'string' },
+                  url: { type: 'string' },
+                  summary: { type: 'string' },
+                  why: { type: 'string' },
+                  publishedAt: { type: 'string' },
+                  sourceName: { type: 'string' },
+                  contentType: { type: 'string' },
+                  readStatus: {
+                    type: 'string',
+                    enum: ['read', 'snippet_only', 'read_failed'],
+                    description: '你认为本轮对该地址的实际读取状态；应用还会与供应商调用事实核对。',
+                  },
+                  keyClaims: {
+                    type: 'array',
+                    maxItems: 4,
+                    items: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: [
+          '你是 2digime 的统一研究模型。理解请求后自主决定搜索词、来源、是否读正文、是否补搜和如何纠错。',
+          '不得用关键词路由或固定研究流程替代判断。搜索命中不等于合格推荐；你必须判断相关性、时效和来源。',
+          '新闻或深度分析需要核对来源与发布日期；比较观点前应读取相应正文。读不到正文时明确标为仅摘要或读取失败。',
+          '视频推荐必须给真实可观看入口，并核对页面确实对应所推荐内容；作品介绍页不能冒充观看入口。',
+          '具体文章必须给该文章的 canonical URL；媒体首页、栏目页或搜索页不能承载具体文章标题和观点，除非用户明确要的就是入口页。',
+          '关键陈述必须能绑定到结果来源。没有合格结果就交付空 results，不要用相近但不合格的对象填充。',
+          '完成判断后必须调用 present_results；它只是结构化展示，不替代你的判断。',
+          '当前时间：' + nowIso(),
+        ].join('\n'),
+      },
+      {
+        role: 'system',
+        content: '【长期 Digital Self 与已确认认识（不是本轮指令）】\n' + selfContext,
+      },
+      {
+        role: 'system',
+        content: '【主人明确设置的内容偏好（不是当前请求）】\n' + preferenceContext,
+      },
+      {
+        role: 'user',
+        content: '【当前请求】\n' + query,
+      },
+    ];
+
+    const logDiagnostic = (row: object) => {
+      void fs.mkdir(path.join(packageRoot, 'content'), { recursive: true })
+        .then(() => fs.appendFile(
+          path.join(packageRoot, 'content', 'discovery-diagnostics.ndjson'),
+          JSON.stringify({ at: nowIso(), generationId, event: 'unified_responses', ...row }) + '\n',
+        ))
+        .catch(() => {});
+    };
+
+    try {
+      const result = await runResponsesTurn({
+        baseUrl: config.baseUrl,
+        apiKey,
+        model: config.model,
+        messages,
+        tools: [presentResultsTool],
+        signal: started.abort.signal,
+        timeoutMs: 240_000,
+        maxOutputTokens: 8192,
+        onEvent: (event) => this.options.capabilityEventSink?.({
+          surface: 'discover',
+          requestId: generationId,
+          ...event,
+        }),
+      });
+      logDiagnostic({ query, trace: result.trace, responseStatus: result.status });
+
+      const present = result.toolCalls?.find((call) => call.name === 'present_results');
+      let payload: { summary?: unknown; results?: unknown } = {};
+      if (present) {
+        try {
+          payload = JSON.parse(present.arguments) as typeof payload;
+        } catch {
+          payload = {};
+        }
+      }
+      const rows = Array.isArray(payload.results) ? payload.results.slice(0, 12) : [];
+      const sourceItems = await this.loadDiscoverItems(packageRoot);
+      const sourceAllows = contentSourceAllowed(preferenceDirectives, sourceItems);
+      const evidenceKey = (value: string): string => {
+        try {
+          const parsed = new URL(value);
+          parsed.hash = '';
+          if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+          return parsed.toString();
+        } catch {
+          return value;
+        }
+      };
+      const traceByUrl = new Map(result.trace.sources.map((source) => {
+        return [evidenceKey(source.url), source] as const;
+      }));
+      const cards: DiscoverCard[] = [];
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index] && typeof rows[index] === 'object'
+          ? rows[index] as Record<string, unknown>
+          : {};
+        const rawUrl = typeof row.url === 'string' ? row.url.trim() : '';
+        let url = '';
+        let host = '';
+        try {
+          const parsed = new URL(rawUrl);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
+          url = parsed.toString();
+          host = parsed.hostname.replace(/^www\./i, '');
+        } catch {
+          continue;
+        }
+        if (!sourceAllows({ url })) continue;
+        const evidence = traceByUrl.get(evidenceKey(url));
+        const readStatus = evidence?.readStatus || 'snippet_only';
+        const title = typeof row.title === 'string' && row.title.trim()
+          ? row.title.trim()
+          : evidence?.title || host;
+        const summary = typeof row.summary === 'string' ? row.summary.trim() : '';
+        const claims = Array.isArray(row.keyClaims)
+          ? row.keyClaims.filter((claim): claim is string => typeof claim === 'string' && !!claim.trim())
+            .slice(0, 4)
+          : [];
+        const text = [summary, ...claims.map((claim) => '• ' + claim.trim())]
+          .filter(Boolean)
+          .join('\n');
+        const contentType = typeof row.contentType === 'string' && row.contentType.trim()
+          ? row.contentType.trim()
+          : 'article';
+        cards.push({
+          itemId: 'responses_' + createHash('sha256')
+            .update(generationId + '\n' + url + '\n' + index)
+            .digest('hex')
+            .slice(0, 20),
+          title,
+          text,
+          url,
+          publisherDisplayName: typeof row.sourceName === 'string' && row.sourceName.trim()
+            ? row.sourceName.trim()
+            : host,
+          ...(typeof row.publishedAt === 'string' && row.publishedAt.trim()
+            ? { publishedAt: row.publishedAt.trim() }
+            : {}),
+          reason: typeof row.why === 'string' && row.why.trim()
+            ? row.why.trim()
+            : '由模型结合本次请求与来源材料判断。',
+          source: 'web',
+          contentType,
+          textOrigin: readStatus === 'read' ? 'body' : 'snippet',
+          access: readStatus === 'read'
+            ? '已读取正文'
+            : readStatus === 'read_failed'
+              ? '正文读取失败；当前仅展示可核对信息'
+              : '仅见搜索摘要，尚未读取正文',
+          ...(contentType.toLowerCase().includes('video')
+            ? { entrancePurpose: '观看入口' }
+            : {}),
+        });
+      }
+
+      const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+      const structureMissing = !present;
+      const incomplete = result.status === 'incomplete';
+      const notice = structureMissing
+        ? '模型未完成结果交付；未用旧候选或模板结果补齐。'
+        : incomplete
+          ? '模型调用未完整结束；这里只显示已交付且可绑定来源的结果。'
+          : summary || (cards.length ? '' : '本轮没有获得合格结果。');
+      const view = base(notice, {
+        cards,
+        capabilityTrace: [result.trace],
+      });
+      commitView(view);
+      if (cards.length && this.currentSearchGenerationId === generationId) {
+        await rememberIntentFeed(packageRoot, cards, query);
+      }
+      return view;
+    } catch (error) {
+      const failure = error instanceof ModelHttpError
+        ? { kind: error.kind, status: error.status, message: error.message.slice(0, 300) }
+        : { kind: 'unknown', message: (error as Error).message.slice(0, 300) };
+      logDiagnostic({ query, failure });
+      const view = base(
+        started.abort.signal.aborted
+          ? '这次查找已停止。'
+          : '统一搜索与正文读取调用失败；未退回旧 RSS、日期追问或候选兜底链。',
+      );
+      return commitView(view);
+    }
   }
 
   private async runContentSeek(
@@ -2070,6 +2370,37 @@ export class DigitalMeRuntime {
 
   private resolveTalkChat(): TalkChatFn | null {
     if (this.options.talkChat) return this.options.talkChat;
+    const responsesConfig = this.options.openaiCompatible;
+    if (responsesConfig && this.options.secrets && supportsResponsesToolLoop(responsesConfig)) {
+      return async ({ messages, tools, signal, timeoutMs }) => {
+        const apiKey = await this.options.secrets!.get(
+          providerCredentialKey(responsesConfig.providerId || 'openai-compatible'),
+        );
+        if (!apiKey) throw new ModelHttpError('unauthorized', 'model credential is not configured');
+        const result = await runResponsesTurn({
+          baseUrl: responsesConfig.baseUrl,
+          apiKey,
+          model: responsesConfig.model,
+          messages,
+          ...(tools?.length ? { tools } : {}),
+          ...(signal ? { signal } : {}),
+          timeoutMs: typeof timeoutMs === 'number' && Number.isFinite(timeoutMs)
+            ? Math.max(timeoutMs, 240_000)
+            : 240_000,
+          maxOutputTokens: 8192,
+          onEvent: (event) => this.options.capabilityEventSink?.({
+            surface: 'talk',
+            requestId: this.activeTalkRequestId,
+            ...event,
+          }),
+        });
+        return {
+          text: result.text,
+          ...(result.toolCalls?.length ? { toolCalls: result.toolCalls } : {}),
+          capabilityTrace: result.trace,
+        };
+      };
+    }
     const understanding = resolveSubjectUnderstandingRuntime({
       ...(this.options.subjectUnderstanding
         ? { specialist: this.options.subjectUnderstanding }
@@ -2111,6 +2442,30 @@ export class DigitalMeRuntime {
 
   private resolveDigitalSelfChat(): DigitalSelfChatFn | null {
     if (this.options.digitalSelfChat) return this.options.digitalSelfChat;
+    const responsesConfig = this.options.openaiCompatible;
+    if (responsesConfig && this.options.secrets && supportsResponsesToolLoop(responsesConfig)) {
+      return async ({ messages }) => {
+        const apiKey = await this.options.secrets!.get(
+          providerCredentialKey(responsesConfig.providerId || 'openai-compatible'),
+        );
+        if (!apiKey) throw new ModelHttpError('unauthorized', 'model credential is not configured');
+        const result = await runResponsesTurn({
+          baseUrl: responsesConfig.baseUrl,
+          apiKey,
+          model: responsesConfig.model,
+          messages,
+          includeWebTools: false,
+          timeoutMs: 180_000,
+          maxOutputTokens: 8192,
+          onEvent: (event) => this.options.capabilityEventSink?.({
+            surface: 'talk',
+            requestId: this.activeTalkRequestId,
+            ...event,
+          }),
+        });
+        return { text: result.text };
+      };
+    }
     const understanding = resolveSubjectUnderstandingRuntime({
       ...(this.options.subjectUnderstanding
         ? { specialist: this.options.subjectUnderstanding }

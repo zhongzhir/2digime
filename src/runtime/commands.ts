@@ -1059,6 +1059,8 @@ export interface CommandMap {
     input: {
       text?: string;
       contextPaths?: string[];
+      /** UI request identity for real provider-event projection. */
+      requestId?: string;
       /** 只传引用；需求和来源由 runtime 从现有发现结果解析。 */
       contentIds?: string[];
     };

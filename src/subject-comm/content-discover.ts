@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
+import type { ResponsesToolTrace } from '../capability/adapters/responses-tool-loop';
 import type { DigitalSelf } from '../subject-core/digital-self/types';
 import { digitalSelfFilePath } from '../subject-core/digital-self/store';
 import type { NetworkItem } from './network-item';
@@ -101,6 +102,8 @@ export interface DiscoverView {
   laterCards?: DiscoverCard[];
   /** 这次请求实际发给联网搜索的次数；同一请求内重复的搜索词复用结果，不再计次。UI 不得展示。 */
   searchUsage?: { calls: number; reused: number; skippedAfterQuota: number; rateLimited: boolean };
+  /** 统一能力的真实供应商调用事实；不含密钥、提示正文或网页正文。UI 不得据此虚构阶段。 */
+  capabilityTrace?: ResponsesToolTrace[];
   /** 发现页「本次调整」。不是数字之我，也不是打开/收藏推断。 */
   adjustment?: {
     id: string;

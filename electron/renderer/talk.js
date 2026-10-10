@@ -7,7 +7,6 @@
   let contentContext = null;
   const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
   const DOING_TEXT = '正在替你做';
-  const CHECKING_TEXT = '正在查看结果';
   let sendGeneration = 0;
   let viewEpoch = 0;
   let sending = false;
@@ -433,6 +432,31 @@
     if (el) el.textContent = text;
   }
 
+  function progressText(stage) {
+    if (stage === 'request_started' || stage === 'reasoning') return '正在理解你的请求';
+    if (stage === 'searching') return '正在搜索公开来源';
+    if (stage === 'reading_source') return '正在读取来源正文';
+    if (stage === 'answering') return '正在整理结果';
+    if (stage === 'waiting_permission') return '等待你确认访问范围';
+    if (stage === 'cancelled') return '已取消';
+    if (stage === 'failed') return '本次处理未完成';
+    return '';
+  }
+
+  function bindCapabilityProgress() {
+    const client = api();
+    if (!client || typeof client.onCapabilityProgress !== 'function' || document.documentElement.dataset.talkProgressBound) return;
+    document.documentElement.dataset.talkProgressBound = '1';
+    client.onCapabilityProgress((event) => {
+      if (!event || event.surface !== 'talk') return;
+      if (String(event.requestId || '') !== 'talk_' + sendGeneration) return;
+      const text = progressText(String(event.stage || ''));
+      if (!text) return;
+      setDoingText(text);
+      setNotice(text);
+    });
+  }
+
   async function invokeTalk(payload) {
     const client = api();
     if (!client || typeof client.invoke !== 'function') {
@@ -501,16 +525,10 @@
         : trimmed;
     renderView(lastView, { userText: pendingText, doingText: DOING_TEXT });
     let watchdog = 0;
-    let checkTimer = 0;
     try {
-    const payload = { text: contentContext && contentContext.contentIds ? trimmed : withContentContext(trimmed) };
+    const payload = { text: contentContext && contentContext.contentIds ? trimmed : withContentContext(trimmed), requestId: 'talk_' + generation };
     if (contentContext && contentContext.contentIds) payload.contentIds = contentContext.contentIds.slice();
     if (paths.length) payload.contextPaths = paths;
-      checkTimer = setTimeout(() => {
-        if (generation !== sendGeneration || epoch !== viewEpoch) return;
-        setDoingText(CHECKING_TEXT);
-        setNotice(CHECKING_TEXT);
-      }, 8000);
       const result = await Promise.race([
         invokeTalk(payload),
         new Promise((_, reject) => {
@@ -546,7 +564,6 @@
       setNotice(facingError(err));
     } finally {
       if (watchdog) clearTimeout(watchdog);
-      if (checkTimer) clearTimeout(checkTimer);
       if (epoch === viewEpoch && generation === sendGeneration) {
         sending = false;
         setCancelVisible(false);
@@ -642,6 +659,7 @@
     bindAttach();
     bindConnectAi();
     bindFolderAccess();
+    bindCapabilityProgress();
     void refresh();
   }
 

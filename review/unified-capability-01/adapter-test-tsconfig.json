@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./adapter-test-dist",
+    "rootDir": "../../src",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [],
+  "files": [
+    "../../src/infrastructure/model-http.ts",
+    "../../src/capability/adapters/responses-tool-loop.ts",
+    "../../src/capability/adapters/tests/responses-tool-loop.test.ts"
+  ]
+}

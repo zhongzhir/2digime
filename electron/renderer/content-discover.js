@@ -839,15 +839,22 @@
     }
   }
 
-  function noteSlowSearch(gen) {
-    return setTimeout(() => {
-      if (activeSearchGenerationId !== gen) return;
-      setStatus('还在向来源核对。再搜一次会停掉这一次，旧结果不会留在新主题上。');
-    }, 10000);
+  function capabilityProgressText(stage) {
+    const labels = {
+      request_started: '正在连接搜索与阅读能力……',
+      reasoning: '正在理解这次请求并决定下一步……',
+      searching: '正在搜索公开来源……',
+      reading_source: '正在读取并核对来源正文……',
+      answering: '正在整理已核对的结果……',
+      completed: '正在把结果交给发现页……',
+      failed: '搜索或正文读取失败，正在收尾……',
+      cancelled: '已停止。',
+    };
+    return labels[stage] || '';
   }
 
   // 页面整体兜底：后端仍在补充超过此时间，就走现有 cancel（中止后端这一代请求），再让页面进入终态。
-  const PAGE_DEADLINE_MS = 75000;
+  const PAGE_DEADLINE_MS = 250000;
 
   function watchDeadline(gen) {
     return setTimeout(() => {
@@ -904,7 +911,6 @@
     activeFeedMode = 'personal';
     const gen = activeSearchGenerationId;
     if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
-    const slowNote = noteSlowSearch(gen);
     const deadline = watchDeadline(gen);
     try {
       const result = await client.invoke('content', {
@@ -916,7 +922,6 @@
     } catch (err) {
       if (activeSearchGenerationId === gen) await terminate(failureMessage(err));
     } finally {
-      clearTimeout(slowNote);
       clearTimeout(deadline);
     }
   }
@@ -1021,7 +1026,6 @@
     if (feedTitle) feedTitle.textContent = '正在找「' + text.slice(0, 24) + '」';
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
-    const slowNote = noteSlowSearch(gen);
     const deadline = watchDeadline(gen);
     try {
       const result = await client.invoke('content', {
@@ -1034,7 +1038,6 @@
     } catch (err) {
       if (activeSearchGenerationId === gen) await terminate(failureMessage(err));
     } finally {
-      clearTimeout(slowNote);
       clearTimeout(deadline);
       if (seekPendingGen === gen) seekPendingGen = '';
       if (activeSearchGenerationId === gen && lastCards.length) setStatus('');
@@ -1070,6 +1073,20 @@
   }
 
   function bind() {
+    const client = api();
+    if (
+      client &&
+      typeof client.onCapabilityProgress === 'function' &&
+      !document.documentElement.dataset.discoverProgressBound
+    ) {
+      document.documentElement.dataset.discoverProgressBound = '1';
+      client.onCapabilityProgress((event) => {
+        if (!event || event.surface !== 'discover') return;
+        if (!activeSearchGenerationId || event.requestId !== activeSearchGenerationId) return;
+        const message = capabilityProgressText(event.stage);
+        if (message) setStatus(message);
+      });
+    }
     const form = $('content-discover-search');
     if (form && !form.dataset.bound) {
       form.dataset.bound = '1';
