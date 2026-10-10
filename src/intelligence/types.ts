@@ -84,6 +84,8 @@ export interface TalkView {
     role: 'user' | 'assistant';
     text: string;
     result?: { title: string; path?: string };
+    /** Provider execution facts exposed for diagnostics; never prompt, key, reasoning or page body. */
+    capabilityTrace?: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace[];
   }>;
 }
 

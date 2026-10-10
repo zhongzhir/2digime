@@ -344,8 +344,11 @@
         void client.openPath(file.path).then((out) => {
           if (out && out.opened === false && typeof client.revealPath === 'function') {
             void client.revealPath(file.path);
+            setNotice('文件未能直接打开，已在文件夹中显示。');
+            return;
           }
-        });
+          setNotice('已打开 ' + (file.title || basename(file.path)) + '。');
+        }).catch(() => setNotice('文件未能打开。'));
       } else if (client && typeof client.revealPath === 'function') {
         void client.revealPath(file.path);
       }

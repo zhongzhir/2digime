@@ -218,6 +218,7 @@ import {
   defaultDiscoverIntent,
   DiscoverIntentError,
   interpretDiscoverIntent,
+  isGenericHubUrl,
   localCalendarDate,
 } from '../subject-comm/discover-intent';
 import { ManagedAiError } from '../capability/managed-ai-client';
@@ -455,6 +456,17 @@ async function readPersonalFeedIds(packageRoot: string): Promise<string[]> {
     return parsed.lastView?.itemIds || parsed.personal?.itemIds || [];
   } catch {
     return [];
+  }
+}
+
+/** 统一结果只能把可定位的具体页面作为具体内容；不做相关性或优先级判断。 */
+export function isSpecificUnifiedResultUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return !isGenericHubUrl(parsed.toString());
+  } catch {
+    return false;
   }
 }
 
@@ -1403,6 +1415,7 @@ export class DigitalMeRuntime {
         return [evidenceKey(source.url), source] as const;
       }));
       const cards: DiscoverCard[] = [];
+      let rejectedGenericHubs = 0;
       for (let index = 0; index < rows.length; index += 1) {
         const row = rows[index] && typeof rows[index] === 'object'
           ? rows[index] as Record<string, unknown>
@@ -1416,6 +1429,12 @@ export class DigitalMeRuntime {
           url = parsed.toString();
           host = parsed.hostname.replace(/^www\./i, '');
         } catch {
+          continue;
+        }
+        // 来源完整性门：站点首页/搜索页不能承载模型给出的具体文章标题。
+        // 这只拒绝错误身份绑定，不替模型做相关性评分、排序或补搜。
+        if (!isSpecificUnifiedResultUrl(url)) {
+          rejectedGenericHubs += 1;
           continue;
         }
         if (!sourceAllows({ url })) continue;
@@ -1469,11 +1488,15 @@ export class DigitalMeRuntime {
       const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
       const structureMissing = !present;
       const incomplete = result.status === 'incomplete';
-      const notice = structureMissing
+      const mainNotice = structureMissing
         ? '模型未完成结果交付；未用旧候选或模板结果补齐。'
         : incomplete
           ? '模型调用未完整结束；这里只显示已交付且可绑定来源的结果。'
           : summary || (cards.length ? '' : '本轮没有获得合格结果。');
+      const integrityNotice = rejectedGenericHubs
+        ? rejectedGenericHubs + ' 项仅指向站点首页或搜索页，未作为具体文章展示。'
+        : '';
+      const notice = [mainNotice, integrityNotice].filter(Boolean).join(' ');
       const view = base(notice, {
         cards,
         capabilityTrace: [result.trace],
@@ -2183,8 +2206,12 @@ export class DigitalMeRuntime {
               }),
           };
         },
-        async (text, taskContext) => {
-          const learned = await this.getDigitalSelfService().invoke({ action: 'tell', text }, taskContext);
+        async (text, taskContext, signal) => {
+          const learned = await this.getDigitalSelfService().invoke(
+            { action: 'tell', text },
+            taskContext,
+            signal,
+          );
           if (!learned.view.asked) return { asked: false, ...(learned.goalUpdate ? {goalUpdate:learned.goalUpdate} : {}) };
           const pending = learned.view.groups.learning
             .filter((item) => item.confirmationLabel === '需要你确认')
@@ -2394,6 +2421,21 @@ export class DigitalMeRuntime {
             ...event,
           }),
         });
+        const pkg = this.subject.getActive();
+        if (pkg) {
+          const contentDir = path.join(pkg.rootDir, 'content');
+          await fs.mkdir(contentDir, { recursive: true }).catch(() => undefined);
+          await fs.appendFile(
+            path.join(contentDir, 'talk-diagnostics.ndjson'),
+            JSON.stringify({
+              at: nowIso(),
+              surface: 'talk',
+              phase: 'main_talk',
+              requestId: this.activeTalkRequestId,
+              trace: result.trace,
+            }) + '\n',
+          ).catch(() => undefined);
+        }
         return {
           text: result.text,
           ...(result.toolCalls?.length ? { toolCalls: result.toolCalls } : {}),
@@ -2444,7 +2486,7 @@ export class DigitalMeRuntime {
     if (this.options.digitalSelfChat) return this.options.digitalSelfChat;
     const responsesConfig = this.options.openaiCompatible;
     if (responsesConfig && this.options.secrets && supportsResponsesToolLoop(responsesConfig)) {
-      return async ({ messages }) => {
+      return async ({ messages, signal }) => {
         const apiKey = await this.options.secrets!.get(
           providerCredentialKey(responsesConfig.providerId || 'openai-compatible'),
         );
@@ -2455,6 +2497,7 @@ export class DigitalMeRuntime {
           model: responsesConfig.model,
           messages,
           includeWebTools: false,
+          ...(signal ? { signal } : {}),
           timeoutMs: 180_000,
           maxOutputTokens: 8192,
           onEvent: (event) => this.options.capabilityEventSink?.({
@@ -2463,6 +2506,21 @@ export class DigitalMeRuntime {
             ...event,
           }),
         });
+        const pkg = this.subject.getActive();
+        if (pkg) {
+          const contentDir = path.join(pkg.rootDir, 'content');
+          await fs.mkdir(contentDir, { recursive: true }).catch(() => undefined);
+          await fs.appendFile(
+            path.join(contentDir, 'talk-diagnostics.ndjson'),
+            JSON.stringify({
+              at: nowIso(),
+              surface: 'talk',
+              phase: 'digital_self_interpret',
+              requestId: this.activeTalkRequestId,
+              trace: result.trace,
+            }) + '\n',
+          ).catch(() => undefined);
+        }
         return { text: result.text };
       };
     }
@@ -2480,13 +2538,14 @@ export class DigitalMeRuntime {
     });
     const runtime = understanding.runtime;
     if (!runtime?.enabled) return null;
-    return async ({ messages }) => {
+    return async ({ messages, signal }) => {
       const result = await runtime.chatComplete({
         messages,
         baseUrl: runtime.model.baseUrl,
         model: runtime.model.model,
         temperature: 0.2,
         responseFormat: { type: 'json_object' },
+        ...(signal ? { signal } : {}),
         // 单次 interpret 与 Talk 整轮同级：完整资料 JSON 比闲聊更长，不得比 Talk 更短。
         timeoutMs: 180_000,
       });

@@ -10,6 +10,7 @@ import { liveUnderstandings } from './view';
 
 export type DigitalSelfChatFn = (input: {
   messages: ChatMessage[];
+  signal?: AbortSignal;
 }) => Promise<{ text: string }>;
 
 const SYSTEM = `你在帮助 2digime 理解「用户本人」。只判断与用户本人有关的信息。
@@ -155,6 +156,7 @@ export async function interpretWithModel(input: {
   text: string;
   materialName?: string;
   taskContext?: string;
+  signal?: AbortSignal;
 }): Promise<ModelInterpretResult> {
   const user = buildInterpretPrompt(input);
   const result = await input.chat({
@@ -162,6 +164,7 @@ export async function interpretWithModel(input: {
       { role: 'system', content: SYSTEM },
       { role: 'user', content: user },
     ],
+    ...(input.signal ? { signal: input.signal } : {}),
   });
   return parseInterpretResult(result.text, input.mode === 'tell' && !!input.taskContext);
 }

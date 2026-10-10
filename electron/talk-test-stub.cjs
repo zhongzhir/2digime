@@ -202,6 +202,24 @@ async function chat({ messages, tools }) {
     };
   }
 
+  const hasArtifact =
+    Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'write_artifact');
+  if (hasArtifact && /无付费成果打开验证/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [
+        {
+          id: 'call_artifact_open_1',
+          name: 'write_artifact',
+          arguments: JSON.stringify({
+            fileName: 'artifact-open-test.txt',
+            content: '公开虚构数据：无付费成果打开验证。',
+          }),
+        },
+      ],
+    };
+  }
+
   const hasTools = Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'delegate');
 
   if (hasTools && /(写|备忘|文档|说明|待办|三件)/.test(text)) {

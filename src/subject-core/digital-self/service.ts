@@ -35,8 +35,12 @@ export class DigitalSelfService {
     private readonly onMaterialImported?: (sourceCopy: string) => Promise<void>,
   ) {}
 
-  async invoke(input: DigitalSelfCommandInput, taskContext?: string): Promise<DigitalSelfCommandOutput> {
-    const run = this.writeChain.then(() => this.invokeNow(input, taskContext));
+  async invoke(
+    input: DigitalSelfCommandInput,
+    taskContext?: string,
+    signal?: AbortSignal,
+  ): Promise<DigitalSelfCommandOutput> {
+    const run = this.writeChain.then(() => this.invokeNow(input, taskContext, signal));
     this.writeChain = run.then(
       () => undefined,
       () => undefined,
@@ -47,6 +51,7 @@ export class DigitalSelfService {
   private async invokeNow(
     input: DigitalSelfCommandInput,
     taskContext?: string,
+    signal?: AbortSignal,
   ): Promise<DigitalSelfCommandOutput> {
     const pkg = this.resolvePackage();
     if (!pkg) {
@@ -112,7 +117,9 @@ export class DigitalSelfService {
         self,
         text,
         ...(taskContext ? {taskContext} : {}),
+        ...(signal ? { signal } : {}),
       });
+      if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('已取消。');
       const result = applyTellProposals(self, interpreted.understandings, this.now());
       await writeDigitalSelf(pkg.rootDir, result.self);
       const notice = interpreted.notice || result.notice;
@@ -151,6 +158,7 @@ export class DigitalSelfService {
           self,
           text: extracted.text,
           materialName,
+          ...(signal ? { signal } : {}),
         });
       } catch (err) {
         const reason = String(err instanceof Error ? err.message : err).trim() || '理解这份资料时失败。';

@@ -115,7 +115,11 @@ export class TalkService {
     ) => ProfessionalAgent[],
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
-    private readonly learnFromUtterance?: (text: string, taskContext?: string) => Promise<TalkLearnResult>,
+    private readonly learnFromUtterance?: (
+      text: string,
+      taskContext?: string,
+      signal?: AbortSignal,
+    ) => Promise<TalkLearnResult>,
     private readonly resolveContentSeek?: (pkg: TalkPackageRef, query: string) => Promise<string>,
     private readonly requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>,
     private readonly resolveWebSearch?: () =>
@@ -208,11 +212,22 @@ export class TalkService {
     // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
     if (spoken && this.learnFromUtterance) {
       try {
-        const learned = await this.learnFromUtterance(spoken, thread.discoveryGoal
-          ? JSON.stringify({ originalRequest: thread.discoveryGoal.originalRequest, currentRequest: thread.discoveryGoal.request, scope: thread.discoveryGoal.scope }) : undefined);
+        const learned = await this.learnFromUtterance(
+          spoken,
+          thread.discoveryGoal
+            ? JSON.stringify({ originalRequest: thread.discoveryGoal.originalRequest, currentRequest: thread.discoveryGoal.request, scope: thread.discoveryGoal.scope })
+            : undefined,
+          externalSignal || undefined,
+        );
         learnedGoalUpdate = learned.goalUpdate;
         if (learned.asked && learned.askHint) confirmHint = learned.askHint;
       } catch {
+        if (externalSignal?.aborted) {
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '已取消。' });
+          await writeThread(pkg.rootDir, thread);
+          return { view: projectView(thread, '已取消。', 'CANCELLED') };
+        }
         if (thread.discoveryGoal) {
           thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
           thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '本轮理解或保存失败，当前目标的新条件未能确认保存。' });
@@ -628,6 +643,7 @@ function projectView(
       role: turn.role,
       text: turn.text,
       ...(turn.result ? { result: turn.result } : {}),
+      ...(turn.capabilityTrace ? { capabilityTrace: turn.capabilityTrace } : {}),
     })),
   };
 }

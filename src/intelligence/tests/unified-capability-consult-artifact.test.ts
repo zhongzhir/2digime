@@ -5,7 +5,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { runTalkTurn } from '../loop';
 import { emptyThread } from '../store';
-import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
+import {
+  createDigitalMeRuntime,
+  isSpecificUnifiedResultUrl,
+} from '../../runtime/digitalme-runtime';
 import { providerCredentialKey } from '../../infrastructure/secret-store';
 
 async function tempDir(name: string): Promise<string> {
@@ -143,4 +146,18 @@ test('Digital Self 前置解释复用北京 Responses 且不暴露 Web 工具', 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('统一结果来源完整性门拒绝实测首页并保留具体文章 URL', () => {
+  assert.equal(isSpecificUnifiedResultUrl('https://www.techflowpost.com/'), false);
+  assert.equal(isSpecificUnifiedResultUrl('https://www.wublock123.com/'), false);
+  assert.equal(isSpecificUnifiedResultUrl('https://example.org/search?q=blockchain'), false);
+  assert.equal(
+    isSpecificUnifiedResultUrl('https://m.cnyes.com/news/id/6624795'),
+    true,
+  );
+  assert.equal(
+    isSpecificUnifiedResultUrl('https://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/'),
+    true,
+  );
 });
