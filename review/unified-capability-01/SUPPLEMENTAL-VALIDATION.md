@@ -1,5 +1,7 @@
 # DIGITALME-UNIFIED-CAPABILITY-01 补验交付
 
+> 2026-10-11 收尾：来源完整性离线完整链路及唯一一次真实区块链 UI 复验均已通过。最新结论与预算以 [`CLOSEOUT.md`](./CLOSEOUT.md) 为准；本文保留 2026-10-10 当时的失败与修复前状态，不能单独作为最终结论。
+
 **状态：** COMPLETE / OWNER REVIEW REQUIRED / NOT MERGED
 
 **分支：** `codex/digitalme-unified-capability-01-core`

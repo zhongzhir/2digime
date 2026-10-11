@@ -268,12 +268,18 @@ function parsedPublicUrl(raw: string): URL | null {
 }
 
 function isSearchResultsUrl(parsed: URL): boolean {
-  return (
+  const hasSearchParameter = (
     parsed.searchParams.has('q') ||
     parsed.searchParams.has('wd') ||
     parsed.searchParams.has('query') ||
     parsed.searchParams.has('search')
   );
+  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+  const hasSearchPath = /(^|\/)(search|search-results|results|find)(\/|$)/i.test(path);
+  // Query keys alone are not enough: article URLs commonly retain q/query as
+  // tracking or in-page state. Only a root query or an explicit search path is
+  // a mechanical search-results identity.
+  return hasSearchPath || (path === '/' && hasSearchParameter);
 }
 
 /** 机械 URL 结构：首页或搜索结果页。不是站点特例表。 */

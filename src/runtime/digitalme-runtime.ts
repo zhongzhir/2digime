@@ -1465,7 +1465,10 @@ export class DigitalMeRuntime {
           publisherDisplayName: typeof row.sourceName === 'string' && row.sourceName.trim()
             ? row.sourceName.trim()
             : host,
-          ...(typeof row.publishedAt === 'string' && row.publishedAt.trim()
+          // A displayed publication date must be bound to the same source URL
+          // whose body the provider actually returned. Search snippets may be
+          // useful, but this trace does not preserve a date field from them.
+          ...(readStatus === 'read' && typeof row.publishedAt === 'string' && row.publishedAt.trim()
             ? { publishedAt: row.publishedAt.trim() }
             : {}),
           reason: typeof row.why === 'string' && row.why.trim()

@@ -1,0 +1,190 @@
+{
+  "provenance": {
+    "sourceFile": "review/unified-capability-01/supplemental-ui-validation-result.json",
+    "sourceResponseId": "resp_d6e35c64-e621-9212-94ce-321a793c09a0",
+    "sourceCompletedAt": "2026-10-10T09:22:52.146Z",
+    "captureKind": "normalized_saved_real_ui_cards_and_provider_trace",
+    "limitation": "The original provider SSE bytes and present_results arguments were not retained; empty why fields and the replay summary are reconstruction metadata, not supplier evidence."
+  },
+  "terminalResponse": {
+    "id": "replay_resp_d6e35c64-e621-9212-94ce-321a793c09a0",
+    "status": "completed",
+    "output": [
+      {
+        "id": "replay_search_1",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "sources": [
+            {
+              "url": "https://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=5FUftOaKSwE"
+            },
+            {
+              "url": "https://www.weforum.org/stories/financial-and-monetary-systems/digital-economy-inflection-point-what-to-expect-for-digital-assets-in-2026/"
+            },
+            {
+              "url": "https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era"
+            },
+            {
+              "url": "https://mercuryo.io/explore/learn/crypto-trends-2026"
+            },
+            {
+              "url": "https://scalablesolutions.io/blog/posts/blockchain-updates-2026"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=CZYCUiVlXmE"
+            },
+            {
+              "url": "https://www.fastcompany.com/91612027/fintech-cryptocurrency-blockchain-next-big-things-in-tech-2026"
+            },
+            {
+              "url": "https://blog.kraken.com/crypto-education/crypto-markets-in-2026"
+            },
+            {
+              "url": "https://oakresearch.io/en/reports/markets/8-expert-insights-crypto-2026"
+            },
+            {
+              "url": "https://www.wublock123.com/"
+            },
+            {
+              "url": "https://artistic709.medium.com/%E5%9C%A8-2026-%E5%B9%B4-%E6%90%9E%E5%8D%80%E5%A1%8A%E9%8F%88%E9%82%84%E6%98%AF%E6%9C%89%E6%84%8F%E7%BE%A9%E7%9A%84%E5%97%8E-da69592be39f"
+            },
+            {
+              "url": "https://blockcast.it/"
+            },
+            {
+              "url": "https://news.cnyes.com/news/id/6623593"
+            },
+            {
+              "url": "https://www.chaincatcher.com/news"
+            },
+            {
+              "url": "https://www.binance.com/zh-CN/blog/all/2101230134524981863"
+            },
+            {
+              "url": "https://spacedev.io/blog/blockchain-trends-2026"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=4EcH0BSpGiM"
+            },
+            {
+              "url": "https://smartym.pro/articles/blockchain-technology-trends-2026/"
+            },
+            {
+              "url": "https://www.grandviewresearch.com/industry-analysis/blockchain-technology-market"
+            },
+            {
+              "url": "https://www.sciencedirect.com/science/article/pii/S1319157822000891"
+            },
+            {
+              "url": "https://www.appventurez.com/blog/blockchain-technology-trends"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=waWcCcBJsWc"
+            },
+            {
+              "url": "https://www.investopedia.com/terms/b/blockchain.asp"
+            },
+            {
+              "url": "https://www.fortunebusinessinsights.com/industry-reports/blockchain-market-100072"
+            },
+            {
+              "url": "https://www.facebook.com/fb-answers/blockchain-technology-trends-2026/"
+            },
+            {
+              "url": "https://appers.com.au/top-10-blockchain-trends-to-follow-in-2026/"
+            },
+            {
+              "url": "https://m.cnyes.com/news/id/6624795"
+            },
+            {
+              "url": "https://www.zqsxw.com/22515.html"
+            },
+            {
+              "url": "https://x.com/Foresight_News/article/2072142296532066643"
+            },
+            {
+              "url": "https://www.hongkong-fintech.hk/cn/insights/news/news-2026/consensus-2026/"
+            },
+            {
+              "url": "https://tech.china.com/articles/20260620/202606201898103.html"
+            },
+            {
+              "url": "https://www.prnewswire.com/apac/zh/news-releases/cypher-asia-202622-302874563.html"
+            },
+            {
+              "url": "https://www.antier.com/zh-CN/%E5%8D%9A%E5%AE%A2/2026%E5%B9%B4%E6%8E%A8%E5%8A%A8%E4%BC%81%E4%B8%9A%E8%BD%AC%E5%9E%8B%E7%9A%84%E5%8D%81%E5%A4%A7%E5%8C%BA%E5%9D%97%E9%93%BE%E5%AE%9E%E9%99%85%E5%BA%94%E7%94%A8%E6%A1%88%E4%BE%8B/"
+            },
+            {
+              "url": "https://www.techflowpost.com/"
+            },
+            {
+              "url": "https://www.gate.com/zh/news/detail/16232818"
+            },
+            {
+              "url": "https://artistic709.medium.com/%E5%9C%A8-2026-%E5%B9%B4-%E6%90%9E%E5%8D%80%E5%A0%8A%E9%8F%88%E9%82%84%E6%98%AF%E6%9C%89%E6%84%8F%E7%BE%A9%E7%9A%84%E5%97%8E-da69592be39f"
+            }
+          ]
+        }
+      },
+      {
+        "id": "replay_extract_1",
+        "type": "web_extractor_call",
+        "status": "completed",
+        "urls": [
+          "https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era",
+          "https://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/",
+          "https://oakresearch.io/en/reports/markets/8-expert-insights-crypto-2026"
+        ],
+        "output": "https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era\nGrayscale 发布 32 分钟长文年度展望报告，核心判断 2026 年将终结四年周期进入机构化牛市。从宏观避险需求与监管明确两大支柱出发，提出十大投资主题（稳定币、资产代币化、隐私方案、AI 融合等），并明确将量子计算风险和数字资产国库（DAT）列为'红鲱鱼'。 • 2026 年加密市场将持续牛市，四年周期可能终结 • 宏观需求：政府债务上升推动比特币等稀缺数字资产的避险配置 • 监管明确正驱动机构资金进入公共区块链 • 量子计算和 DAT 对 2026 年市场影响有限\n\nhttps://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/\nPantera Capital 的区块链季报。上半部分复盘 2025 年市场：BTC 跌 6%、ETH 跌 11%、Solana 跌 34%、中位数代币跌 79%——非 BTC 代币市场自 2024 年 12 月即进入熊市。下半部分由管理合伙人 Paul Veradittakit 给出 2026 年九大预测：RWA 爆发（TVL 或翻倍）、AI 重塑链上安全、数字资产 IPO 大年等。 • 2025 年非比特币代币市场中位数下跌 79%，自 2024 年 12 月起已处熊市 • 2026 年 RWA 总锁仓量（当时 $16.6B）可能翻倍以上 • SEC 创新豁免将推动代币化股票加速增长 • 2026 年可能成为史上最大加密 IPO 年\n\nhttps://oakresearch.io/en/reports/markets/8-expert-insights-crypto-2026\nOAK Research 联合 Castle Labs 和 Hazeflow 推出的 180 页年度报告精华，邀请 8 位顶级加密专家逐一分享 2026 年关键趋势：RWA 链上总值从 2022 年的 $3B 增长到 2025 年 11 月的 $36B；链上信用与 TradFi 竞争；链上新银行（neobank）概念；稳定币迈向万亿美元市值；以太坊基金会治理改革等。 • 链上 RWA 总值从 2022 年 $3B 增至 2025 年 11 月约 $36B • 链上新银行有望把 DeFi 收益产品变成消费级金融产品 • 稳定币正成为链上金融的记账单位、支付媒介和结算层 • 比特币已完成从加密原生逻辑向宏观资产的转变"
+      },
+      {
+        "id": "replay_extract_2",
+        "type": "web_extractor_call",
+        "status": "completed",
+        "urls": [
+          "https://www.weforum.org/stories/financial-and-monetary-systems/digital-economy-inflection-point-what-to-expect-for-digital-assets-in-2026/",
+          "https://www.techflowpost.com/"
+        ],
+        "output": "https://www.weforum.org/stories/financial-and-monetary-systems/digital-economy-inflection-point-what-to-expect-for-digital-assets-in-2026/\n世界经济论坛分析文章指出 2026 年是数字资产从试验走向基础设施的拐点年。三大趋势：监管明确化推动规模化采用、资产代币化重塑资本市场、区块链日益嵌入企业核心运营。强调互操作性、全球协调和公私合作是负责任采用的关键优先项。 • 2026 年整个资产类别可能实现链上可交易，重塑资本流动和投资流动性 • 企业和机构将把区块链嵌入核心运营和资产负债表基础设施 • 互操作性（多链生态与跨链桥接）是下一阶段优先事项\n\nhttps://www.techflowpost.com/\n中文区块链深度媒体 TechFlow 的实时首页，近几日发布内容涵盖：Abstract 宣布关链（400 万钱包仍养不起一条 L2）的复盘；Hyperliquid 组合保证金如何冲击传统 DeFi 原语；稳定币战争进入'修路'（接口争夺）时代的分析；比特币波动率腰斩但极端日反超 2018 年的风险讨论；Aave 品牌治理归属之争等。 • Abstract 虽有 400 万钱包和 144 个应用仍无法跑通 L2 商业模型 • 稳定币竞争已从'印钱'转向'修路'即支付接口争夺 • BTC 三年 225% 回报可能集中在 15 个交易日内 • Zcash 现货 ETF 首月吸金超 10 亿美元"
+      },
+      {
+        "id": "replay_extract_3",
+        "type": "web_extractor_call",
+        "status": "completed",
+        "urls": [
+          "https://www.wublock123.com/",
+          "https://m.cnyes.com/news/id/6624795"
+        ],
+        "output": "https://www.wublock123.com/\n吴说区块链中文快讯与深度平台，最新内容包括：2026 年 9 月主要交易所现货成交量合计约 6,967 亿美元（环比上升 36.5%）；Vitalik Buterin 测试隐私 AI 架构（本地模型 Qwen + zkAPI + Tor 三层保护）；Q3 Web3 就业回暖但结构性分化明显——岗位集中在头部交易所和合规科技，通用岗下滑。 • 2026 年 9 月交易所现货成交量约 6,967 亿美元，环比上升 36.5% • Vitalik 正在测试本地模型+zkAPI+Tor 三层隐私 AI 架构 • Q3 Web3 就业增长集中在头部交易所与合规科技领域\n\nhttps://m.cnyes.com/news/id/6624795\n金色财经发布的当日行业综述：指出区块链行业处于'合规化、规模化、深度融合'转型关键期；高性能公链竞争加剧（ICP 实际 TPS 达 980.3 居首）；路易威登确认大规模启用加密 NFC 芯片标志区块链溯源在高端零售初步落地；Bitget 因第三方零日漏洞被盗 3.875 亿美元凸显供应链安全风险。 • 行业正从'技术探索'向'合规化、规模化、深度融合'转型 • Bitget 因第三方安全产品零日漏洞被盗 3.875 亿美元 • 高性能公链 ICP 实际 TPS 达 980.3 位居榜首 • LV 是目前唯一公开确认大规模启用加密 NFC 晶片的奢侈品牌"
+      },
+      {
+        "id": "replay_present_1",
+        "type": "function_call",
+        "status": "completed",
+        "call_id": "replay_present_call_1",
+        "name": "present_results",
+        "arguments": "{\"summary\":\"已完成区块链最新报道与深度分析检索。\",\"results\":[{\"title\":\"2026 Digital Asset Outlook: Dawn of the Institutional Era\",\"url\":\"https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era\",\"summary\":\"Grayscale 发布 32 分钟长文年度展望报告，核心判断 2026 年将终结四年周期进入机构化牛市。从宏观避险需求与监管明确两大支柱出发，提出十大投资主题（稳定币、资产代币化、隐私方案、AI 融合等），并明确将量子计算风险和数字资产国库（DAT）列为'红鲱鱼'。 • 2026 年加密市场将持续牛市，四年周期可能终结 • 宏观需求：政府债务上升推动比特币等稀缺数字资产的避险配置 • 监管明确正驱动机构资金进入公共区块链 • 量子计算和 DAT 对 2026 年市场影响有限\",\"why\":\"\",\"publishedAt\":\"2025-12-15\",\"sourceName\":\"Grayscale Research\",\"contentType\":\"article\",\"readStatus\":\"read\"},{\"title\":\"Navigating Crypto in 2026\",\"url\":\"https://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/\",\"summary\":\"Pantera Capital 的区块链季报。上半部分复盘 2025 年市场：BTC 跌 6%、ETH 跌 11%、Solana 跌 34%、中位数代币跌 79%——非 BTC 代币市场自 2024 年 12 月即进入熊市。下半部分由管理合伙人 Paul Veradittakit 给出 2026 年九大预测：RWA 爆发（TVL 或翻倍）、AI 重塑链上安全、数字资产 IPO 大年等。 • 2025 年非比特币代币市场中位数下跌 79%，自 2024 年 12 月起已处熊市 • 2026 年 RWA 总锁仓量（当时 $16.6B）可能翻倍以上 • SEC 创新豁免将推动代币化股票加速增长 • 2026 年可能成为史上最大加密 IPO 年\",\"why\":\"\",\"publishedAt\":\"2026-01-01\",\"sourceName\":\"Pantera Capital\",\"contentType\":\"article\",\"readStatus\":\"read\"},{\"title\":\"8 Expert Insights on Crypto in 2026\",\"url\":\"https://oakresearch.io/en/reports/markets/8-expert-insights-crypto-2026\",\"summary\":\"OAK Research 联合 Castle Labs 和 Hazeflow 推出的 180 页年度报告精华，邀请 8 位顶级加密专家逐一分享 2026 年关键趋势：RWA 链上总值从 2022 年的 $3B 增长到 2025 年 11 月的 $36B；链上信用与 TradFi 竞争；链上新银行（neobank）概念；稳定币迈向万亿美元市值；以太坊基金会治理改革等。 • 链上 RWA 总值从 2022 年 $3B 增至 2025 年 11 月约 $36B • 链上新银行有望把 DeFi 收益产品变成消费级金融产品 • 稳定币正成为链上金融的记账单位、支付媒介和结算层 • 比特币已完成从加密原生逻辑向宏观资产的转变\",\"why\":\"\",\"publishedAt\":\"2026-01-01\",\"sourceName\":\"OAK Research\",\"contentType\":\"article\",\"readStatus\":\"read\"},{\"title\":\"A digital economy at an inflection point: What to expect for digital assets in 2026\",\"url\":\"https://www.weforum.org/stories/financial-and-monetary-systems/digital-economy-inflection-point-what-to-expect-for-digital-assets-in-2026/\",\"summary\":\"世界经济论坛分析文章指出 2026 年是数字资产从试验走向基础设施的拐点年。三大趋势：监管明确化推动规模化采用、资产代币化重塑资本市场、区块链日益嵌入企业核心运营。强调互操作性、全球协调和公私合作是负责任采用的关键优先项。 • 2026 年整个资产类别可能实现链上可交易，重塑资本流动和投资流动性 • 企业和机构将把区块链嵌入核心运营和资产负债表基础设施 • 互操作性（多链生态与跨链桥接）是下一阶段优先事项\",\"why\":\"\",\"publishedAt\":\"2026-09-21\",\"sourceName\":\"World Economic Forum\",\"contentType\":\"article\",\"readStatus\":\"read\"},{\"title\":\"深潮 TechFlow：2026 年 10 月区块链深度分析集锦\",\"url\":\"https://www.techflowpost.com/\",\"summary\":\"中文区块链深度媒体 TechFlow 的实时首页，近几日发布内容涵盖：Abstract 宣布关链（400 万钱包仍养不起一条 L2）的复盘；Hyperliquid 组合保证金如何冲击传统 DeFi 原语；稳定币战争进入'修路'（接口争夺）时代的分析；比特币波动率腰斩但极端日反超 2018 年的风险讨论；Aave 品牌治理归属之争等。 • Abstract 虽有 400 万钱包和 144 个应用仍无法跑通 L2 商业模型 • 稳定币竞争已从'印钱'转向'修路'即支付接口争夺 • BTC 三年 225% 回报可能集中在 15 个交易日内 • Zcash 现货 ETF 首月吸金超 10 亿美元\",\"why\":\"\",\"publishedAt\":\"2026-10-10\",\"sourceName\":\"TechFlow 深潮\",\"contentType\":\"article\",\"readStatus\":\"read\"},{\"title\":\"吴说区块链：2026 年 10 月行业数据与动态\",\"url\":\"https://www.wublock123.com/\",\"summary\":\"吴说区块链中文快讯与深度平台，最新内容包括：2026 年 9 月主要交易所现货成交量合计约 6,967 亿美元（环比上升 36.5%）；Vitalik Buterin 测试隐私 AI 架构（本地模型 Qwen + zkAPI + Tor 三层保护）；Q3 Web3 就业回暖但结构性分化明显——岗位集中在头部交易所和合规科技，通用岗下滑。 • 2026 年 9 月交易所现货成交量约 6,967 亿美元，环比上升 36.5% • Vitalik 正在测试本地模型+zkAPI+Tor 三层隐私 AI 架构 • Q3 Web3 就业增长集中在头部交易所与合规科技领域\",\"why\":\"\",\"publishedAt\":\"2026-10-05\",\"sourceName\":\"吴说区块链 (Wu Blockchain)\",\"contentType\":\"article\",\"readStatus\":\"read\"},{\"title\":\"區塊鏈重點動態 2026 年 10 月 8 日早參考\",\"url\":\"https://m.cnyes.com/news/id/6624795\",\"summary\":\"金色财经发布的当日行业综述：指出区块链行业处于'合规化、规模化、深度融合'转型关键期；高性能公链竞争加剧（ICP 实际 TPS 达 980.3 居首）；路易威登确认大规模启用加密 NFC 芯片标志区块链溯源在高端零售初步落地；Bitget 因第三方零日漏洞被盗 3.875 亿美元凸显供应链安全风险。 • 行业正从'技术探索'向'合规化、规模化、深度融合'转型 • Bitget 因第三方安全产品零日漏洞被盗 3.875 亿美元 • 高性能公链 ICP 实际 TPS 达 980.3 位居榜首 • LV 是目前唯一公开确认大规模启用加密 NFC 晶片的奢侈品牌\",\"why\":\"\",\"publishedAt\":\"2026-10-08\",\"sourceName\":\"金色财经 / 钜亨网\",\"contentType\":\"article\",\"readStatus\":\"read\"}]}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 30067,
+      "output_tokens": 3665,
+      "output_tokens_details": {
+        "reasoning_tokens": 873
+      },
+      "x_tools": {
+        "web_search": {
+          "count": 1
+        },
+        "web_extractor": {
+          "count": 3
+        }
+      }
+    }
+  }
+}
