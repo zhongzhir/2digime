@@ -93,10 +93,10 @@ jobs:
           test -f "$stage/index.html"
           test -f "$stage/news/index.html"
           test -f "$stage/news/feed.xml"
-          rsync -a "$target/" "$restore/"
-          if ! rsync -a --delete "$stage/" "$target/"; then
+          rsync -rlt --no-owner --no-group --no-perms --omit-dir-times --exclude=/media/ --exclude=/.user.ini --exclude=/.well-known/ "$target/" "$restore/"
+          if ! rsync -rlt --no-owner --no-group --no-perms --omit-dir-times --exclude=/media/ --exclude=/.user.ini --exclude=/.well-known/ --delete "$stage/" "$target/"; then
             echo "Deployment failed; restoring previous site" >&2
-            rsync -a --delete "$restore/" "$target/"
+            rsync -rlt --no-owner --no-group --no-perms --omit-dir-times --exclude=/media/ --exclude=/.user.ini --exclude=/.well-known/ --delete "$restore/" "$target/"
             exit 1
           fi
           REMOTE
