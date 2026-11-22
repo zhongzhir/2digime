@@ -212,6 +212,13 @@ export class RelayTransport implements SubjectTransport {
           rejected += 1;
           continue;
         }
+        if (
+          wire.keyId !== peer.keyId ||
+          (await this.identity.isPeerKeyRevoked(peer.subjectId, wire.keyId))
+        ) {
+          rejected += 1;
+          continue;
+        }
         const sealedJson = sealedCanonicalJson(wire.sealed as import('./crypto-identity').SealedPayload);
         // 验签不得把 Relay 附加的 expiresAt 算进去（签名时可能未含该字段）
         const signBytes = canonicalRelaySignBytes({

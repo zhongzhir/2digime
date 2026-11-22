@@ -31,6 +31,8 @@ interface PeersFile {
   version: 1;
   self: LocalEndpointProfile | null;
   peers: Record<string, PeerEndpointRecord>;
+  /** subjectId -> keyId -> revokedAt。只记录对端通信身份，不等于 Owner 授权撤销。 */
+  revokedPeerKeys: Record<string, Record<string, string>>;
 }
 
 function peersPath(packageRoot: string): string {
@@ -50,16 +52,17 @@ async function loadPeers(packageRoot: string): Promise<PeersFile> {
       return false;
     }
   });
-  if (!result.content) return { version: 1, self: null, peers: {} };
+  if (!result.content) return { version: 1, self: null, peers: {}, revokedPeerKeys: {} };
   try {
     const parsed = JSON.parse(result.content) as PeersFile;
     return {
       version: 1,
       self: parsed.self || null,
       peers: parsed.peers || {},
+      revokedPeerKeys: parsed.revokedPeerKeys || {},
     };
   } catch {
-    return { version: 1, self: null, peers: {} };
+    return { version: 1, self: null, peers: {}, revokedPeerKeys: {} };
   }
 }
 
@@ -168,6 +171,31 @@ export class CommIdentityStore {
   async listPeers(): Promise<PeerEndpointRecord[]> {
     const peers = await loadPeers(this.packageRoot);
     return Object.values(peers.peers);
+  }
+
+  async revokePeerKey(input: {
+    subjectId: string;
+    keyId: string;
+    revokedAt?: string;
+  }): Promise<void> {
+    const subjectId = input.subjectId.trim();
+    const keyId = input.keyId.trim();
+    if (!subjectId || !keyId) throw new Error('撤销记录缺少 subjectId 或 keyId');
+    const peers = await loadPeers(this.packageRoot);
+    const revoked = peers.revokedPeerKeys[subjectId] || {};
+    revoked[keyId] = input.revokedAt || nowIso();
+    peers.revokedPeerKeys[subjectId] = revoked;
+    await savePeers(this.packageRoot, peers);
+  }
+
+  async listRevokedPeerKeyIds(subjectId: string): Promise<string[]> {
+    const peers = await loadPeers(this.packageRoot);
+    return Object.keys(peers.revokedPeerKeys[subjectId] || {}).sort();
+  }
+
+  async isPeerKeyRevoked(subjectId: string, keyId: string): Promise<boolean> {
+    const peers = await loadPeers(this.packageRoot);
+    return Boolean(peers.revokedPeerKeys[subjectId]?.[keyId]);
   }
 
   toSubjectRef(peer: SubjectEndpointPublic): {

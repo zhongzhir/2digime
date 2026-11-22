@@ -99,10 +99,24 @@ export function signRelayEnvelope(
   signPrivatePem: string,
   bytes: Buffer,
 ): string {
-  return b64(sign(null, bytes, loadSignPrivate(signPrivatePem)));
+  return signDetachedEd25519(signPrivatePem, bytes);
 }
 
 export function verifyRelayEnvelope(
+  signPublicSpkiB64: string,
+  bytes: Buffer,
+  signatureB64: string,
+): boolean {
+  return verifyDetachedEd25519(signPublicSpkiB64, bytes, signatureB64);
+}
+
+/** 通用 Ed25519 分离签名；协议域分隔由调用方的 canonical bytes 负责。 */
+export function signDetachedEd25519(signPrivatePem: string, bytes: Buffer): string {
+  return b64(sign(null, bytes, loadSignPrivate(signPrivatePem)));
+}
+
+/** 通用 Ed25519 分离验签；格式错误按不可信处理，不向上泄露 crypto 异常。 */
+export function verifyDetachedEd25519(
   signPublicSpkiB64: string,
   bytes: Buffer,
   signatureB64: string,

@@ -13,10 +13,11 @@ import {
   type SubjectCollabPayload,
   type SubjectEnvelope,
 } from '../subject-comm/envelope';
-import { remoteEndpointRef } from '../subject-comm/endpoint';
+import { parseRemoteEndpointRef, remoteEndpointRef } from '../subject-comm/endpoint';
 import type { AttachedSubject, SubjectCollabNetwork } from './network';
 import type { CollaborationRequest, CollaborationResponse, PublicSubjectCard } from './types';
 import { readPeerCard, readPublicCard, sanitizePublicCard, writePeerCard } from './public-card';
+import { signPublicSubjectCard, verifySignedPublicSubjectCard } from './signed-public-card';
 
 const UNREACHABLE = '对方当前不可达。';
 
@@ -138,18 +139,20 @@ export function createRelaySubjectNetwork(input: {
       const payload = env.payload;
       try {
         if (payload.wire === 'public_card') {
-          const peer = (await identity.listPeers()).find((item) => item.subjectId === env.from.subjectId);
-          const card = sanitizePublicCard(payload.card, {
-            subjectId: env.from.subjectId,
-            displayName: env.from.displayName,
-            endpointRef: env.from.endpointRef,
-          });
-          if (card && peer) {
-            await writePeerCard(input.packageRoot, {
-              ...card,
-              subjectId: peer.subjectId,
-              endpointRef: remoteEndpointRef(peer.endpointId),
+          const fromEndpointId = parseRemoteEndpointRef(env.from.endpointRef);
+          const peer = (await identity.listPeers()).find(
+            (item) =>
+              item.subjectId === env.from.subjectId && item.endpointId === fromEndpointId,
+          );
+          if (peer) {
+            const verified = verifySignedPublicSubjectCard({
+              signedCard: payload.card,
+              expectedPeer: peer,
+              revokedKeyIds: await identity.listRevokedPeerKeyIds(peer.subjectId),
             });
+            if (verified.ok && verified.card) {
+              await writePeerCard(input.packageRoot, verified.card);
+            }
           }
           await relay.acknowledge(env.envelopeId);
           processed += 1;
@@ -283,6 +286,7 @@ export function createRelaySubjectNetwork(input: {
         endpointRef: from.endpointRef,
         reachable: true,
       };
+      const signedCard = await signPublicSubjectCard({ card, identity });
       const peers = await identity.listPeers();
       for (const peer of peers) {
         await sendPayload(
@@ -291,7 +295,7 @@ export function createRelaySubjectNetwork(input: {
             displayName: peer.displayName,
             endpointRef: remoteEndpointRef(peer.endpointId),
           },
-          { wire: 'public_card', card: { ...card } },
+          { wire: 'public_card', card: { ...signedCard } },
         );
       }
     },

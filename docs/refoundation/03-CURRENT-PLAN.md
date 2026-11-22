@@ -12,7 +12,7 @@
 
 **任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
 
-**状态：** `PLANNED / FOUNDATION_ACCEPTED / IMPLEMENTATION_NOT_STARTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
 
 **详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
 
@@ -33,6 +33,12 @@
 4. Owner 对 Subject 的委托采用 VC 2.0 数据模型，并评估已正式发布的 OpenID4VCI/OpenID4VP；实现最小披露、过期、撤销和密钥轮换。
 5. A2A 只作跨主体协议形状：Agent Card、Message、Task、Artifact 与安全方案；A2A Task 不得变成面向用户的新任务状态机。
 6. 在同一 Talk 入口验证“本地主体自己做 / 请求另一个主体协作”的真实选择、接受、拒绝、结果和恢复，不新增协作中心或第二套 runtime。
+
+### Personal Agent 参考修订与当前检查点
+
+`docs/reference` 的两类探索只作为外部启发，不覆盖产品宪法：HackerTube 类“个人算法”落实为平台/来源只供候选、同一个 Digital Self 与当前模型完成个人选择；Second 类“长期个人上下文”落实为一个本机可拥有、可纠正、可迁移的 Digital Self，外部 Agent/Tool/Subject 只能按目的取得短期最小投影。明确不吸收全时屏幕/键盘/OS 监控、后台 Agent 群、第二份长期记忆或中心画像。
+
+2026-11-22 已完成 Slice 0 审计和 Slice 1A 开发者验证：已配对主体的公开卡使用现有 Ed25519 身份签名，绑定 Subject、Endpoint、key id 和有效期；Relay 拒绝篡改、过期、撤销 key 及错误绑定。当前实现不是标准 A2A Agent Card 或 Owner 身份证明，尚未 Owner 验收、合并、推送、打包、发布或部署。下一顺序为 Slice 1B 密钥/端点轮换闭环、Slice 1C Personal Context Contract，再进入真实机构身份联邦。
 
 ### Discover 收束结论
 

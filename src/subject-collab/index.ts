@@ -11,6 +11,14 @@ export type {
   CollaborationDecision,
 } from './types';
 export { formatPublicCardsForModel, readPublicCard, writePublicCard, publicCardPath } from './public-card';
+export {
+  SIGNED_PUBLIC_CARD_KIND,
+  SIGNED_PUBLIC_CARD_SCHEMA_VERSION,
+  publicSubjectCardSignBytes,
+  signPublicSubjectCard,
+  verifySignedPublicSubjectCard,
+} from './signed-public-card';
+export type { SignedPublicSubjectCard, SignedPublicCardVerification } from './signed-public-card';
 export { checkDisclosure, threadPlainText } from './disclosure';
 export { appendExchange, listExchanges, bodyDigest } from './exchange-store';
 export { createInMemorySubjectNetwork } from './network';
