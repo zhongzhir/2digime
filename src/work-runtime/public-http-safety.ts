@@ -38,11 +38,22 @@ export interface SafePublicHttpGetResult {
   status: number;
   body: string;
   finalUrl: string;
+  /** 响应协议事实；统一为小写键，供 ETag / Last-Modified 条件刷新使用。 */
+  headers?: Record<string, string>;
 }
 
 const DEFAULT_MAX_REDIRECTS = 3;
 const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
 const DEFAULT_TIMEOUT_MS = 20_000;
+
+function responseHeaders(input: Record<string, string | string[] | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const text = Array.isArray(value) ? value.join(', ') : String(value || '');
+    if (text) out[key.toLowerCase()] = text;
+  }
+  return out;
+}
 
 export async function defaultLookupAddresses(hostname: string): Promise<string[]> {
   const host = String(hostname || '').trim().replace(/^\[|\]$/g, '');
@@ -342,7 +353,12 @@ export async function safePublicHttpGet(
       const next = resolvePublicRedirect(parsed.toString(), loc);
       return safePublicHttpGet(next, headers, redirectLeft - 1, { ...deps, deadlineAt });
     }
-    return { status, body: hopped.body, finalUrl: parsed.toString() };
+    return {
+      status,
+      body: hopped.body,
+      finalUrl: parsed.toString(),
+      headers: responseHeaders(hopped.headers || {}),
+    };
   }
   return new Promise((resolve, reject) => {
     const lib = parsed.protocol === 'https:' ? https : http;
@@ -392,7 +408,13 @@ export async function safePublicHttpGet(
         res.on('data', (c: Buffer) => {
           size += c.length;
           if (size > maxBodyBytes) {
-            req.destroy(Object.assign(new Error('响应过大'), { code: 'too_large' }));
+            req.destroy(
+              Object.assign(new Error('响应过大'), {
+                code: 'too_large',
+                status,
+                finalUrl: parsed.toString(),
+              }),
+            );
             return;
           }
           chunks.push(Buffer.from(c));
@@ -402,6 +424,7 @@ export async function safePublicHttpGet(
             status,
             body: decodePublicBody(Buffer.concat(chunks), type),
             finalUrl: parsed.toString(),
+            headers: responseHeaders(res.headers),
           });
         });
       },

@@ -6,8 +6,13 @@ import * as path from 'node:path';
 import { seekContent, openMediaQueries } from '../content-seek';
 import { intentFromModelText, objectFidelity, defaultDiscoverIntent } from '../discover-intent';
 import { ensurePersonalFeed } from '../personal-feed';
-import { catalogEndpointsFor, OPEN_SOURCE_CATALOG } from '../open-source-catalog';
-import { searchOpenMedia, sourceKindsForRequest } from '../content-source-capabilities';
+import {
+  catalogEndpointsFor,
+  OPEN_SOURCE_CATALOG,
+  supportsDefaultCatalogListing,
+  type OpenSourceEndpoint,
+} from '../open-source-catalog';
+import { listOpenCatalog, searchOpenMedia, sourceKindsForRequest } from '../content-source-capabilities';
 import { hasPlayableAudioRepresentation } from '../content-media';
 import { validateNetworkItem, type NetworkItem } from '../network-item';
 import type { DigitalSelf } from '../../subject-core/digital-self/types';
@@ -196,6 +201,9 @@ test('SOURCE ROUTING: article / video / image / audio pick distinct open capabil
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => row.contentTypes.includes('image')), true);
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => row.kind === 'itunes_podcast'), true);
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => /bbc|guardian|npr|aljazeera|epoch/i.test(row.url)), false);
+  const defaultSources = OPEN_SOURCE_CATALOG.filter(supportsDefaultCatalogListing);
+  assert.equal(defaultSources.length >= 20, true);
+  assert.equal(new Set(defaultSources.map((row) => new URL(row.url).hostname)).size >= 6, true);
 
   const fetchImpl = async (url: string) => {
     if (url.includes('commons.wikimedia.org') && url.includes('filetype')) {
@@ -622,4 +630,142 @@ test('internet archive returns a public file, and a page without a file is not a
   });
   assert.equal(sought.cards.some((card) => card.mediaUrl && card.mediaUrl.endsWith('.mp3')), true);
   assert.equal(sought.cards.some((card) => /blog\/suite/.test(String(card.url || ''))), false);
+});
+
+test('internet archive catalog resumes by official page and emits the next source cursor', async () => {
+  const requestedPages: string[] = [];
+  const attempts: Array<{ sourceId: string; ok: boolean; itemCount: number; cursor?: string | null }> = [];
+  const endpoint: OpenSourceEndpoint = {
+    id: 'internet-archive',
+    label: 'Internet Archive',
+    kind: 'internet_archive' as const,
+    url: 'https://archive.org/advancedsearch.php',
+    contentTypes: ['audio'],
+  };
+  const fetchImpl = async (url: string) => {
+    if (url.includes('advancedsearch.php')) {
+      const page = new URL(url).searchParams.get('page') || '';
+      requestedPages.push(page);
+      return {
+        status: 200,
+        body: JSON.stringify({
+          response: {
+            docs: page === '3' ? [] : [{ identifier: `audio-page-${page}`, title: `Audio page ${page}` }],
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('/metadata/')) {
+      return {
+        status: 200,
+        body: JSON.stringify({ metadata: {}, files: [{ name: 'track.mp3' }] }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+
+  await listOpenCatalog({
+    kinds: ['audio'],
+    endpoints: [endpoint],
+    fetchImpl,
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+  await listOpenCatalog({
+    kinds: ['audio'],
+    endpoints: [endpoint],
+    fetchImpl,
+    cursorBySourceId: { 'internet-archive': 'internet-archive:page:2' },
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+  await listOpenCatalog({
+    kinds: ['audio'],
+    endpoints: [endpoint],
+    fetchImpl,
+    cursorBySourceId: { 'internet-archive': 'internet-archive:page:3' },
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+
+  assert.deepEqual(requestedPages, ['1', '2', '3']);
+  assert.equal(attempts[0]?.cursor, 'internet-archive:page:2');
+  assert.equal(attempts[1]?.cursor, 'internet-archive:page:3');
+  assert.equal(attempts[2]?.cursor, null);
+});
+
+test('commons catalog keeps independent continuation for image, audio and video streams', async () => {
+  const calls: Array<{ kind: string; continuation: string }> = [];
+  const attempts: Array<{ sourceId: string; ok: boolean; itemCount: number; cursor?: string | null }> = [];
+  let round = 1;
+  const endpoint: OpenSourceEndpoint = {
+    id: 'wikimedia-commons',
+    label: 'Wikimedia Commons',
+    kind: 'wikimedia_commons',
+    url: 'https://commons.wikimedia.org/w/api.php',
+    contentTypes: ['image', 'audio', 'video'],
+  };
+  const fetchImpl = async (url: string) => {
+    const parsed = new URL(url);
+    const search = parsed.searchParams.get('gsrsearch') || '';
+    const kind = parsed.searchParams.get('generator') === 'allimages'
+      ? 'image'
+      : search.includes('audio')
+        ? 'audio'
+        : 'video';
+    const continuation = parsed.searchParams.get('gaicontinue') || parsed.searchParams.get('gsroffset') || '';
+    calls.push({ kind, continuation });
+    const tokenKey = kind === 'image' ? 'gaicontinue' : 'gsroffset';
+    const hasMore = round === 1 && kind !== 'video';
+    const suffix = kind === 'image' ? 'jpg' : kind === 'audio' ? 'ogg' : 'webm';
+    return {
+      status: 200,
+      body: JSON.stringify({
+        ...(hasMore
+          ? {
+              continue: {
+                continue: kind === 'image' ? 'gaicontinue||' : 'gsroffset||',
+                [tokenKey]: kind === 'image' ? 'image-next' : 8,
+              },
+            }
+          : {}),
+        query: {
+          pages: {
+            '1': {
+              title: `File:${kind}-${round}.${suffix}`,
+              imageinfo: [
+                {
+                  url: `https://upload.wikimedia.org/wikipedia/commons/${kind}-${round}.${suffix}`,
+                  mime: kind === 'image' ? 'image/jpeg' : kind === 'audio' ? 'audio/ogg' : 'video/webm',
+                },
+              ],
+            },
+          },
+        },
+      }),
+      finalUrl: url,
+    };
+  };
+
+  await listOpenCatalog({
+    endpoints: [endpoint],
+    fetchImpl,
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+  const cursor = attempts[0]?.cursor;
+  assert.equal(typeof cursor, 'string');
+  assert.match(String(cursor), /^wikimedia-commons:v1:/);
+
+  round = 2;
+  await listOpenCatalog({
+    endpoints: [endpoint],
+    fetchImpl,
+    cursorBySourceId: { 'wikimedia-commons': String(cursor) },
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+
+  assert.deepEqual(calls.slice(0, 3).map((call) => call.kind).sort(), ['audio', 'image', 'video']);
+  assert.deepEqual(calls.slice(3).map((call) => call.kind).sort(), ['audio', 'image']);
+  assert.equal(calls.some((call) => call.kind === 'image' && call.continuation === 'image-next'), true);
+  assert.equal(calls.some((call) => call.kind === 'audio' && call.continuation === '8'), true);
+  assert.equal(attempts[1]?.cursor, null);
 });

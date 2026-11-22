@@ -9,6 +9,14 @@ import type { ChatCompleteFn } from '../subject-core/structured-distill';
 import type { DigitalSelf } from '../subject-core/digital-self/types';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import type { NetworkItem } from './network-item';
+import {
+  buildDiscoverCandidateReservoir,
+  DEFAULT_DISCOVER_RESERVOIR_CAPACITY,
+  diverseFeedCandidates,
+  presentableFeedCandidates,
+  seatThisTurnItems,
+} from './discover-candidate-reservoir';
+export { diverseFeedCandidates, presentableFeedCandidates, seatThisTurnItems } from './discover-candidate-reservoir';
 import { selectNetworkItems } from './personal-selection';
 import { appendNetworkContentFeedback, createAiJudgmentFeedback } from './network-content-feedback';
 import {
@@ -33,7 +41,6 @@ import type { ContentPreferenceDirective } from './content-preferences';
 import { isNetworkItemExpired, trustedPublishedMs } from './network-item';
 import { completeStructured, type StructuredAttempt } from './structured-call';
 import {
-  catalogFeedUrls,
   listOpenCatalog,
   networkItemFromOpenHit,
   searchOpenMedia,
@@ -41,6 +48,14 @@ import {
   sourceKindsForRequest,
   type OpenMediaFetch,
 } from './content-source-capabilities';
+import {
+  dueCatalogFeedSources,
+  dueCatalogSources,
+  recordContentSourceAttempts,
+  type ContentSourceAttempt,
+  type ContentSourceRecord,
+} from './content-source-portfolio';
+import { OPEN_SOURCE_CATALOG, supportsDefaultCatalogListing } from './open-source-catalog';
 import {
   classifySearchFailure,
   humanNetworkNotice,
@@ -79,6 +94,21 @@ interface FeedCacheFile {
   rankedIds?: string[];
 }
 
+/**
+ * 后台已经由当前 Digital Self 排好的候选包。
+ * 这是可丢弃的运行时结果，不是第二份 Feed 状态；正式队列仍只在 personal-feed-cache.json。
+ */
+export interface PersonalFeedPrefetch {
+  selectionContextKey: string;
+  rankedIds: string[];
+}
+
+export interface PersonalFeedResult {
+  view: DiscoverView;
+  reasonCode: FeedReasonCode;
+  prefetch?: PersonalFeedPrefetch;
+}
+
 const MIN_FEED = 6;
 const MAX_FEED = 12;
 const STALE_MS = 24 * 60 * 60 * 1000;
@@ -86,6 +116,35 @@ const LEAD = '看文章、图片、音频和视频。';
 
 export function personalFeedCachePath(packageRoot: string): string {
   return path.join(packageRoot, 'content', 'personal-feed-cache.json');
+}
+
+/** 当前个人流已排好、但还没有交付给用户的候选数。只从同一缓存派生，不另存会话状态。 */
+export async function personalFeedRemainingCount(packageRoot: string): Promise<number> {
+  const cache = await readCache(packageRoot);
+  const delivered = new Set(cache.lastView?.mode === 'personal' ? cache.lastView.itemIds : []);
+  return (cache.rankedIds || []).filter((id) => id && !delivered.has(id)).length;
+}
+
+/**
+ * 只在原队列已经耗尽时，把后台个人选择结果接到同一份缓存后面。
+ * 调整上下文变化、当前不是个人流、或已有未交付队列时都拒绝提交。
+ */
+export async function commitPersonalFeedPrefetch(
+  packageRoot: string,
+  prefetch: PersonalFeedPrefetch,
+): Promise<number> {
+  const cache = await readCache(packageRoot);
+  if (cache.lastView?.mode !== 'personal') return 0;
+  if ((cache.selectionContextKey || '') !== (prefetch.selectionContextKey || '')) return 0;
+  const deliveredIds = cache.lastView.itemIds.filter(Boolean);
+  const delivered = new Set(deliveredIds);
+  const remaining = (cache.rankedIds || []).filter((id) => id && !delivered.has(id));
+  if (remaining.length) return 0;
+  const queued = [...new Set(prefetch.rankedIds.filter((id) => id && !delivered.has(id)))];
+  if (!queued.length) return 0;
+  cache.rankedIds = [...deliveredIds, ...queued];
+  await writeCache(packageRoot, cache);
+  return queued.length;
 }
 
 function emptyCache(): FeedCacheFile {
@@ -627,25 +686,42 @@ function canReplenishSupply(input: {
 }
 
 async function ingestCatalogFeeds(input: {
+  packageRoot: string;
+  now: string;
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
+  ingestCatalogSource?: (
+    source: ContentSourceRecord,
+  ) => Promise<Omit<ContentSourceAttempt, 'sourceId'>>;
   networking: NetworkDiscoveryCode;
 }): Promise<boolean> {
-  if (!input.ingestHit || input.networking === 'DISABLED') return false;
-  let replenished = false;
-  await Promise.all(
-    catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
+  if ((!input.ingestHit && !input.ingestCatalogSource) || input.networking === 'DISABLED') return false;
+  const sources = await dueCatalogFeedSources(
+    input.packageRoot,
+    input.now,
+    ['article', 'video', 'audio', 'image'],
+  );
+  const attempts = await Promise.all(
+    sources.map(async (source) => {
       try {
-        const ingested = await input.ingestHit!({ title: 'open catalog', url: feedUrl });
-        if (ingested.length) replenished = true;
+        if (input.ingestCatalogSource) {
+          return {
+            sourceId: source.id,
+            ...(await input.ingestCatalogSource(source)),
+          };
+        }
+        const ingested = await input.ingestHit!({ title: 'open catalog', url: source.url });
+        return { sourceId: source.id, ok: true, itemCount: ingested.length };
       } catch {
-        /* 单条目录失败不挡住其它目录 */
+        return { sourceId: source.id, ok: false, itemCount: 0 };
       }
     }),
   );
-  return replenished;
+  await recordContentSourceAttempts(input.packageRoot, input.now, attempts);
+  return attempts.some((attempt) => attempt.itemCount > 0);
 }
 
 async function ingestOpenCatalogMedia(input: {
+  packageRoot: string;
   fetchOpenMedia?: OpenMediaFetch;
   putNetworkItem?: (item: NetworkItem) => Promise<void>;
   networking: NetworkDiscoveryCode;
@@ -654,11 +730,37 @@ async function ingestOpenCatalogMedia(input: {
   if (!input.fetchOpenMedia || input.networking === 'DISABLED') return false;
   let filled = false;
   try {
-    const media = await listOpenCatalog({
-      kinds: ['video', 'image', 'audio'],
-      fetchImpl: input.fetchOpenMedia,
-    });
-    const works = await searchOpenWorks({ fetchImpl: input.fetchOpenMedia });
+    const due = await dueCatalogSources(
+      input.packageRoot,
+      input.now,
+      ['article', 'video', 'image', 'audio'],
+    );
+    const endpointById = new Map(OPEN_SOURCE_CATALOG.map((endpoint) => [endpoint.id, endpoint]));
+    const endpoints = due.map((source) => endpointById.get(source.id)).filter((row): row is NonNullable<typeof row> => !!row);
+    const cursorBySourceId = Object.fromEntries(
+      due.flatMap((source) => (source.cursor ? [[source.id, source.cursor] as const] : [])),
+    );
+    const defaultEndpoints = endpoints.filter(supportsDefaultCatalogListing);
+    const mediaEndpoints = defaultEndpoints.filter((endpoint) => endpoint.kind !== 'bangumi_api');
+    const workEndpoints = endpoints.filter(
+      (endpoint) => endpoint.kind === 'bangumi_api' && /calendar/i.test(endpoint.url),
+    );
+    const attempts: ContentSourceAttempt[] = [];
+    const [media, works] = await Promise.all([
+      listOpenCatalog({
+        kinds: ['video', 'image', 'audio'],
+        fetchImpl: input.fetchOpenMedia,
+        endpoints: mediaEndpoints,
+        cursorBySourceId,
+        onSourceAttempt: (attempt) => attempts.push(attempt),
+      }),
+      searchOpenWorks({
+        fetchImpl: input.fetchOpenMedia,
+        endpoints: workEndpoints,
+        onSourceAttempt: (attempt) => attempts.push(attempt),
+      }),
+    ]);
+    await recordContentSourceAttempts(input.packageRoot, input.now, attempts);
     const hits = interleaveHits(media, works).slice(0, 16);
     for (const hit of hits) {
       const item = networkItemFromOpenHit(hit, input.now, 'feed');
@@ -686,130 +788,12 @@ function cacheFresh(snapshot: FeedSnapshot | undefined, nowMs: number): boolean 
   return Number.isFinite(at) && nowMs - at <= STALE_MS;
 }
 
-function repeatedWork(items: NetworkItem[]): boolean {
-  if (items.length < 3) return false;
-  const stems = items.map((item) => {
-    const title = String(item.content.title || '').replace(/\s+/g, ' ').trim();
-    const stem = title.replace(/(?:第\s*)?\d+\s*(?:章|节|回|话|集|期).*$/u, '').trim();
-    return stem.length >= 2 && stem.length < title.length ? stem : '';
-  });
-  const stem = stems[0] || '';
-  return stem.length > 0 && stems.every((row) => row === stem);
-}
-
-function hostOf(url?: string): string {
-  try {
-    return new URL(String(url || '')).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-}
-
-/** 已取到的作品/媒介种类。按目录身份和 contentType，不是主题分类器。 */
-export function presentationKind(item: NetworkItem): string {
-  const type = String(item.content.contentType || 'article');
-  if (type === 'video' || type === 'image' || type === 'audio') return type;
-  const host = hostOf(item.content.url);
-  if (host === 'bgm.tv' || host === 'bangumi.tv' || host.endsWith('steampowered.com')) return 'work';
-  if (host === 'zh.wikivoyage.org') return 'guide';
-  return type || 'article';
-}
-
-/**
- * 候选窗：先按来源轮转，再让已经取到、但还没进窗的作品/媒介有机会被模型看见。
- * 不是类型配额，也不为凑数塞无关条目。
- */
-export function presentableFeedCandidates(items: NetworkItem[], limit = 24, perSource = 2): NetworkItem[] {
-  const rotated = diverseFeedCandidates(items, limit, perSource);
-  const kindsInPool = new Set(items.map(presentationKind));
-  const kindsInWindow = new Set(rotated.map(presentationKind));
-  const missing = [...kindsInPool].filter((kind) => kind !== 'article' && !kindsInWindow.has(kind));
-  if (!missing.length) return rotated;
-  const used = new Set(rotated.map((item) => item.itemId));
-  const extras: NetworkItem[] = [];
-  for (const kind of missing) {
-    const found = items.find((item) => presentationKind(item) === kind && !used.has(item.itemId));
-    if (!found) continue;
-    extras.push(found);
-    used.add(found.itemId);
-  }
-  if (!extras.length) return rotated;
-  const out = rotated.slice();
-  for (const extra of extras) {
-    let replaceAt = -1;
-    for (let i = out.length - 1; i >= 0; i -= 1) {
-      if (presentationKind(out[i]!) === 'article') {
-        replaceAt = i;
-        break;
-      }
-    }
-    if (replaceAt >= 0) out[replaceAt] = extra;
-    else if (out.length < limit) out.push(extra);
-  }
-  return out;
-}
-
-/** 本轮按理解发出的检索结果必须进排序窗，不能被已有新闻池挤掉。 */
-export function seatThisTurnItems(
-  window: NetworkItem[],
-  fresh: NetworkItem[],
-  limit = 24,
-  maxFresh = 8,
-): NetworkItem[] {
-  const extras: NetworkItem[] = [];
-  const seen = new Set<string>();
-  for (const item of fresh) {
-    if (seen.has(item.itemId)) continue;
-    if (isAccessNetworkItem(item)) continue;
-    seen.add(item.itemId);
-    extras.push(item);
-    if (extras.length >= maxFresh) break;
-  }
-  if (!extras.length) return window;
-  const extraIds = new Set(extras.map((item) => item.itemId));
-  return [...extras, ...window.filter((item) => !extraIds.has(item.itemId))].slice(0, limit);
-}
-
 function interleaveHits<T>(left: T[], right: T[]): T[] {
   const out: T[] = [];
   const n = Math.max(left.length, right.length);
   for (let i = 0; i < n; i += 1) {
     if (i < left.length) out.push(left[i]!);
     if (i < right.length) out.push(right[i]!);
-  }
-  return out;
-}
-
-/** 默认信息流轮流取不同来源。同一作品的重复章节在还有其它来源时最多占几条；不同文章不按来源名额裁掉。只有一个来源时仍可看完已取到的内容。明确点播走检索，不走这里。 */
-export function diverseFeedCandidates(items: NetworkItem[], limit = 24, perSource = 2): NetworkItem[] {
-  const groups: NetworkItem[][] = [];
-  const index = new Map<string, number>();
-  for (const item of items) {
-    const key = item.publisherSubjectId || item.itemId;
-    let at = index.get(key);
-    if (at === undefined) {
-      at = groups.length;
-      index.set(key, at);
-      groups.push([]);
-    }
-    groups[at]!.push(item);
-  }
-  const capped = groups.map((group) => groups.length > 1 && repeatedWork(group));
-  const out: NetworkItem[] = [];
-  const cursors = groups.map(() => 0);
-  while (out.length < limit) {
-    let added = false;
-    for (let i = 0; i < groups.length; i += 1) {
-      const cursor = cursors[i] || 0;
-      if (capped[i] && cursor >= perSource) continue;
-      const item = groups[i]?.[cursor];
-      if (!item) continue;
-      cursors[i] = cursor + 1;
-      out.push(item);
-      added = true;
-      if (out.length >= limit) break;
-    }
-    if (!added) break;
   }
   return out;
 }
@@ -829,11 +813,14 @@ export async function ensurePersonalFeed(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   searchWeb?: (query: string) => Promise<ExternalSeekHit[]>;
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
+  ingestCatalogSource?: (
+    source: ContentSourceRecord,
+  ) => Promise<Omit<ContentSourceAttempt, 'sourceId'>>;
   fetchOpenMedia?: OpenMediaFetch;
   putNetworkItem?: (item: NetworkItem) => Promise<void>;
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
-  mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset';
+  mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'prefetch' | 'more' | 'reset';
   /** catalog：只并行取公开目录。seated：检索后先交付有依据的候选。rank：只排序，不再检索。 */
   supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank';
   /** 撤销时只读默认流缓存，不读调整后的 lastView。 */
@@ -842,7 +829,7 @@ export async function ensurePersonalFeed(input: {
   isCurrentGeneration?: () => boolean;
   now?: string;
   adjustment?: DiscoverView['adjustment'];
-}): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
+}): Promise<PersonalFeedResult> {
   const now = input.now || new Date().toISOString();
   const nowMs = Date.parse(now) || Date.now();
   const startedAt = Date.now();
@@ -852,6 +839,7 @@ export async function ensurePersonalFeed(input: {
   };
   let steeredQueries: string[] = [];
   const persistCache = async (file: FeedCacheFile) => {
+    if (input.mode === 'prefetch') return;
     if (input.isCurrentGeneration && !input.isCurrentGeneration()) return;
     await writeCache(input.packageRoot, {...file, selectionContextKey: input.selectionContextKey || ''});
   };
@@ -1019,7 +1007,7 @@ export async function ensurePersonalFeed(input: {
     let catalogFilled = false;
     if (!localCards.length && canFetchOpenCatalog({ ...input, networking })) {
       mark('CATALOG_START');
-      const feedsFilled = await ingestCatalogFeeds({ ...input, networking });
+      const feedsFilled = await ingestCatalogFeeds({ ...input, networking, now });
       const mediaFilled = await ingestOpenCatalogMedia({ ...input, networking, now });
       catalogFilled = feedsFilled || mediaFilled;
       const reloaded = input.reloadItems
@@ -1093,9 +1081,11 @@ export async function ensurePersonalFeed(input: {
   if (input.mode === 'replenish') mark('REPLENISH_START');
   let items = candidatesForDefault(input.items, now).filter((item) => !blocked(item, prefs));
   const shown = new Set(
-    input.mode === 'refresh' || input.mode === 'more'
-      ? cache.lastView?.itemIds || cache.personal?.itemIds || []
-      : [],
+    input.mode === 'prefetch'
+      ? [...(cache.lastView?.itemIds || cache.personal?.itemIds || []), ...(cache.rankedIds || [])]
+      : input.mode === 'refresh' || input.mode === 'more'
+        ? cache.lastView?.itemIds || cache.personal?.itemIds || []
+        : [],
   );
   const opened = new Set(openedItemIds(recent));
   const boostedExact = new Set(
@@ -1103,11 +1093,14 @@ export async function ensurePersonalFeed(input: {
   );
   const unseen = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId));
   const diverseReady = presentableFeedCandidates(unseen, MIN_FEED, 2).length;
+  const prefetchReady = presentableFeedCandidates(unseen, 24, 2).length;
   const needReplenish =
     input.supplyPhase === 'rank'
       ? false
       : input.mode === 'refresh' || input.mode === 'reset'
         ? true
+        : input.mode === 'prefetch'
+          ? prefetchReady < 24
         : input.mode === 'more'
           ? diverseReady < MIN_FEED
           : input.mode === 'replenish'
@@ -1136,7 +1129,7 @@ export async function ensurePersonalFeed(input: {
 
   if (input.mode === 'replenish' && input.supplyPhase === 'catalog') {
     mark('CATALOG_START');
-    if (await ingestCatalogFeeds({ ...input, networking })) replenished = true;
+    if (await ingestCatalogFeeds({ ...input, networking, now })) replenished = true;
     if (input.reloadItems) {
       items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     }
@@ -1208,16 +1201,7 @@ export async function ensurePersonalFeed(input: {
           })
         : Promise.resolve([]);
     if (!steered && input.fetchOpenMedia && input.ingestHit) {
-      await Promise.all(
-        catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
-          try {
-            const ingested = await input.ingestHit!({ title: 'open catalog', url: feedUrl });
-            if (ingested.length) replenished = true;
-          } catch {
-            /* 目录 feed 失败不阻断 */
-          }
-        }),
-      );
+      if (await ingestCatalogFeeds({ ...input, networking, now })) replenished = true;
     }
     if (ranked && input.chatComplete && input.model) {
       if (steered && input.adjustment?.text) {
@@ -1314,6 +1298,7 @@ export async function ensurePersonalFeed(input: {
       stillShort ||
       input.mode === 'refresh' ||
       input.mode === 'more' ||
+      input.mode === 'prefetch' ||
       input.mode === 'reset' ||
       !!input.adjustment;
     if (ranked && input.searchWeb && shouldSearch) {
@@ -1372,11 +1357,23 @@ export async function ensurePersonalFeed(input: {
   const freshIds = new Set(freshSearchItems.map((item) => item.itemId));
   const freshInPool = rankedPool.filter((item) => freshIds.has(item.itemId));
   const freshMissing = freshSearchItems.filter((item) => !rankedPool.some((row) => row.itemId === item.itemId));
+  // 后台补量一次只准备下一页。72 条会触发多批比较；即使 24 条也可能因结构化
+  // 输出过长而重试。12 条仍由同一模型完整比较，并在每页交付后立即滚动准备
+  // 下一页，用户浏览当前页时即可覆盖后台判断延迟。
+  const reservoirCapacity = input.mode === 'prefetch' ? MAX_FEED : DEFAULT_DISCOVER_RESERVOIR_CAPACITY;
+  const reservoir = buildDiscoverCandidateReservoir({
+    items: rankedPool.filter((item) => !isAccessNetworkItem(item)),
+    now,
+    capacity: reservoirCapacity,
+  });
+  mark('RESERVOIR_INPUT', reservoir.stats.input);
+  mark('RESERVOIR_READY', reservoir.stats.selected);
+  mark('RESERVOIR_DUPLICATES', reservoir.stats.duplicates);
   let candidates = seatThisTurnItems(
-    presentableFeedCandidates(rankedPool.filter((item) => !isAccessNetworkItem(item)), 24, 2),
+    reservoir.items,
     [...freshInPool, ...freshMissing],
-    24,
-    8,
+    reservoirCapacity,
+    MAX_FEED,
   );
   if (input.supplyPhase === 'rank') {
     const ids = cache.rankedIds?.length ? cache.rankedIds : cache.lastView?.itemIds || [];
@@ -1388,7 +1385,7 @@ export async function ensurePersonalFeed(input: {
       if (!item || blocked(item, prefs) || isAccessNetworkItem(item)) continue;
       seated.push(item);
     }
-    if (seated.length) candidates = seated.slice(0, 24);
+    if (seated.length) candidates = seated.slice(0, DEFAULT_DISCOVER_RESERVOIR_CAPACITY);
   }
   mark('CANDIDATES', candidates.length);
   const accessFromFresh = firstWaveCards(freshAccessItems, prefs, now).accessCards;
@@ -1556,6 +1553,7 @@ export async function ensurePersonalFeed(input: {
     items: candidates,
     chatComplete: input.chatComplete,
     model: input.model,
+    targetCount: MAX_FEED,
     ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
     ...(recentContext ? { selectionNotes: recentContext } : {}),
   });
@@ -1640,9 +1638,11 @@ export async function ensurePersonalFeed(input: {
   const incomingRank = rankedVisible.filter((card) => shownIds.has(card.itemId));
   const rankedLater = rankedVisible.filter((card) => !shownIds.has(card.itemId));
   const merged = pageForDefault(incomingRank.length ? incomingRank : rankedVisible);
-  if (merged.page.length < MIN_FEED) {
+  // IGNORE 在个人选择协议中只是“排后”，不是删除；有足够候选时每页应继续填满，
+  // 否则模型只标出 7～11 条 SHOW 就会把真实 72 条蓄水池压成短页。
+  if (merged.page.length < MAX_FEED) {
     for (const card of rankedLater) {
-      if (merged.page.length >= MIN_FEED) break;
+      if (merged.page.length >= MAX_FEED) break;
       if (merged.page.some((row) => row.itemId === card.itemId)) continue;
       merged.page.push(card);
     }
@@ -1660,6 +1660,31 @@ export async function ensurePersonalFeed(input: {
     const item = byId.get(id) || input.items.find((row) => row.itemId === id);
     return !item || !blocked(item, prefs);
   });
+
+  if (input.mode === 'prefetch') {
+    const rankedIds = cache.rankedIds.filter((id) => !shown.has(id) && !opened.has(id));
+    mark('PREFETCH_SELECTION_READY', rankedIds.length);
+    const completed = finish(
+      viewOf({
+        cards: lastCards,
+        preferences: input.preferences,
+        notice: '',
+        reasonCode: replenished ? 'REPLENISHED' : 'CACHED_FEED',
+        feedMode: 'personal',
+        networking,
+      }),
+      replenished ? 'REPLENISHED' : 'CACHED_FEED',
+    );
+    return rankedIds.length
+      ? {
+          ...completed,
+          prefetch: {
+            selectionContextKey: input.selectionContextKey || '',
+            rankedIds,
+          },
+        }
+      : completed;
+  }
 
   if (!cards.length) {
     const alreadyHave = input.mode === 'more' ? [] : candidates

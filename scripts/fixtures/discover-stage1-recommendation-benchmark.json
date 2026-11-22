@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "purpose": "DISCOVER-50-STAGE1 recommendation quality gate; 50 requests x 3 anonymized Digital Self profiles; no keyword scorer in product path.",
+  "topK": 12,
+  "profiles": [
+    {
+      "id": "self_product",
+      "understandings": [
+        ["about_me", "我在做数字产品与创业，长期关心 AI 如何改变产品、组织和产业。"],
+        ["goals", "我需要理解投资、商业模式和数字版权，不追逐没有依据的短期热点。"],
+        ["boundaries", "推荐选择应留在自己的数字之我，不以点击率和停留时长替我决定。"]
+      ],
+      "interestTopics": ["ai", "product", "investment", "copyright"]
+    },
+    {
+      "id": "self_culture",
+      "understandings": [
+        ["about_me", "我平时关注游戏、体育、影视和大众文化，也喜欢能与朋友分享的体验。"],
+        ["goals", "我想发现具体作品、赛事和线下生活方式，不希望所有内容都被讲成投资课。"],
+        ["preferences", "对创作者、文化表达和好玩的新产品有兴趣。"]
+      ],
+      "interestTopics": ["games", "sports", "culture", "lifestyle", "product"]
+    },
+    {
+      "id": "self_science",
+      "understandings": [
+        ["about_me", "我持续学习科学、健康和教育，也会规划旅行。"],
+        ["goals", "我希望看到可靠的解释、可实践的方法和高质量视觉材料。"],
+        ["preferences", "比起追热点，我更看重证据、知识结构和长期可用性。"]
+      ],
+      "interestTopics": ["science", "health", "education", "travel"]
+    }
+  ],
+  "topicSpecs": {
+    "ai": ["AI 产品的新能力边界", "模型与智能体的真实进展"],
+    "product": ["数字产品设计复盘", "新产品的用户价值"],
+    "investment": ["长期资本如何判断新产业", "创业融资与商业模式"],
+    "copyright": ["数字内容授权与创作者权益", "开放许可的实践案例"],
+    "open_source": ["开源项目与社区治理", "开放技术的工程实践"],
+    "games": ["值得体验的具体游戏作品", "游戏设计与玩家社区"],
+    "sports": ["赛事与运动表现解析", "球员和观赛体验"],
+    "culture": ["影视音乐与文化表达", "创作者的新作品"],
+    "lifestyle": ["城市生活与消费体验", "周末可实践的新活动"],
+    "science": ["可靠科学发现的通俗解释", "自然与宇宙的新证据"],
+    "health": ["有证据的健康方法", "医学研究如何影响日常选择"],
+    "education": ["可实践的学习方法", "教育与知识工具"],
+    "travel": ["具体目的地与路线指南", "旅行中的历史和自然"],
+    "security": ["网络安全事件与防护", "软件供应链风险"]
+  },
+  "families": [
+    {
+      "id": "broad_mix",
+      "profileSensitive": true,
+      "targetTopics": [],
+      "variants": [
+        "今天给我一组真正值得看的混合内容，不限定主题。",
+        "按你对我的理解推荐今天先看的内容，保持一些新意。",
+        "我没有明确题目，给我一页质量高、不要单一来源的推荐。",
+        "现在随便看看，但别用纯热点填满，选对我有价值的。",
+        "给我一组长期有用和少量意外发现并存的内容。"
+      ]
+    },
+    {
+      "id": "ai_product",
+      "targetTopics": ["ai", "product"],
+      "variants": [
+        "最近 AI 产品有哪些真正值得看的进展？",
+        "给我看 AI 如何改变具体产品，不要只有融资新闻。",
+        "找一组关于智能体产品落地的高质量内容。",
+        "今天想看 AI 产品设计和用户价值。",
+        "推荐能帮助判断 AI 产品方向的内容。"
+      ]
+    },
+    {
+      "id": "capital_rights",
+      "targetTopics": ["investment", "copyright"],
+      "variants": [
+        "看一些数字内容投资与版权授权的实质案例。",
+        "推荐创作者经济、内容权利和长期资本相关内容。",
+        "我想理解数字版权如何形成可持续商业模式。",
+        "找内容产业融资与授权机制的可靠分析。",
+        "今天重点看内容资产、版权和投资判断。"
+      ]
+    },
+    {
+      "id": "games_culture",
+      "targetTopics": ["games", "culture"],
+      "allowedObjectKinds": ["primary"],
+      "variants": [
+        "给我具体游戏和文化作品，不要十大盘点。",
+        "周末想看值得体验的游戏与影视作品本身。",
+        "推荐几部具体作品，少给评论和榜单。",
+        "找能直接玩的游戏或能直接看的文化作品。",
+        "这次只想发现具体作品，不要行业新闻顶替。"
+      ]
+    },
+    {
+      "id": "science_learning",
+      "targetTopics": ["science", "education"],
+      "variants": [
+        "推荐可靠科学解释和可实践的学习方法。",
+        "今天想看有证据的科学与教育内容。",
+        "找能真正学到东西的科学文章和学习工具。",
+        "给我一页科学发现与知识方法，不要耸动标题。",
+        "推荐长期有用的科学、教育内容。"
+      ]
+    },
+    {
+      "id": "health_travel",
+      "targetTopics": ["health", "travel"],
+      "variants": [
+        "规划旅行前想看健康准备和具体路线。",
+        "推荐有证据的旅行健康建议与目的地指南。",
+        "找适合实际出行的健康、路线内容。",
+        "我要准备长途旅行，给我可靠而具体的内容。",
+        "今天重点看旅行中的健康与自然体验。"
+      ]
+    },
+    {
+      "id": "audio_tech",
+      "targetTopics": ["ai", "open_source", "security"],
+      "allowedContentTypes": ["audio"],
+      "variants": [
+        "给我能听的 AI、开源或安全播客。",
+        "今天只想听技术内容，不要文章冒充音频。",
+        "找几期可以直接播放的 AI 与开源节目。",
+        "推荐技术播客，优先具体单集。",
+        "我在路上，只给音频形式的技术内容。"
+      ]
+    },
+    {
+      "id": "science_images",
+      "targetTopics": ["science", "travel"],
+      "allowedContentTypes": ["image"],
+      "variants": [
+        "找一些科学或自然主题的图片作品。",
+        "这次只看高质量科学影像，不要图片报道顶替。",
+        "给我能直接看的宇宙、自然图片。",
+        "推荐科学摄影与旅行视觉作品。",
+        "我想看图，主题是科学和自然。"
+      ]
+    },
+    {
+      "id": "game_video",
+      "targetTopics": ["games", "sports", "culture"],
+      "allowedContentTypes": ["video"],
+      "variants": [
+        "给我游戏、体育或文化视频，必须是视频本身。",
+        "今天只看能直接播放或去原站观看的视频。",
+        "找具体游戏与赛事视频，不要文字盘点。",
+        "推荐一些高质量文化视频。",
+        "我想看视频，主题偏游戏和体育。"
+      ]
+    },
+    {
+      "id": "open_practice",
+      "targetTopics": ["open_source", "security", "product"],
+      "allowedObjectKinds": ["primary", "guide"],
+      "variants": [
+        "找开源、安全或产品实践的具体教程与项目。",
+        "推荐可以动手实践的开放技术内容。",
+        "不要泛泛评论，给我开源项目和工程指南。",
+        "今天重点看安全、开源的具体做法。",
+        "找能落地到产品工作的开放技术材料。"
+      ]
+    }
+  ]
+}

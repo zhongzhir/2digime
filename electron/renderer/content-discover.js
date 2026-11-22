@@ -22,6 +22,9 @@
   let activeFeedMode = 'personal';
   let moreInFlight = false;
   let moreExhausted = false;
+  let moreRetryTimer = null;
+  let moreWaitStartedAt = 0;
+  let sourcesLoading = false;
   const selectedForTalk = new Map();
 
   function newSearchGenerationId() {
@@ -116,6 +119,7 @@
 
   function consumeLabel(card) {
     const type = String(card.contentType || '');
+    const purpose = String(card.entrancePurpose || '');
     const host = (() => {
       try {
         return new URL(String(card.url || '')).hostname.replace(/^www\./, '');
@@ -123,6 +127,10 @@
         return '';
       }
     })();
+    if (/试看|预告|片段/.test(purpose)) return '打开试看 / 预告';
+    if (/完整观看|完整入口/.test(purpose)) return '去原站观看';
+    if (/平台页/.test(purpose)) return '打开平台页';
+    if (card.channelUse === 'discover' || /发现依据|推荐依据/.test(purpose)) return '查看依据';
     if (card.linkKind === 'aggregator') return '打开聚合入口';
     if (host === 'bgm.tv' || host === 'bangumi.tv') return '打开作品页';
     if (host === 'zh.wikivoyage.org') return '打开攻略';
@@ -632,7 +640,7 @@
         const key = cardKey(card);
         return key && !seen.has(key);
       });
-      moreExhausted = extra.length === 0;
+      moreExhausted = extra.length === 0 && !next.replenishing;
       next = Object.assign({}, next, {
         cards: (lastView.cards || []).concat(extra),
         relatedCards: lastView.relatedCards || next.relatedCards || [],
@@ -685,6 +693,142 @@
     for (const el of switches) {
       el.classList.toggle('active', el.getAttribute('data-discover-section') === activeSection);
     }
+    if (activeSection === 'sources') void loadSources();
+  }
+
+  function sourceTime(value) {
+    const at = Date.parse(String(value || ''));
+    if (!Number.isFinite(at)) return '';
+    return new Date(at).toLocaleString('zh-CN', { hour12: false });
+  }
+
+  function sourceTypeText(row) {
+    const labels = { article: '文章', image: '图片', audio: '音频', video: '视频' };
+    return (row.contentTypes || []).map((type) => labels[type] || type).join('、');
+  }
+
+  function sourceAvailabilityText(row) {
+    if (!row.enabled || row.availability === 'disabled') return '已停用';
+    if (row.availability === 'available') return '最近可用';
+    if (row.availability === 'failing') {
+      const labels = {
+        timeout: '请求超时',
+        dns: '域名解析失败',
+        ssrf: '安全门拒绝',
+        content_type: '内容格式不支持',
+        too_large: '响应过大',
+        source_error: '来源异常',
+      };
+      return '最近失败' + (row.lastErrorCode ? ' · ' + (labels[row.lastErrorCode] || row.lastErrorCode) : '');
+    }
+    return '等待首次检查';
+  }
+
+  function renderSources(rows, message) {
+    const list = $('content-source-list');
+    const empty = $('content-source-empty');
+    const notice = $('content-source-notice');
+    if (notice && message != null) notice.textContent = String(message || '');
+    if (!list) return;
+    list.innerHTML = '';
+    for (const row of rows || []) {
+      const li = document.createElement('li');
+      li.className = 'content-source-row';
+      const body = document.createElement('div');
+      body.className = 'content-source-body';
+      const title = document.createElement('strong');
+      title.textContent = row.label || '未命名来源';
+      body.appendChild(title);
+      const status = document.createElement('p');
+      status.className = 'muted tiny content-source-status';
+      const bits = [sourceAvailabilityText(row), sourceTypeText(row)];
+      if (row.lastAttemptAt) bits.push('最近检查 ' + sourceTime(row.lastAttemptAt));
+      if (row.lastItemCount != null) bits.push('最近 ' + Number(row.lastItemCount || 0) + ' 条');
+      status.textContent = bits.filter(Boolean).join(' · ');
+      body.appendChild(status);
+      const link = document.createElement('a');
+      link.className = 'muted tiny content-source-url';
+      link.href = row.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = row.url;
+      body.appendChild(link);
+      const toggle = btn(row.enabled ? '停用' : '启用', () => void toggleSource(row), 'ghost');
+      li.appendChild(body);
+      li.appendChild(toggle);
+      list.appendChild(li);
+    }
+    if (empty) empty.hidden = !!(rows && rows.length);
+  }
+
+  async function loadSources(message) {
+    if (sourcesLoading) return;
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    sourcesLoading = true;
+    const notice = $('content-source-notice');
+    if (notice && message == null) notice.textContent = '正在读取来源状态……';
+    try {
+      const result = await client.invoke('content', {
+        action: 'sourceList',
+        searchGenerationId: activeSearchGenerationId,
+      });
+      renderSources((result && result.sources) || [], message == null ? (result && result.sourceNotice) || '' : message);
+    } catch {
+      if (notice) notice.textContent = '暂时无法读取内容来源。';
+    } finally {
+      sourcesLoading = false;
+    }
+  }
+
+  async function toggleSource(row) {
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    const notice = $('content-source-notice');
+    if (notice) notice.textContent = row.enabled ? '正在停用这个来源……' : '正在启用这个来源……';
+    try {
+      const result = await client.invoke('content', {
+        action: 'sourceToggle',
+        sourceId: row.id,
+        enabled: !row.enabled,
+        searchGenerationId: activeSearchGenerationId,
+      });
+      renderSources((result && result.sources) || [], (result && result.sourceNotice) || '来源状态已更新。');
+    } catch {
+      if (notice) notice.textContent = '来源状态没有更新成功。';
+    }
+  }
+
+  async function addSource() {
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    const urlInput = $('content-source-url');
+    const labelInput = $('content-source-label');
+    const url = urlInput ? String(urlInput.value || '').trim() : '';
+    if (!url) return;
+    const submit = $('btn-content-source-add');
+    const notice = $('content-source-notice');
+    if (submit) submit.disabled = true;
+    if (notice) notice.textContent = '正在检查这个开放来源……';
+    try {
+      const result = await client.invoke('content', {
+        action: 'sourceAdd',
+        url: url,
+        title: labelInput ? String(labelInput.value || '').trim() : '',
+        searchGenerationId: activeSearchGenerationId,
+      });
+      const message = (result && result.sourceNotice) || '';
+      renderSources((result && result.sources) || [], message);
+      if (/^已加入/.test(message)) {
+        if (urlInput) urlInput.value = '';
+        if (labelInput) labelInput.value = '';
+        moreExhausted = false;
+      }
+    } catch {
+      if (notice) notice.textContent = '没有检查成功，请稍后再试。';
+    } finally {
+      if (submit) submit.disabled = false;
+    }
   }
 
   function renderView(view) {
@@ -694,6 +838,7 @@
     const lead = $('content-discover-lead');
     const list = $('content-discover-list');
     const notice = $('content-discover-notice');
+    const response = $('content-discover-response');
     const empty = $('content-discover-empty');
     const prefsList = $('content-discover-pref-list');
     const prefEmpty = $('content-discover-pref-empty');
@@ -718,6 +863,11 @@
       notice.textContent =
         lastCards.length || (view && view.feedMode === 'intent') ? friendlyNotice(view && view.notice) : '';
     }
+    if (response) {
+      const text = String((view && view.responseText) || '').trim();
+      response.textContent = text;
+      response.hidden = !text;
+    }
     const replenishing = !!(view && view.replenishing);
     if (root) root.dataset.replenishing = replenishing ? '1' : '0';
     // 只供诊断读取，不显示。
@@ -725,8 +875,10 @@
     if (root) root.dataset.searchUsage = usage ? JSON.stringify(usage) : '';
     const cancelBtn = $('btn-discover-cancel');
     if (cancelBtn) cancelBtn.hidden = !replenishing;
-    if (replenishing && !lastCards.length) {
-      setStatus('兔机米正在准备一些值得看的内容……');
+    if (replenishing) {
+      setStatus(lastCards.length && view && view.feedMode !== 'intent'
+        ? '正在提前准备下一批内容……'
+        : '兔机米正在准备一些值得看的内容……');
     } else {
       setStatus('');
     }
@@ -854,14 +1006,15 @@
   }
 
   // 页面整体兜底：后端仍在补充超过此时间，就走现有 cancel（中止后端这一代请求），再让页面进入终态。
-  const PAGE_DEADLINE_MS = 250000;
+  const PAGE_DEADLINE_MS = 90000;
+  const INITIAL_RESPONSE_DEADLINE_MS = 30000;
 
-  function watchDeadline(gen) {
+  function watchDeadline(gen, delay, message) {
     return setTimeout(() => {
       const root = $('content-discover');
       if (activeSearchGenerationId !== gen || !root || root.dataset.replenishing !== '1') return;
-      void terminate('这次等得太久，已停止补充。已显示的内容保留。');
-    }, PAGE_DEADLINE_MS);
+      void terminate(message || '这次等得太久，已停止补充。已显示的内容保留。');
+    }, delay || PAGE_DEADLINE_MS);
   }
 
   function showTerminal(message) {
@@ -926,22 +1079,50 @@
     }
   }
 
-  async function loadMore() {
+  const MORE_READY_POLL_MS = 800;
+  const MORE_READY_DEADLINE_MS = 20000;
+
+  function clearMoreRetry() {
+    if (moreRetryTimer) clearTimeout(moreRetryTimer);
+    moreRetryTimer = null;
+    moreWaitStartedAt = 0;
+  }
+
+  function scheduleMoreRetry() {
+    if (moreRetryTimer || moreInFlight || moreExhausted) return;
+    if (!moreWaitStartedAt) moreWaitStartedAt = Date.now();
+    if (Date.now() - moreWaitStartedAt >= MORE_READY_DEADLINE_MS) {
+      setStatus('下一批仍在准备；页面没有卡住，可以继续浏览现有内容，稍后再向下滚动。');
+      return;
+    }
+    moreRetryTimer = setTimeout(() => {
+      moreRetryTimer = null;
+      void loadMore(true);
+    }, MORE_READY_POLL_MS);
+  }
+
+  async function loadMore(isRetry) {
     if (moreInFlight || moreExhausted || activeFeedMode !== 'personal' || activeSection !== 'for-you') return;
     if (!lastCards.length) return;
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
     moreInFlight = true;
-    setStatus('正在继续加载……');
+    if (!isRetry) setStatus('正在继续加载……');
+    const beforeCount = lastCards.length;
     try {
       const result = await act('more');
       const view = result && result.view;
-      if (!view || !((view.cards || []).length)) {
+      const appended = lastCards.length > beforeCount;
+      if (view && view.replenishing && !appended) {
+        moreExhausted = false;
+        setStatus('正在提前准备下一批内容……');
+      } else if (!view || !((view.cards || []).length) || !appended) {
         moreExhausted = true;
         setStatus('');
         const notice = $('content-discover-notice');
         if (notice && !notice.textContent) notice.textContent = '暂时没有更多新内容。';
       } else {
+        clearMoreRetry();
         setStatus('');
       }
     } catch {
@@ -949,7 +1130,7 @@
     } finally {
       moreInFlight = false;
     }
-    if (!moreExhausted) maybeLoadMore();
+    if (!moreExhausted && lastView && lastView.replenishing) scheduleMoreRetry();
   }
 
   function feedScroller() {
@@ -970,6 +1151,7 @@
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
     moreExhausted = false;
+    clearMoreRetry();
     setStatus('兔机米正在帮你找些值得看的内容……');
     try {
       const result = await client.invoke('content', {
@@ -989,6 +1171,7 @@
     if (input) input.value = '';
     activeSearchGenerationId = newSearchGenerationId();
     activeFeedMode = 'personal';
+    clearMoreRetry();
     lastView = null;
     await refresh();
     showSection('for-you');
@@ -1004,6 +1187,7 @@
     const gen = newSearchGenerationId();
     activeSearchGenerationId = gen;
     activeFeedMode = 'intent';
+    clearMoreRetry();
     lastView = null;
     // 搜索一开始就可以取消：最长的等待恰恰发生在第一个 seek 返回之前。
     seekPendingGen = gen;
@@ -1016,6 +1200,11 @@
     setStatus('兔机米正在准备一些值得看的内容……');
     const notice = $('content-discover-notice');
     if (notice) notice.textContent = '';
+    const response = $('content-discover-response');
+    if (response) {
+      response.textContent = '';
+      response.hidden = true;
+    }
     const root = $('content-discover');
     if (root) root.dataset.replenishing = '1';
     for (const id of ['content-discover-list', 'content-discover-related-list', 'content-discover-unjudged-list', 'content-discover-access-list']) {
@@ -1026,19 +1215,29 @@
     if (feedTitle) feedTitle.textContent = '正在找「' + text.slice(0, 24) + '」';
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
-    const deadline = watchDeadline(gen);
+    const initialDeadline = watchDeadline(
+      gen,
+      INITIAL_RESPONSE_DEADLINE_MS,
+      '30 秒内没有拿到第一批结果，已停止这次查找。你可以直接修改要求后重试。',
+    );
     try {
       const result = await client.invoke('content', {
         action: 'seek',
         text: text,
         searchGenerationId: gen,
       });
+      clearTimeout(initialDeadline);
       applyView(result && result.view);
-      await followReplenish(client, gen);
+      const supplementDeadline = watchDeadline(gen);
+      try {
+        await followReplenish(client, gen);
+      } finally {
+        clearTimeout(supplementDeadline);
+      }
     } catch (err) {
       if (activeSearchGenerationId === gen) await terminate(failureMessage(err));
     } finally {
-      clearTimeout(deadline);
+      clearTimeout(initialDeadline);
       if (seekPendingGen === gen) seekPendingGen = '';
       if (activeSearchGenerationId === gen && lastCards.length) setStatus('');
     }
@@ -1202,6 +1401,14 @@
         showSection('for-you');
         setStatus('正在清空最近推荐并重新挑选……');
         void act('resetRecent');
+      });
+    }
+    const sourceForm = $('content-source-add-form');
+    if (sourceForm && !sourceForm.dataset.bound) {
+      sourceForm.dataset.bound = '1';
+      sourceForm.addEventListener('submit', (evt) => {
+        evt.preventDefault();
+        void addSource();
       });
     }
     if (!document.documentElement.dataset.discoverScrollBound) {

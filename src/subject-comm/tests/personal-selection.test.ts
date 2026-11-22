@@ -62,6 +62,55 @@ test('Personal selection uses Digital Self and model JSON; model failure is unav
   if (!failed.ok) assert.equal(failed.error, PERSONAL_SELECTION_UNAVAILABLE);
 });
 
+test('Personal selection makes one bounded 8192-token recovery after two truncated responses', async () => {
+  const digitalSelf = self('subj_recovery', ['我关心开放技术。']);
+  const subset = FEED_01_SEED_ITEMS.slice(0, 3);
+  const maxTokens: number[] = [];
+  const result = await selectNetworkItems({
+    digitalSelf,
+    items: subset,
+    model: { baseUrl: 'http://127.0.0.1', model: 'test' },
+    chatComplete: async (options) => {
+      maxTokens.push(Number(options.maxTokens || 0));
+      if (maxTokens.length < 3) return { text: '{"decisions":[', truncated: true };
+      return {
+        text: JSON.stringify({
+          decisions: subset.map((item) => ({ itemId: item.itemId, decision: 'show', reason: '有用' })),
+        }),
+      };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(maxTokens, [2048, 4096, 8192]);
+});
+
+test('Personal selection receives the mechanical page size without a second relevance scorer', async () => {
+  const digitalSelf = self('subj_page', ['我关心科学解释与可实践的方法。']);
+  const subset = FEED_01_SEED_ITEMS.slice(0, 3);
+  const result = await selectNetworkItems({
+    digitalSelf,
+    items: subset,
+    targetCount: 2,
+    model: { baseUrl: 'http://127.0.0.1', model: 'test' },
+    chatComplete: async (options) => {
+      const blob = options.messages.map((message) => message.content).join('\n');
+      assert.match(blob, /当前页面需要 2 条/);
+      assert.match(blob, /具体选哪 2 条仍由你/);
+      return {
+        text: JSON.stringify({
+          decisions: subset.map((item, index) => ({
+            itemId: item.itemId,
+            decision: index < 2 ? 'show' : 'ignore',
+            reason: index < 2 ? '更符合本页目标。' : '这一轮先靠后。',
+          })),
+        }),
+      };
+    },
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.shownItemIds.length, 2);
+});
+
 test('Personal selection source has no keyword/score fallback', async () => {
   const src = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/personal-selection.ts'), 'utf8');
   assert.equal(src.includes('opportunity-match'), false);

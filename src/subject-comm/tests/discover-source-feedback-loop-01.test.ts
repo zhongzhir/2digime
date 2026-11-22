@@ -226,6 +226,24 @@ test('user search open-hit stays search; default catalog open-hit is feed', () =
   assert.equal(catalog?.provenance?.via, 'feed');
 });
 
+test('open hits from one capability share a stable source identity', () => {
+  const first = networkItemFromOpenHit({
+    title: '播客一',
+    url: 'https://podcasts.apple.com/cn/podcast/id1',
+    contentType: 'audio',
+    capability: 'itunes-top-podcasts',
+  }, NOW, 'feed');
+  const second = networkItemFromOpenHit({
+    title: '播客二',
+    url: 'https://podcasts.apple.com/cn/podcast/id2',
+    contentType: 'audio',
+    capability: 'itunes-top-podcasts',
+  }, NOW, 'feed');
+  assert.ok(first && second);
+  assert.equal(first!.publisherSubjectId, second!.publisherSubjectId);
+  assert.notEqual(first!.itemId, second!.itemId);
+});
+
 test('one-off seek does not become a default-feed standing direction', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-seek-default-'));
   const article = itemOf({

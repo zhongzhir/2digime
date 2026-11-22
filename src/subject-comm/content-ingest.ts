@@ -81,6 +81,14 @@ export interface IngestSourceInput {
   signal?: AbortSignal;
 }
 
+export interface IngestSourceResult {
+  sourceTitle: string;
+  records: IngestRecord[];
+  items: NetworkItem[];
+  /** HTTP 304 是成功检查但没有新正文，不得记作来源失败。 */
+  notModified?: boolean;
+}
+
 function xmlUnescape(raw: string): string {
   return String(raw || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
@@ -329,11 +337,7 @@ async function existingById(store: NetworkItemStore, itemId: string, now: string
   return listed.items.find((item) => item.itemId === itemId);
 }
 
-export async function ingestSource(input: IngestSourceInput): Promise<{
-  sourceTitle: string;
-  records: IngestRecord[];
-  items: NetworkItem[];
-}> {
+export async function ingestSource(input: IngestSourceInput): Promise<IngestSourceResult> {
   if (input.signal?.aborted) {
     return { sourceTitle: '', records: [{ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl }], items: [] };
   }
@@ -350,6 +354,14 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
       sourceTitle: '',
       records: [{ status: 'unavailable', reason: (err as { code?: string }).code || 'fetch_failed', canonicalUrl: input.sourceUrl }],
       items: [],
+    };
+  }
+  if (fetched.status === 304) {
+    return {
+      sourceTitle: '',
+      records: [],
+      items: [],
+      notModified: true,
     };
   }
   if (fetched.status < 200 || fetched.status >= 300) {

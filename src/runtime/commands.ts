@@ -1088,7 +1088,10 @@ export interface CommandMap {
         | 'cancel'
         | 'adjust'
         | 'adjustKeep'
-        | 'adjustRevoke';
+        | 'adjustRevoke'
+        | 'sourceList'
+        | 'sourceAdd'
+        | 'sourceToggle';
       relayUrl?: string;
       itemId?: string;
       directiveId?: string;
@@ -1097,11 +1100,15 @@ export interface CommandMap {
       title?: string;
       url?: string;
       publisher?: string;
+      sourceId?: string;
+      enabled?: boolean;
       /** 一次主动搜索 / 个人 Feed 打开的请求身份。迟到结果必须核对。 */
       searchGenerationId?: string;
     };
     output: {
       view: import('../subject-comm/content-discover').DiscoverView;
+      sources?: import('../subject-comm/content-source-portfolio').ContentSourceView[];
+      sourceNotice?: string;
     };
   };
 }

@@ -1,10 +1,132 @@
 # 03 — CURRENT PLAN
 
 **状态：** `current_authority / only_execution_plan`
-**日期：** 2026-10-10
+**日期：** 2026-11-22
 **性质：** 当前唯一执行计划。旧 roadmap、execution index、context 文首指针、01A baseline 附录中的「下一步」均不得再当 current plan。
 
 开始任何实现前读 AGENTS.md 所列四份文件。本文件只回答：现在做什么、按什么顺序、什么不准做、还有哪些未决冲突。
+
+---
+
+## 0A. 当前覆盖指针（2026-11-22）
+
+**任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
+
+**状态：** `PLANNED / FOUNDATION_ACCEPTED / IMPLEMENTATION_NOT_STARTED`
+
+**详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
+
+**版本基线：** `0.3.0-development-baseline`。它表示已将 Owner 接受的发现能力、文字等相对可达内容能力和现有协作/机构分发地基收束到一条可开发主线；它不是公开发布、生产部署或机构级安全认证。
+
+### Owner 最新裁决
+
+1. `DISCOVER-WATCH-ENTRY-01` 以“公开入口能力有限、现有改进接收”的边界关闭，不再继续寻找其他搜索供应商，也不转入 PC 登录态平台逐站搜索。
+2. 直接观看能力受内容平台生态、账号、付费、地区和 App 跳转限制影响，等待内容开放生态成熟；当前优先把文字等相对容易到达的内容做到可用、好用。
+3. 当前已接受能力进入主干；中间开发成果按“代码与可复现证据入库、运行态和一次性探针封存、凭据永不入库”的规则收束。
+4. 下一阶段恢复停留已久的协作能力与做事能力建设，面向银行、电信、大型机构和大用户平台，落实主体身份、认证、安全、授权与 A2A 互操作。
+
+### 新阶段动作顺序
+
+1. 以既有 `INSTITUTION-DISTRIBUTION-V01` 已接受地基为起点，不重造机构控制面，不让机构读取 Owner 的 Digital Self、Talk、文件和记忆。
+2. 先完成 Owner、Digital Subject、Runtime Endpoint 三类身份分离及签名 Agent Card，再接真实机构身份联邦。
+3. 机构登录沿用 OIDC/OAuth2/SAML；高价值 API 采用 FAPI 2.0 安全剖面，不自研认证协议。
+4. Owner 对 Subject 的委托采用 VC 2.0 数据模型，并评估已正式发布的 OpenID4VCI/OpenID4VP；实现最小披露、过期、撤销和密钥轮换。
+5. A2A 只作跨主体协议形状：Agent Card、Message、Task、Artifact 与安全方案；A2A Task 不得变成面向用户的新任务状态机。
+6. 在同一 Talk 入口验证“本地主体自己做 / 请求另一个主体协作”的真实选择、接受、拒绝、结果和恢复，不新增协作中心或第二套 runtime。
+
+### Discover 收束结论
+
+下列“下一阶段产品结果”“当前动作顺序”和“开发检查点”保留为 `DISCOVER-WATCH-ENTRY-01` 历史，不再是当前执行指令。现有通用页面读取、作品/依据分离和入口结构化能力保留；Tavily 免费验证没有形成有效净增，专用 key 已撤销，未产生费用、未写 adapter、未部署 Relay。后续不得继续叠加供应商、站点规则、查询改写或提示词补丁。
+
+**上一阶段：** `DISCOVER-50-STAGE1` 已于 2026-11-22 获得 Owner 限定验收：关联度与无关内容控制已有可感知提升，本轮修改接收；但推荐卡仍不能稳定交付直接观看、试看或明确的平台观看入口。限定验收记录见 [`../audits/DISCOVER-50-STAGE1-OWNER-ACCEPTANCE-SESSION-08.md`](../audits/DISCOVER-50-STAGE1-OWNER-ACCEPTANCE-SESSION-08.md)。
+
+### DISCOVER-WATCH-ENTRY-01 历史目标（已关闭）
+
+1. 用户要“看”某类内容时，主推荐卡必须是具体作品对象；新闻、榜单、百科和评论只能作推荐依据或补充材料。
+2. 模型应继续自主搜索具体作品及其观看入口，优先交付已核实的直接观看、公开试看/预告或官方平台作品页；登录、付费、地区、App 跳转等限制必须如实标明。
+3. 平台限制不是把报道当观看入口的理由。找不到可核实入口时，保留具体作品卡并诚实说明“暂未核实到观看入口”，不得伪造链接或暗示可以播放。
+4. 优先复用现有 `web_search`、安全页面读取、开放媒体元数据/oEmbed 与平台公开页面；不自研搜索、爬虫或播放器，不绕过登录、付费、地区限制或验证码。
+5. 第一刀先证明公开能力能把“报道候选”推进到“作品 + 可消费入口”；只有公开能力覆盖仍不足时，才单独评估官方平台连接器或经主人授权的登录态 Computer Use。
+
+### DISCOVER-WATCH-ENTRY-01 历史动作顺序（不再执行）
+
+1. 冻结并记录 `DISCOVER-50-STAGE1` 的限定验收边界，不把本轮写成直接观看能力通过。
+2. 先做现有能力审计和代表性样本基线，不写平台关键词规则或站点白名单。
+3. 复用现有通用页面读取/媒体元数据事实，把“入口核实”暴露给同一推荐主模型；runtime 只校验 URL、读取事实、安全和访问限制。
+4. 调整卡片主动作：`直接观看 / 试看或预告 / 打开平台 / 查看推荐依据` 按真实事实投影，报道不再占“想看内容”的主卡位。
+5. 通过开发者正式 Electron 门后，再安排一次最小 Owner 体验门；本任务未开始前不继续请 Owner 调试当前包。
+
+### DISCOVER-WATCH-ENTRY-01 2026-11-22 收束检查点
+
+通用候选页面读取、入口结构化交付、对象/依据分离和并行读取已经实现；具名作品入口覆盖达到 86%，但开放推荐只有 52.2%，20 请求整体门与 30 秒终态门未通过。连续三轮同层调整已触发 02 Red，停止继续补提示词或站点特例。
+
+Owner 已授权继续“增强 Relay 成熟搜索供应商”路线，但不授权外部费用。IQS `CNAuto` / `CNLiteBasic` 双引擎不能补足开放推荐；Gemini Search、Brave 与 Google Custom Search 不满足零费用或可持续性边界。Tavily Researcher 免费计划随后完成真实验证：Basic 全量 20 请求仅 5 个自动疑似命中；Advanced 对 8 个缺口样本仅 3 个自动疑似命中，人工复核均为泛频道、盘点文章、同名 AI 二创或既有结果重复，有效净增为 0。共使用 36 个免费 plan credits，未录入付款方式，Pay As You Go 保持关闭，未产生费用。
+
+Owner 已选择接受当前公开能力边界并停止该路线：不写 Tavily adapter、不部署 Relay、不继续叠加免费供应商、站点规则、查询改写或提示词补丁。未安排 Owner 复验；专用 Tavily key 已撤销。实现证据见 [`../audits/DISCOVER-WATCH-ENTRY-01-SESSION-01.md`](../audits/DISCOVER-WATCH-ENTRY-01-SESSION-01.md)，零费用供应商验证与最终处置见 [`../audits/DISCOVER-WATCH-ENTRY-01-CAPABILITY-SESSION-03.md`](../audits/DISCOVER-WATCH-ENTRY-01-CAPABILITY-SESSION-03.md)。
+
+---
+
+## 0B. 上一阶段覆盖记录（2026-11-11～2026-11-22）
+
+**任务名：** `DISCOVER-50-STAGE1`
+
+**状态：** `RELAY_DEPLOYED / RECOMMENDATION_MAINLINE_REFACTORED / OWNER_LIMITED_ACCEPTED / DIRECT_WATCH_ENTRY_PENDING / NOT_RELEASED`
+
+**详细计划：** [`../plans/DISCOVER-50-STAGE1.md`](../plans/DISCOVER-50-STAGE1.md)
+
+**覆盖关系：** Owner 2026-11-10 明确要求重新着手把「发现」真正落实；本节覆盖下方 `DIGITALME-UNIFIED-CAPABILITY-01` 与 `PUBLIC-ALPHA-CONTENT-RELEASE-01` 的下一开发任务指针，但不改写它们的历史结论。
+
+### 本轮要解决的产品结果
+
+1. **能发现：** 建立可持续维护的优质来源组合与多路候选供给，不再依赖几个硬编码新闻/漫剧来源。
+2. **能推荐：** Digital Self、用户本次要求、用户明确内容控制和短期上下文共同进入本机模型选择；Relay / Search / Source 不得做个人化最终排序。
+3. **一直有：** 形成独立的候选蓄水池、已看去重、分页游标、低水位补量与失败保底；“一次 12→24 条”不再算连续供给通过。
+4. **技术基线：** 对标抖音、小红书、B站公开可核验的推荐系统共同能力，第一阶段达到能力覆盖约 50%，但不复制点击率、停留时长和成瘾目标。
+
+### 当前工程基线与边界
+
+- 隔离分支/工作树：`codex/discover-50-stage1` / `.task-worktrees/discover-50-stage1`；基线 `147ac09d2933c225c1fb079b4a266157c85a5091`。
+- 基线构建通过；相关回归 103 项为 95 通过、8 失败。5 项为 Discover 跨代异步结果污染，1 项为 AI 视频与个人流恢复冲突，2 项为额度提示旧断言。这些是开工前已存在失败，不得算作本轮回归。
+- 本轮开工时的关键上限：约 17 个硬编码开放端点、24 条排序窗、8 条一批的串行模型选择、没有来源健康账本或后台补量；10 月“连续加载”只证明 12→24 条。
+- 继续复用：开放标准/API 接入、统一 `NetworkItem`、规范 URL 去重、Digital Self、显式内容控制、现有 Responses/Search 接入、来源执行事实。
+- 本轮替换/抽离：候选窗口、来源组合、连续分页和补量编排。不得继续用单体 `personal-feed.ts` 中的新条件分支伪装系统升级。
+- 禁止中心用户画像、Relay 个性化、CTR/停留时长优化、关键词打分器、站点黑名单、整站抓取器和第二套 Digital Self。
+- 本轮先实现可离线验收的供给与蓄水池地基；真实外部来源扩容、模型质量和真实 UI 分别过门，不用 mock 代替。
+
+### 当前检查点（2026-11-22）
+
+- 2026-11-22 Owner 已在新安装的独立试用构建 `v2-tujimi-20261122T064002Z-147ac09d` 上完成体验并明确接收本轮修改：信息关联度和去除无关内容已有提升，可以先验收。
+- 本轮未完成边界同样明确：推荐卡仍主要落到新闻、榜单、百科或推荐依据，不能稳定直接观看；平台登录、付费、地区或 App 跳转可能限制实际访问，但系统仍应尽力找到并区分直接观看、试看/预告、官方平台作品页与单纯报道。下一任务为 `DISCOVER-WATCH-ENTRY-01`。
+
+- Owner 正式试用已推翻“可交体验”的结论：明确搜索「持械入宋」及自然语言短剧推荐均未得到资源或有效答复；个人流补量出现 1～2 分钟停顿后批量涌出；另一次输入等待两分钟无终态。见 [`../audits/DISCOVER-50-STAGE1-OWNER-ACCEPTANCE-SESSION-07.md`](../audits/DISCOVER-50-STAGE1-OWNER-ACCEPTANCE-SESSION-07.md)。
+- 根因已定位为：显式搜索错误地把“当前主模型是否原生支持特定 Responses 工具协议”当成联网发现是否可用，忽略了已经连接的托管 Search；`content.more` 在队列耗尽时同步等待完整模型补量；前端还会在近底部递归连取多页，且第一响应兜底长达 250 秒。
+- 当前修复方向：Search 作为独立可替换 Tool 接入，当前模型与 Digital Self 保持唯一理解/选择权；个人流首屏后立即后台预取，`more` 只消费就绪缓存、绝不等待网络；前端每次只追加一页，第一响应 30 秒必须终态。修复完成前不得再次交 Owner 试用。
+- 响应与连续供给修复已落实：部署后正式 Electron 查询「持械入宋」18.705 秒交付 6 张主卡和 2 张相关卡；自然语言推荐请求 21 秒内形成终态。连续 8 次 `more` 总计 2.665 秒，前 7 页各 12 张、162～241 ms，第 8 页 4 张、168 ms；没有轮询、等待补量、1～2 分钟停顿或集中涌出。
+- `CNAuto` Relay 修复已部署到北京 ECS `i-2zedlw82hph3c2lxd3w7` 的 `digitalme-relay.service`；公网 health 200，服务器本机搜索「持械入宋」301 ms 返回 10 条。回滚备份为 `/opt/digitalme-review-discover-20261111/backup-20261111T105604-964361`。付费开关保持关闭，没有购买、充值或更改 Secret；未发布客户端或安装包。
+- 宽泛推荐质量仍失败：同一自然语言短剧请求第一次只有 1 条主推荐并混入弱相关材料；尝试把具体作品详情提升为主卡后，又把 3 个明显不相关的开放作品目录条目带入推荐，该试验已撤回且未部署。响应性通过不等于推荐能力通过。
+- Red 审计确认：非 Responses 当前模型仍走旧式“意图解释 → 多路候选 → 每 4 条分批角色判断 → 确定性拼装”，没有让完整 Digital Self 与全候选窗口进入一次整体最终选择。停止继续修改 `classifyCandidateRoles` 或增加主题/站点特例；下一实现改为“成熟 Search/Source 只供候选 → 当前模型以本次要求 + Digital Self + 明确控制 + 短期上下文一次性最终选择 → runtime 只校验机械事实”。备选的“强制改用 Responses 模型”因破坏模型中立暂不采用。完整证据见 Session 07。
+- 上述 Red 重构已在隔离工作树落实：非 Responses 显式发现不再调用旧 `runContentSeek`；当前模型在同一工具环自主调用通用 `web_search`，同时看到有界 Source 候选窗口、本次请求、完整 Digital Self、明确内容控制和短期上下文，并用 `present_results` 一次整体交付。runtime 只接受真实 candidate ID，伪造 ID 会返回同模型纠正；Search 请求仍只发送 query，不接触 Digital Self。
+- 榜单/报道只作推荐依据的新合同已落实：候选页面本身是对象时直接交付；当多个公开来源明确支持具体对象但没有对象页时，模型可交付无伪造 URL 的推荐对象卡，卡片单列“看推荐依据”。第一次在已有候选时空交付会在同一模型工具环内复核一次，runtime 不替模型选择。
+- 工程证据：TypeScript 构建通过；推荐、Source、Portfolio、Reservoir、Personal Feed、搜索额度、代次和来源身份聚焦回归 77/77 通过。全仓测试不是当前绿基线，运行中出现多个与本次路径无关的既有真实协作/MCP/CTO 失败和长轮询，已停止，不能写全仓通过。
+- 真实 Electron 最终门已通过：宽泛推荐原句 22.483 秒完成，交付 3 个具体主推荐和 2 条榜单依据；无关开放作品库条目为 0，依据 URL 没有冒充作品 URL。具名「持械入宋」18.430 秒完成，交付 4 张主卡和 2 张相关卡，能够理解对象、说明内容并给出可核实来源。此前小时限额阻塞等待自然恢复后才复验，没有换令牌绕过。
+- 开发者验收之后已生成并安装独立 Owner 试用构建，Owner 于 2026-11-22 给出限定接受。该结论只接收本轮关联度、无关内容控制、响应与连续供给改善，不代表直接观看入口、发布或整体市场 50% 能力通过；仍未 push、合并或公开发布。
+
+- 已实现 72 条中立候选 Reservoir、规范去重/来源轮转、持久 Source Portfolio、普通用户来源管理投影、真实摄入后登记和可逆启停。
+- 已实现低于 24 条时的后台补量与 Digital Self 个人预排序；结果只在原队列耗尽且上下文一致时接入同一缓存，不替换当前页或建立第二事实源。
+- Feed 来源已保存并使用 ETag / Last-Modified，304 作为成功未变化检查；当前默认目录中需要续页的 Internet Archive 与 Wikimedia Commons 均从同一 Source Portfolio 保存并消费协议 cursor，Commons 图片/音频/视频三流互不覆盖。
+- 本地已排队 `content.more` 50 样本 P95 96.11 ms（门槛 300 ms）；这不是 Electron 渲染或等待网络补量的时延。
+- 严格 30 分钟来源门同时抽样正文可消费性，并只统计当前健康来源：23 个健康来源、22 个域、文章/图片/音频/视频 4 种表达，终局 Reservoir 72 条 / 23 来源；Science News 的正文 403 没有被后续 304 假恢复。
+- 30 分钟末轮 19/19 到期 Feed 成功、2 个真实 304；Commons 图片 continuation 从已有 token 前进，音频/视频 `gsroffset` 8→16。Internet Archive 继续被 SSRF 安全门拒绝，没有为做绿报告放宽边界。
+- 50 请求 × 3 脱敏 Digital Self 的 150/150 真实模型运行通过：Top-12 可用相关率 80.78%、明确条件遵守率 99.67%、来源可打开率 100%、三主体平均重合率 34.51%。
+- 严格来源报告驱动的真实模型连续 5 页通过：5×12、60 条唯一卡、21 个来源、规范重复 0、单源最高 6.67%、5 种表达、60/60 原文可打开。
+- 正式 Electron v10 通过：当前代码连续显示 60 张唯一卡和 60 个原文动作；来源列表 28→29，用户加入 BBC 中文公开 Feed 后真实读入 24 条，停用/启用往返通过；两张截图已视觉复核。
+- 构建通过；Source / Portfolio / Reservoir / Selection / Personal Feed / generation / SSRF 专项 59/59，通过；调整推荐 / 屏蔽与反转 / 重置 / 来源反馈 33/33 通过；本地 `content.more` 50 样本 P95 96.11 ms（门槛 300 ms）。
+- 全仓测试尝试仍混入既有真实协作、真实模型和长轮询失败，本批不写全仓绿色结论，也不扩大任务去修协作系统。查询型 API cursor 继续只属于具体检索会话，不伪装成来源级全局 cursor。
+- 本批技术证据：[`../audits/DISCOVER-50-STAGE1-RECOMMENDATION-AND-UI-SESSION-06.md`](../audits/DISCOVER-50-STAGE1-RECOMMENDATION-AND-UI-SESSION-06.md)；严格化前的来源健康史见 [`../audits/DISCOVER-50-STAGE1-SOURCE-HEALTH-SESSION-05.md`](../audits/DISCOVER-50-STAGE1-SOURCE-HEALTH-SESSION-05.md)，API cursor 见 [`../audits/DISCOVER-50-STAGE1-API-CURSOR-SESSION-04.md`](../audits/DISCOVER-50-STAGE1-API-CURSOR-SESSION-04.md)。
+
+### 退出条件（历史；2026-11-22 已满足）
+
+此前技术门保留为历史工程证据，但当时不足以支持“第一阶段技术候选通过”。Session 07 的三类失败随后已在正式 Electron 入口关闭，独立技术门与 2026-11-22 Owner 体验门均已执行；结果为限定接受而非直接观看能力通过。下一缺口转入 `DISCOVER-WATCH-ENTRY-01`。
 
 ---
 

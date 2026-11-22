@@ -7,26 +7,45 @@ import { createDigitalMeRuntime } from '../digitalme-runtime';
 import { createCommandBus } from '../command-bus';
 import { WebDiscoveryError } from '../../capability/web-discovery';
 import type { DiscoverView } from '../../subject-comm/content-discover';
+import type { ChatMessage, ChatToolCall } from '../../infrastructure/model-http';
 
-function chatWith(searchQueries: string[], media: string[]) {
-  return async ({ messages }: { messages: Array<{ content?: string }> }) => {
-    const blob = messages.map((row) => String(row.content || '')).join('\n');
-    if (blob.includes('判断用户在「发现」里')) {
+function toolCall(id: string, name: string, args: object): ChatToolCall {
+  return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
+}
+
+function chatWith(searchQueries: string[]) {
+  let searchIndex = 0;
+  return async ({ messages }: { messages: ChatMessage[] }) => {
+    if (searchIndex < searchQueries.length) {
+      const query = searchQueries[searchIndex]!;
+      searchIndex += 1;
       return {
-        text: JSON.stringify({ intent: 'consume', requestedMedia: media, objectWanted: 'work_itself', searchQueries }),
+        text: '',
+        toolCalls: [toolCall(`search-${searchIndex}`, 'web_search', { query })],
       };
     }
-    if (blob.includes('判断每个候选')) {
-      const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
-        candidates?: Array<{ id: string }>;
-      };
-      return {
-        text: JSON.stringify({
-          roles: (user.candidates || []).map((row) => ({ id: row.id, role: 'PRIMARY_CONTENT', medium: 'video', entrance: 'full' })),
-        }),
-      };
-    }
-    return { text: '{}' };
+    const payloads = messages
+      .filter((row) => row.role === 'tool')
+      .map((row) => JSON.parse(row.content) as Record<string, unknown>);
+    const ids = [...new Set(payloads.flatMap((payload) =>
+      (Array.isArray(payload.candidates) ? payload.candidates : [])
+        .map((candidate) => String((candidate as Record<string, unknown>).candidateId || ''))
+        .filter(Boolean),
+    ))];
+    const quota = payloads.some((payload) => payload.networkCode === 'RATE_LIMITED');
+    return {
+      text: '',
+      toolCalls: [toolCall('present', 'present_results', {
+        summary: quota ? '联网搜索受到额度或频率限制，未把它说成没有内容。' : '已按完整候选窗口交付。',
+        selections: ids.map((candidateId) => ({
+          candidateId,
+          why: '符合本次观看要求',
+          placement: 'main',
+          contentType: 'video',
+          entrancePurpose: '观看入口',
+        })),
+      })],
+    };
   };
 }
 
@@ -45,7 +64,7 @@ test('SEARCH USAGE: a program request sends no preview search and reuses identic
     documentCapability: 'fake',
     registerOpenAiStub: false,
     searchCapability: false,
-    contentChat: chatWith(['纪录片 正片', '纪录片  正片', '人文 纪录片'], ['video']),
+    contentChat: chatWith(['纪录片 正片', '纪录片  正片', '人文 纪录片']),
     contentSearch: async (query: string) => {
       searched.push(query);
       return [{ title: `${query} 第1集`, url: `https://tv.example.org/show/${searched.length}`, snippet: '纪录片正片' }];
@@ -70,7 +89,7 @@ test('SEARCH QUOTA: an exhausted search quota is shown as quota, not as "nothing
     documentCapability: 'fake',
     registerOpenAiStub: false,
     searchCapability: false,
-    contentChat: chatWith(['纪录片 正片'], ['video']),
+    contentChat: chatWith(['纪录片 正片']),
     contentSearch: async () => {
       calls += 1;
       throw new WebDiscoveryError('RATE_LIMITED', 'rate_limited', 429);

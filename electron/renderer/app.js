@@ -6164,6 +6164,19 @@
   if (els.navSettings) els.navSettings.addEventListener("click", () => setNav("settings"));
   els.navWork.addEventListener("click", () => setNav("work"));
   if (els.navCollab) els.navCollab.addEventListener("click", () => setNav("collab"));
+  document.addEventListener("keydown", (ev) => {
+    if (!ev.ctrlKey || ev.altKey || ev.metaKey || ev.shiftKey) return;
+    const destination = {
+      Digit1: "chat",
+      Digit2: "discover",
+      Digit3: "subject",
+      Digit4: "settings",
+    }[ev.code];
+    if (!destination) return;
+    ev.preventDefault();
+    if (destination === "chat") setChatGuideMode("normal");
+    setNav(destination);
+  });
   // 设置/帮助为次级入口，不在主导航平权
   els.newTask.addEventListener("click", () => {
     setNav("work");

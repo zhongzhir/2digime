@@ -17,6 +17,11 @@ export interface ManagedWebDiscoveryClientOptions {
 
 const WEB_STATUSES = ['AVAILABLE', 'RATE_LIMITED', 'AUTH_FAILED', 'PROVIDER_ERROR', 'TEMPORARY_UNAVAILABLE'] as const;
 
+function safeProviderErrorCode(raw: unknown): string {
+  const value = String(raw || '').trim();
+  return /^[a-zA-Z0-9_.:-]{1,80}$/.test(value) ? value : '';
+}
+
 function classifyHttp(status: number, bodyStatus?: string): WebDiscoveryStatus {
   const labeled = String(bodyStatus || '').toUpperCase();
   if ((WEB_STATUSES as readonly string[]).includes(labeled)) return labeled as WebDiscoveryStatus;
@@ -103,7 +108,18 @@ export function createManagedWebDiscoveryConnector(
       }
       const status = classifyHttp(res.status, json.status);
       if (status !== 'AVAILABLE' || json.ok === false || !res.ok) {
-        throw Object.assign(new WebDiscoveryError(status, status, res.status), { diagnostic: { stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: null, parseError: null, cancellation: null, failure: 'http' } });
+        const providerError = safeProviderErrorCode(json.error);
+        throw Object.assign(new WebDiscoveryError(status, providerError || status, res.status), {
+          diagnostic: {
+            stage: 'discover.search',
+            httpStatus: res.status,
+            finishReason: null,
+            outputLength: null,
+            parseError: null,
+            cancellation: null,
+            failure: 'http',
+          },
+        });
       }
       const results = Array.isArray(json.results) ? json.results : [];
       options.onDiagnostic?.({ stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: results.length, parseError: null, cancellation: null, failure: null });

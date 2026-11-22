@@ -13,6 +13,11 @@ import {
 } from '../personal-feed';
 import { FEED_01_SEED_ITEMS } from './subject-network-feed-01-seed';
 import { laterCards, listLaterItems, saveLaterItem } from '../later-items';
+import {
+  ensureContentSourcePortfolio,
+  recordContentSourceAttempts,
+  setContentSourceEnabled,
+} from '../content-source-portfolio';
 
 const NOW = '2026-09-18T08:00:00.000Z';
 
@@ -433,6 +438,73 @@ test('zero-key Discover lists open catalog without a model and does not ask for 
   assert.ok(opened.view.cards.length >= 1, 'first screen must show catalog without more');
   assert.equal(/API Key|请配置|连接 AI/.test(opened.view.notice || ''), false);
   assert.equal(JSON.stringify(stored).includes('preferencevector'), false);
+});
+
+test('zero-key catalog ingestion resumes the persisted Internet Archive cursor', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-archive-cursor-'));
+  const sources = await ensureContentSourcePortfolio(root, '2026-09-18T07:00:00.000Z');
+  for (const source of sources) {
+    if (source.id !== 'internet-archive') {
+      await setContentSourceEnabled(root, source.id, false, '2026-09-18T07:00:00.000Z');
+    }
+  }
+  await recordContentSourceAttempts(root, '2026-09-18T07:00:00.000Z', [
+    {
+      sourceId: 'internet-archive',
+      ok: true,
+      itemCount: 0,
+      cursor: 'internet-archive:page:2',
+    },
+  ]);
+
+  const requestedPages: string[] = [];
+  const stored: NetworkItem[] = [];
+  const fetchOpenMedia = async (url: string) => {
+    if (url.includes('advancedsearch.php')) {
+      const parsed = new URL(url);
+      const page = parsed.searchParams.get('page') || '';
+      const kind = (parsed.searchParams.get('q') || '').includes('movies') ? 'video' : 'audio';
+      requestedPages.push(page);
+      return {
+        status: 200,
+        body: JSON.stringify({
+          response: { docs: [{ identifier: `archive-${kind}-${page}`, title: `${kind} page ${page}` }] },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('/metadata/')) {
+      const video = url.includes('archive-video-');
+      return {
+        status: 200,
+        body: JSON.stringify({ metadata: {}, files: [{ name: video ? 'clip.mp4' : 'track.mp3' }] }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+
+  const opened = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_archive_cursor'),
+    items: [],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    fetchOpenMedia,
+    putNetworkItem: async (item) => {
+      stored.push(item);
+    },
+    reloadItems: async () => stored,
+    getItem: async (itemId) => stored.find((item) => item.itemId === itemId),
+    mode: 'open',
+    now: NOW,
+  });
+
+  assert.deepEqual(requestedPages, ['2', '2']);
+  assert.equal(opened.view.cards.length > 0, true);
+  const after = await ensureContentSourcePortfolio(root, NOW);
+  assert.equal(after.find((source) => source.id === 'internet-archive')?.cursor, 'internet-archive:page:3');
 });
 
 test('managed search fault keeps an existing feed and still tries open catalog', async () => {

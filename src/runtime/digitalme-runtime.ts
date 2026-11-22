@@ -223,9 +223,21 @@ import {
 } from '../subject-comm/discover-intent';
 import { ManagedAiError } from '../capability/managed-ai-client';
 import { ingestSource } from '../subject-comm/content-ingest';
+import {
+  contentSourceConditionalHeaders,
+  inactiveContentSourcePublisherIds,
+  type ContentSourceRecord,
+} from '../subject-comm/content-source-portfolio';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { indexSearchHits, ingestDiscoveredEntrance, preferProviderSnippet } from '../subject-comm/open-web-discovery';
-import { ensurePersonalFeed, personalFeedCachePath, rememberIntentFeed } from '../subject-comm/personal-feed';
+import {
+  commitPersonalFeedPrefetch,
+  ensurePersonalFeed,
+  personalFeedCachePath,
+  personalFeedRemainingCount,
+  rememberIntentFeed,
+  type PersonalFeedPrefetch,
+} from '../subject-comm/personal-feed';
 import {
   classifySearchFailure,
   SEARCH_QUOTA_NOTICE,
@@ -233,6 +245,7 @@ import {
 } from '../subject-comm/network-discovery-state';
 import {
   appendRecentRecommendationEvent,
+  formatRecentRecommendationContext,
   listRecentRecommendationEvents,
   resetRecentRecommendationState,
 } from '../subject-comm/recent-recommendation-state';
@@ -255,6 +268,11 @@ import {
 } from '../subject-comm/recommendation-adjustment';
 import { laterCards, listLaterItems, saveLaterItem } from '../subject-comm/later-items';
 import { allowsDefaultSupply } from '../subject-comm/domestic-source-boundary';
+import {
+  addManagedContentSource,
+  listManagedContentSources,
+  toggleManagedContentSource,
+} from '../subject-comm/content-source-management';
 import {
   appendNetworkContentFeedback,
   createUserContentFeedback,
@@ -514,6 +532,10 @@ export class DigitalMeRuntime {
     firstNotice?: string;
   } | null = null;
   private pendingPersonal: Promise<DiscoverView> | null = null;
+  /** 低水位时提前完成个人选择；结果可丢弃，耗尽后才提交到唯一 Feed 缓存。 */
+  private pendingPersonalSupply: Promise<PersonalFeedPrefetch | null> | null = null;
+  /** 后台已经排好、等待当前唯一 Feed 队列耗尽后提交的下一段。 */
+  private readyPersonalSupply: PersonalFeedPrefetch | null = null;
   private searchAbort = new AbortController();
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
@@ -632,9 +654,49 @@ export class DigitalMeRuntime {
     const feedbackFile = path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl');
     // 切换代次必须在第一个 await 之前完成：否则两次几乎同时的请求，谁的文件读取后结束谁就成了"当前"，
     // 先发的旧请求可以反过来盖掉后发的新请求。
-    const keepsGeneration = new Set(['more', 'asked', 'replenish', 'refresh', 'open', 'later', 'boost', 'reduce', 'follow', 'block']);
+    const keepsGeneration = new Set([
+      'more',
+      'asked',
+      'replenish',
+      'refresh',
+      'open',
+      'later',
+      'boost',
+      'reduce',
+      'follow',
+      'block',
+      'sourceList',
+      'sourceAdd',
+      'sourceToggle',
+    ]);
     const started = keepsGeneration.has(action) ? null : this.beginSearchGeneration(input.searchGenerationId, action === 'cancel' ? 'user' : 'superseded');
     await this.refreshLaterCards(pkg.rootDir);
+
+    if (action === 'sourceList' || action === 'sourceAdd' || action === 'sourceToggle') {
+      const now = nowIso();
+      const managed = action === 'sourceAdd'
+        ? await addManagedContentSource({
+            packageRoot: pkg.rootDir,
+            url: String(input.url || '').trim(),
+            label: String(input.title || '').trim(),
+            store: new FileNetworkItemStore(path.join(pkg.rootDir, 'content')),
+            now,
+            signal: this.searchAbort.signal,
+          })
+        : action === 'sourceToggle'
+          ? await toggleManagedContentSource({
+              packageRoot: pkg.rootDir,
+              sourceId: String(input.sourceId || '').trim(),
+              enabled: input.enabled === true,
+              now,
+            })
+          : await listManagedContentSources(pkg.rootDir, now);
+      return {
+        view: await empty(''),
+        sources: managed.sources,
+        ...(managed.notice ? { sourceNotice: managed.notice } : {}),
+      };
+    }
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
@@ -747,10 +809,39 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'more') {
+      let remaining = await personalFeedRemainingCount(pkg.rootDir);
+      if (remaining === 0 && this.readyPersonalSupply) {
+        const ready = this.readyPersonalSupply;
+        this.readyPersonalSupply = null;
+        await commitPersonalFeedPrefetch(pkg.rootDir, ready);
+        remaining = await personalFeedRemainingCount(pkg.rootDir);
+      }
+      if (remaining === 0) {
+        await this.schedulePersonalSupplyPrefetch(
+          pkg.rootDir,
+          pkg.id,
+          input.relayUrl,
+          {
+            ...(await empty('正在准备下一批内容。')),
+            feedMode: 'personal',
+            searchGenerationId: this.currentSearchGenerationId,
+          },
+        );
+        return {
+          view: {
+            ...(await empty('正在准备下一批内容。')),
+            feedMode: 'personal',
+            searchGenerationId: this.currentSearchGenerationId,
+            replenishing: true,
+            append: true,
+          },
+        };
+      }
       const view = await this.withAdjustment(
         pkg.rootDir,
         await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'more'),
       );
+      await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
       return { view: { ...view, append: true } };
     }
 
@@ -782,20 +873,24 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'replenish') {
+      const view = await this.withAdjustment(
+        pkg.rootDir,
+        await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId),
+      );
+      await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
       return {
-        view: await this.withAdjustment(
-          pkg.rootDir,
-          await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId),
-        ),
+        view,
       };
     }
 
     if (action === 'refresh') {
+      const view = await this.withAdjustment(
+        pkg.rootDir,
+        await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId),
+      );
+      await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
       return {
-        view: await this.withAdjustment(
-          pkg.rootDir,
-          await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId),
-        ),
+        view,
       };
     }
 
@@ -867,7 +962,41 @@ export class DigitalMeRuntime {
     }
 
     this.lastIntentView = null;
-    return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open')) };
+    const view = await this.withAdjustment(
+      pkg.rootDir,
+      await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open'),
+    );
+    await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
+    return { view };
+  }
+
+  private async schedulePersonalSupplyPrefetch(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl: string | undefined,
+    view: DiscoverView,
+  ): Promise<void> {
+    if (
+      view.feedMode === 'intent' ||
+      view.replenishing ||
+      this.pendingPersonalSupply ||
+      this.readyPersonalSupply ||
+      (await personalFeedRemainingCount(packageRoot)) >= 61
+    ) {
+      return;
+    }
+    const pending = this.runContentDiscoverResult(
+      packageRoot,
+      subjectId,
+      relayUrl,
+      'prefetch',
+    ).then((result) => result.prefetch || null, () => null);
+    this.pendingPersonalSupply = pending;
+    void pending.then((prefetched) => {
+      if (this.pendingPersonalSupply !== pending) return;
+      this.pendingPersonalSupply = null;
+      this.readyPersonalSupply = prefetched;
+    });
   }
 
   private beginSearchGeneration(requested?: string, reason: 'user' | 'superseded' = 'superseded'): { generationId: string; abort: AbortController } {
@@ -879,6 +1008,8 @@ export class DigitalMeRuntime {
     this.currentSearchGenerationId = generationId;
     this.pendingSeekMerge = null;
     this.pendingPersonal = null;
+    this.pendingPersonalSupply = null;
+    this.readyPersonalSupply = null;
     return { generationId, abort };
   }
 
@@ -995,6 +1126,12 @@ export class DigitalMeRuntime {
           replenishing: false,
           notice: terminalSupplementNotice(this.lastIntentView.notice || pending.firstNotice, extra),
         };
+        if (!this.lastIntentView.cards.length && !this.lastIntentView.responseText) {
+          this.lastIntentView.responseText = await this.explainSeekWithoutLiveResults(
+            String(this.lastIntentView.searchQuery || ''),
+            pending.abort.signal,
+          );
+        }
         return this.lastIntentView;
       }
       const preferences = await this.contentPreferenceRows(packageRoot);
@@ -1008,6 +1145,12 @@ export class DigitalMeRuntime {
       );
       const merged = mergeIntentViews(this.lastIntentView, incoming);
       this.lastIntentView = { ...merged, replenishing: false };
+      if (!this.lastIntentView.cards.length && !this.lastIntentView.responseText) {
+        this.lastIntentView.responseText = await this.explainSeekWithoutLiveResults(
+          String(this.lastIntentView.searchQuery || late.intent.topic || ''),
+          pending.abort.signal,
+        );
+      }
       if (merged.cards.length) {
         await rememberIntentFeed(packageRoot, merged.cards, String(merged.searchQuery || ''));
       }
@@ -1123,10 +1266,28 @@ export class DigitalMeRuntime {
     packageRoot: string,
     subjectId: string,
     relayUrl?: string,
-    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset' = 'open',
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'prefetch' | 'more' | 'reset' = 'open',
     supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank',
     preferPersonalCache?: boolean,
   ): Promise<DiscoverView> {
+    return (await this.runContentDiscoverResult(
+      packageRoot,
+      subjectId,
+      relayUrl,
+      mode,
+      supplyPhase,
+      preferPersonalCache,
+    )).view;
+  }
+
+  private async runContentDiscoverResult(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl?: string,
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'prefetch' | 'more' | 'reset' = 'open',
+    supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank',
+    preferPersonalCache?: boolean,
+  ): Promise<{ view: DiscoverView; prefetch?: PersonalFeedPrefetch }> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
     const chatCompleteFn = this.resolveContentChat();
@@ -1141,8 +1302,13 @@ export class DigitalMeRuntime {
     const loadItems = async () => {
       const rows = await this.loadDiscoverItems(packageRoot, relayUrl);
       const allowed = contentSourceAllowed(preferenceRows, rows);
+      const inactivePublishers = await inactiveContentSourcePublisherIds(packageRoot, nowIso());
       sourceAllows = allowed;
-      return rows.filter(item => allowed({url:item.content.url,publisherSubjectId:item.publisherSubjectId}));
+      return rows.filter(
+        (item) =>
+          !inactivePublishers.has(item.publisherSubjectId) &&
+          allowed({ url: item.content.url, publisherSubjectId: item.publisherSubjectId }),
+      );
     };
     const items = await loadItems();
     const adjustment = await this.currentAdjustment(packageRoot);
@@ -1214,6 +1380,75 @@ export class DigitalMeRuntime {
         if (hit.title === 'open catalog') return [];
         return indexSearchHits({ hits: [hit], store, limit: 1, via: 'feed' });
       },
+      ...(openMedia
+        ? {
+            ingestCatalogSource: async (source: ContentSourceRecord) => {
+              let response: Awaited<ReturnType<typeof safePublicHttpGet>> | undefined;
+              const conditionalHeaders = contentSourceConditionalHeaders(source);
+              const ingested = await ingestSource({
+                sourceUrl: source.url,
+                store,
+                limit: 8,
+                via: 'feed',
+                signal: this.searchAbort.signal,
+                fetchImpl: async (url, headers, redirectLeft, deps) => {
+                  const sourceRequest = url === source.url;
+                  const fetched = await openMedia(
+                    url,
+                    { ...(headers || {}), ...(sourceRequest ? conditionalHeaders : {}) },
+                    redirectLeft,
+                    { ...(deps || {}), signal: this.searchAbort.signal, timeoutMs: 8_000 },
+                  );
+                  if (sourceRequest) response = fetched;
+                  return fetched;
+                },
+              });
+              const unavailable = ingested.records.some(
+                (record) => record.status === 'unavailable' || record.status === 'rejected',
+              );
+              const sampleUrls = [...new Set(
+                ingested.items.map((item) => String(item.content.url || '')).filter(Boolean),
+              )].slice(0, 2);
+              const linkResults = await Promise.all(
+                sampleUrls.map(async (url) => {
+                  try {
+                    const fetched = await openMedia(
+                      url,
+                      { range: 'bytes=0-65535' },
+                      undefined,
+                      { signal: this.searchAbort.signal, timeoutMs: 8_000, maxBodyBytes: 256 * 1024 },
+                    );
+                    return fetched.status >= 200 && fetched.status < 400;
+                  } catch (error) {
+                    const status = Number((error as { status?: number }).status || 0);
+                    return (
+                      (error as { code?: string }).code === 'too_large' &&
+                      status >= 200 &&
+                      status < 400
+                    );
+                  }
+                }),
+              );
+              const contentReachable = !sampleUrls.length || linkResults.some(Boolean);
+              const unchangedStillUnreachable =
+                ingested.notModified === true && source.lastErrorCode === 'content_unreachable';
+              const headers = response?.headers || {};
+              return {
+                ok:
+                  !unchangedStillUnreachable &&
+                  (ingested.notModified === true || (!unavailable && contentReachable)),
+                itemCount: ingested.items.length,
+                ...((unchangedStillUnreachable || (!ingested.notModified && !contentReachable))
+                  ? { errorCode: 'content_unreachable' }
+                  : {}),
+                ...(ingested.notModified ? { notModified: true } : {}),
+                etag: headers.etag || (ingested.notModified ? source.etag || null : null),
+                lastModified:
+                  headers['last-modified'] || (ingested.notModified ? source.lastModified || null : null),
+              };
+            },
+          }
+        : {}),
       reloadItems: loadItems,
       getItem: async (itemId) => {
         const item = await store.get(itemId, nowIso());
@@ -1226,7 +1461,7 @@ export class DigitalMeRuntime {
       this.lastNetworkCode = 'AVAILABLE';
     }
     const shownAdjustment = this.adjustmentView(adjustment, result.view.feedMode === 'intent' ? 'intent' : 'personal');
-    return this.stampSearchGeneration(
+    const view = this.stampSearchGeneration(
       {
         ...result.view,
         feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
@@ -1234,6 +1469,49 @@ export class DigitalMeRuntime {
       },
       generationAtStart,
     );
+    return {
+      view,
+      ...(result.prefetch ? { prefetch: result.prefetch } : {}),
+    };
+  }
+
+  private async explainSeekWithoutLiveResults(
+    query: string,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const chatCompleteFn = this.resolveContentChat();
+    const model = this.resolveContentModel();
+    if (!chatCompleteFn || !model || signal.aborted) {
+      return '我理解你是在找与这个要求直接相关、现在可以消费的内容，但这次没有拿到可核实的联网结果。你可以稍后重试；如果这句话可能指不同对象，也可以补充作品名、作者或你想找的是正片、介绍还是相似内容。';
+    }
+    try {
+      const result = await chatCompleteFn({
+        baseUrl: model.baseUrl,
+        ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+        model: model.model,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是 2digime。当前联网发现没有拿到可核实结果，但仍要理解并回应用户，不能沉默。',
+              '用两三句普通中文：先准确复述你理解的需求；明确当前无法核实最新资源，不得编造链接、热度或剧情。',
+              '只有请求确实存在关键歧义时才问一个最有帮助的追问；请求已经具体时不要机械追问。',
+              '只输出给用户看的正文。',
+            ].join('\n'),
+          },
+          { role: 'user', content: query },
+        ],
+        temperature: 0.2,
+        maxTokens: 600,
+        timeoutMs: 12_000,
+        signal,
+      });
+      const text = String(result.text || '').trim();
+      if (text) return text;
+    } catch {
+      /* 搜索失败后的解释也失败时，仍必须给出确定终态。 */
+    }
+    return '我理解你是在找与这个要求直接相关、现在可以消费的内容，但这次没有拿到可核实的联网结果。你可以稍后重试；如果这句话可能指不同对象，也可以补充作品名、作者或你想找的是正片、介绍还是相似内容。';
   }
 
   private async runUnifiedContentSeek(
@@ -1272,15 +1550,29 @@ export class DigitalMeRuntime {
     };
 
     const config = this.options.openaiCompatible;
-    if (!config || !this.options.secrets || !supportsResponsesToolLoop(config)) {
-      const unavailable = base('当前没有可用的统一搜索与正文读取能力；未退回旧 RSS 或候选兜底链。');
-      return commitView(unavailable);
-    }
-    const apiKey = await this.options.secrets.get(
-      providerCredentialKey(config.providerId || 'openai-compatible'),
-    );
-    if (!apiKey) {
-      const unavailable = base('当前模型凭据不可用；未发起搜索，也未退回旧链。');
+    const responsesReady = !!config && !!this.options.secrets && supportsResponsesToolLoop(config);
+    const apiKey = responsesReady
+      ? await this.options.secrets!.get(providerCredentialKey(config!.providerId || 'openai-compatible'))
+      : null;
+    if (!responsesReady || !apiKey) {
+      // Search 是可替换 Tool，不要求当前主模型必须原生实现某一家 Responses API。
+      // 已连接的托管/BYOK Search 只提供候选；理解与最终选择仍由当前模型 + Digital Self 完成。
+      if (this.resolveContentSearch() && this.resolveContentChat() && this.resolveContentModel()) {
+        const view = await this.runChatContentSeek(
+          packageRoot,
+          subjectId,
+          query,
+          started,
+          preferenceDirectives,
+        );
+        if (!view.replenishing && !view.cards.length && !view.responseText) {
+          view.responseText = await this.explainSeekWithoutLiveResults(query, started.abort.signal);
+          return commitView(view);
+        }
+        return view;
+      }
+      const responseText = await this.explainSeekWithoutLiveResults(query, started.abort.signal);
+      const unavailable = base('这次没有拿到可核实的联网结果。', { responseText });
       return commitView(unavailable);
     }
 
@@ -1523,6 +1815,732 @@ export class DigitalMeRuntime {
     }
   }
 
+  /**
+   * 当前主模型的发现工具环。
+   *
+   * Search 只提供事实候选，Digital Self / 明确偏好 / 短期上下文只交给当前模型。
+   * runtime 只校验候选身份、来源边界、代次、超时与交付结构，不替模型判断相关性或排序。
+   */
+  private async runChatContentSeek(
+    packageRoot: string,
+    subjectId: string,
+    query: string,
+    started: { generationId: string; abort: AbortController },
+    preferenceDirectives: Awaited<ReturnType<typeof listContentPreferences>>,
+  ): Promise<DiscoverView> {
+    const generationId = started.generationId;
+    const signal = started.abort.signal;
+    const deadlineAt = Date.now() + SEEK_DEADLINE_MS;
+    const deadlineTimer = setTimeout(() => {
+      if (!signal.aborted) started.abort.abort('deadline');
+    }, SEEK_DEADLINE_MS);
+    const preferences = preferenceDirectives.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      text: row.text,
+    }));
+    const base = (notice: string, extra?: Partial<DiscoverView>): DiscoverView =>
+      this.stampSearchGeneration({
+        headline: '发现',
+        lead: '根据你刚说的话找「' + query + '」，由当前模型自主搜索并整体判断。',
+        feedTitle: '关于「' + query.slice(0, 36) + '」',
+        cards: [],
+        relatedCards: [],
+        preferences,
+        laterCards: this.pendingLaterCards,
+        notice,
+        reasonCode: 'UNIFIED_CHAT_TOOLS',
+        feedMode: 'intent',
+        searchQuery: query,
+        searchGenerationId: generationId,
+        replenishing: false,
+        ...extra,
+      }, generationId);
+    const commitView = (view: DiscoverView): DiscoverView => {
+      if (this.currentSearchGenerationId === generationId) this.lastIntentView = view;
+      return view;
+    };
+    const logDiagnostic = (row: object) => {
+      void fs.mkdir(path.join(packageRoot, 'content'), { recursive: true })
+        .then(() => fs.appendFile(
+          path.join(packageRoot, 'content', 'discovery-diagnostics.ndjson'),
+          JSON.stringify({ at: nowIso(), generationId, event: 'unified_chat_tools', ...row }) + '\n',
+        ))
+        .catch(() => {});
+    };
+
+    const rawSearch = this.resolveContentSearch();
+    const chatCompleteFn = this.resolveContentChat();
+    const model = this.resolveContentModel();
+    if (!rawSearch || !chatCompleteFn || !model) {
+      clearTimeout(deadlineTimer);
+      return commitView(base('当前没有可用的联网搜索或主模型，未退回旧候选链。'));
+    }
+
+    type Candidate = {
+      candidateId: string;
+      title: string;
+      url: string;
+      snippet: string;
+      sourceName: string;
+      source: 'directory' | 'web';
+      itemId?: string;
+      publisherSubjectId?: string;
+      publishedAt?: string;
+      contentType?: string;
+      readContent?: string;
+      resolvedUrl?: string;
+      readAttempted?: boolean;
+    };
+    type Selection = {
+      candidateId: string;
+      why: string;
+      placement: 'main' | 'related';
+      resultKind: 'candidate' | 'recommendation';
+      title?: string;
+      summary?: string;
+      contentType?: string;
+      entrancePurpose?: string;
+      channelUse?: 'watch' | 'discover' | 'supplement';
+      entryKind?: 'full' | 'preview' | 'platform' | 'basis';
+      access?: string;
+    };
+    type Delivery = { summary: string; selections: Selection[] };
+
+    const usage = { calls: 0, reused: 0, skippedAfterQuota: 0, rateLimited: false };
+    this.searchUsage = { generationId, usage };
+    const searchWeb = this.wrapContentSearch(rawSearch, signal, usage)!;
+    const sourceItems = await this.loadDiscoverItems(packageRoot);
+    const sourceAllows = contentSourceAllowed(preferenceDirectives, sourceItems);
+    const candidateById = new Map<string, Candidate>();
+    const candidateIdByUrl = new Map<string, string>();
+    const searchedQueries = new Set<string>();
+    // 最多两轮搜索：第一轮发现具体对象，第二轮可并行补搜少量对象的入口。
+    // 次数上限防止工具循环失控；真实配额仍由 Relay 统一执行。
+    const MAX_SEARCH_CALLS = 4;
+    const MAX_READ_CALLS = 8;
+    // search → read → optional补搜 → read → present 至少需要 5 轮；模型在一次失败工具调用后
+    // 还需要一轮纠正。8 轮只给结构化收口余量，不扩大搜索/读取配额。
+    const MAX_TOOL_ROUNDS = 8;
+    const MAX_CANDIDATES = 30;
+    let delivery: Delivery | null = null;
+    let emptyDeliveryChecked = false;
+
+    const canonicalUrl = (value: string): string => {
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+        parsed.hash = '';
+        if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+        return parsed.toString();
+      } catch {
+        return '';
+      }
+    };
+    const sourceNameOf = (value: string): string => {
+      try {
+        return new URL(value).hostname.replace(/^www\./i, '');
+      } catch {
+        return '';
+      }
+    };
+    // 当前已建立的 Source 也是候选供给，不因显式搜索而丢失。这里仅取一个有界窗口并交给
+    // 同一模型整体判断；runtime 不按关键词、主题或分数筛选它们。
+    const sourceCandidateWindow: Candidate[] = [];
+    for (const item of sourceItems.slice(0, 6)) {
+      const url = canonicalUrl(String(item.content.url || ''));
+      const title = String(item.content.title || '').trim();
+      if (!url || !title || !sourceAllows({ url, publisherSubjectId: item.publisherSubjectId })) continue;
+      const candidateId = 'candidate_' + createHash('sha256')
+        .update(url)
+        .digest('hex')
+        .slice(0, 16);
+      if (candidateById.has(candidateId)) continue;
+      const candidate: Candidate = {
+        candidateId,
+        title: title.slice(0, 240),
+        url,
+        snippet: String(item.content.text || '').trim().slice(0, 700),
+        sourceName: String(item.publisherDisplayName || sourceNameOf(url)).trim(),
+        source: 'directory',
+        itemId: item.itemId,
+        ...(item.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
+        ...(item.content.publishedAt ? { publishedAt: item.content.publishedAt } : {}),
+        ...(item.content.contentType ? { contentType: item.content.contentType } : {}),
+      };
+      candidateIdByUrl.set(url, candidateId);
+      candidateById.set(candidateId, candidate);
+      sourceCandidateWindow.push(candidate);
+    }
+    const remainingMs = () => Math.max(1, deadlineAt - Date.now());
+    const ensureActive = () => {
+      if (signal.aborted || Date.now() >= deadlineAt) {
+        throw Object.assign(new Error('discover request stopped'), { name: 'AbortError' });
+      }
+    };
+
+    const webSearchTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: '搜索开放互联网并返回真实候选。可根据第一次结果继续换词或查具体对象；不要把搜索命中自动当成推荐。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['query'],
+          properties: {
+            query: { type: 'string', description: '本轮搜索词。只发送搜索所需文字，不包含 Digital Self。' },
+          },
+        },
+      },
+    };
+    const readCandidateTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'read_candidate',
+        description: '读取 web_search 已返回候选的真实公开页面，用于核实它是完整观看、试看/预告、平台作品页、文章还是访问限制页。只能传 candidateId，不接受任意 URL。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['candidateId'],
+          properties: {
+            candidateId: { type: 'string' },
+          },
+        },
+      },
+    };
+    const presentResultsTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'present_results',
+        description: '按当前请求整体选择已经由 web_search 返回的候选。只能引用 candidateId；无合格对象时提交空 selections。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['summary', 'selections'],
+          properties: {
+            summary: {
+              type: 'string',
+              maxLength: 360,
+              description: '对本轮结果的简短结论；无合格结果时如实说明或提出一个必要追问。',
+            },
+            emptyConfirmed: {
+              type: 'boolean',
+              description: '已有候选但仍确认没有合格结果时设为 true。第一次空交付可能收到一次检查提示。',
+            },
+            selections: {
+              type: 'array',
+              maxItems: 8,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['candidateId', 'why', 'placement', 'resultKind'],
+                properties: {
+                  candidateId: { type: 'string' },
+                  why: {
+                    type: 'string',
+                    maxLength: 120,
+                    description: '结合当前请求、Digital Self 和来源摘要给出的简短具体理由。',
+                  },
+                  placement: { type: 'string', enum: ['main', 'related'] },
+                  resultKind: {
+                    type: 'string',
+                    enum: ['candidate', 'recommendation'],
+                    description: 'candidate 表示候选页面本身就是要展示的对象；recommendation 表示该候选只是可信推荐依据。',
+                  },
+                  title: {
+                    type: 'string',
+                    description: 'resultKind=recommendation 时必填：依据来源明确提到的具体对象名。不得编造。',
+                  },
+                  summary: {
+                    type: 'string',
+                    maxLength: 240,
+                    description: '简短概括候选已核实的信息；resultKind=recommendation 时只概括依据支持的信息，不得扩写未核实事实。',
+                  },
+                  contentType: { type: 'string' },
+                  entrancePurpose: { type: 'string' },
+                  channelUse: {
+                    type: 'string',
+                    enum: ['watch', 'discover', 'supplement'],
+                    description: 'watch=观看/收听入口；discover=发现依据；supplement=补充入口。只依据读取到的页面判断。',
+                  },
+                  entryKind: {
+                    type: 'string',
+                    enum: ['full', 'preview', 'platform', 'basis'],
+                    description: 'full=完整内容入口；preview=试看/预告/片段；platform=作品或单集平台页但访问条件未知或受限；basis=报道、榜单、百科等依据。',
+                  },
+                  access: {
+                    type: 'string',
+                    maxLength: 120,
+                    description: '如实说明登录、会员、付费、地区、App、验证码或当前无法确认等访问条件。',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const readCandidate = async (candidateId: string): Promise<Record<string, unknown>> => {
+      const candidate = candidateById.get(candidateId);
+      const attempted = [...candidateById.values()].filter((row) => row.readAttempted).length;
+      if (!candidate) return { ok: false, failureReason: 'candidateId 不在本轮候选中。' };
+      if (!candidate.readAttempted && attempted >= MAX_READ_CALLS) {
+        return { ok: false, failureReason: '本轮页面读取次数已到上限，请基于已读取页面交付。' };
+      }
+      if (candidate.readAttempted) {
+        return candidate.readContent
+          ? {
+              ok: true,
+              candidateId,
+              title: candidate.title,
+              url: candidate.resolvedUrl || candidate.url,
+              content: candidate.readContent,
+              note: '这是页面读取材料，不自动证明它是完整内容、官方入口或无需登录。',
+            }
+          : { ok: false, candidateId, failureReason: '该候选页面当前无法公开读取。' };
+      }
+      candidate.readAttempted = true;
+      const began = Date.now();
+      try {
+        const connector = this.options.publicPageRead ? null : createBingHtmlSearchConnector();
+        const read = this.options.publicPageRead
+          ? await this.options.publicPageRead(candidate.url)
+          : await connector?.read?.(candidate.url, { signal, maxChars: 6000 });
+        ensureActive();
+        const content = String(read?.content || '').trim().slice(0, 6000);
+        const resolvedUrl = canonicalUrl(String(read?.resolvedUrl || candidate.url));
+        if (!content || !resolvedUrl || !sourceAllows({ url: resolvedUrl })) {
+          return { ok: false, candidateId, failureReason: '候选页面当前无法公开读取或读取结果超出允许来源边界。' };
+        }
+        candidate.readContent = content;
+        candidate.resolvedUrl = resolvedUrl;
+        return {
+          ok: true,
+          candidateId,
+          title: candidate.title,
+          url: resolvedUrl,
+          content,
+          note: '这是页面读取材料，不自动证明它是完整内容、官方入口或无需登录。',
+        };
+      } catch (error) {
+        logDiagnostic({
+          phase: 'read_candidate_error',
+          candidateId,
+          ms: Date.now() - began,
+          error: String((error as Error)?.message || error).slice(0, 180),
+        });
+        return {
+          ok: false,
+          candidateId,
+          failureReason: signal.aborted ? '页面读取已停止。' : '候选页面当前无法公开读取。',
+        };
+      } finally {
+        logDiagnostic({
+          phase: 'read_candidate',
+          candidateId,
+          ms: Date.now() - began,
+          ok: !!candidate.readContent,
+        });
+      }
+    };
+
+    try {
+      const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
+      const selfContext = formatSelfContext(selectSelfContext(self, query));
+      const preferenceContext = formatPreferenceDirectives(preferenceDirectives) ||
+        '当前没有主人明确设置的内容偏好。';
+      const recentContext = formatRecentRecommendationContext(
+        await listRecentRecommendationEvents(packageRoot),
+      ) || '当前没有可用的短期内容上下文。';
+      await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: [
+            '你是 2digime 的推荐主模型。你直接负责理解、搜索、纠错和最终选择；没有另一个分类器、评分器或审核模型替你判断。',
+            '当前请求优先于历史上下文。Digital Self、明确偏好和短期上下文只帮助理解与个性化，不能把一次搜索写成长期兴趣。',
+            '先根据需要调用 web_search。搜索结果只是候选；对可能成为主卡的对象调用 read_candidate 核实真实页面，必要时换词、补搜具体对象，再调用 present_results。',
+            '最多进行两轮 web_search；读过候选后必须为 present_results 预留最后一轮。第二轮搜索后不要再尝试搜索，基于已读页面诚实交付，无法核实的就明确说明。',
+            '开放推荐不能停在榜单：第一轮从榜单或报道选出具体作品后，第二轮只挑最有希望的 2～3 个作品，分别搜索其官方观看、试看、预告或平台作品页并读取核实。宁可交付 2～3 张有入口的主卡，也不要交付 5～6 张只有推荐依据的作品卡。',
+            '推荐应是与当前请求直接相关、现在可消费或可到达的具体内容对象。榜单、报道、聚合页可以作为发现线索，但不能冒充其中的作品或具体内容。',
+            '涉及近期、热度、趋势等时效性判断时，应比较多个独立来源，不要只从一篇片单或报道推出整批推荐。',
+            '具体内容必须选择其真实候选 ID。不要编造标题、链接、热度、日期或剧情；不要用相近但不合格的对象凑数。',
+            '如果候选页面本身就是作品页、文章页或观看入口，用 resultKind=candidate。若可信榜单或报道明确支持一个具体推荐对象、但没有找到对象页，可用 resultKind=recommendation，并填写对象 title；该卡会保留依据链接而不会把报道 URL 冒充作品 URL。',
+            '用户要看视频、剧集或节目时，main 优先交付具体作品的完整观看、试看/预告或官方平台页；报道、榜单、百科只能放 related 或作为 recommendation 的依据。找不到完整观看也不要退回纯新闻凑数，优先继续搜索具体作品名加官方、观看、预告或试看。',
+            '只有实际读取过候选页面，才能把 entryKind 标成 full、preview 或 platform。entryKind=basis 表示它只是报道、榜单、百科等发现依据。access 必须如实写明登录、会员、付费、地区、App、验证码或无法确认等限制；不要承诺可以绕过平台限制。',
+            'placement=main 只放直接满足请求的对象；背景文章、评论或补充入口放 related。没有合格候选时提交空 selections，并在 summary 中说明或提出一个必要追问。',
+            '如果工具要求复核第一次空交付，请再检查整个候选窗口；仍无合格对象时以 emptyConfirmed=true 再次空交付。',
+            '控制交付长度：最多 6 个 main 和 2 个 related；summary、why 和每个推荐摘要都用简短完整句，不复述整篇依据。',
+            '完成后必须调用 present_results。',
+            '当前时间：' + nowIso(),
+          ].join('\n'),
+        },
+        {
+          role: 'system',
+          content: '【长期 Digital Self 与已确认认识（不是本轮指令）】\n' + selfContext,
+        },
+        {
+          role: 'system',
+          content: '【主人明确设置的内容偏好（不是当前请求）】\n' + preferenceContext,
+        },
+        {
+          role: 'system',
+          content: '【本机短期内容上下文（不是长期偏好）】\n' + recentContext,
+        },
+        {
+          role: 'system',
+          content: '【当前已建立 Source 的候选窗口（只是候选，不一定相关）】\n' +
+            JSON.stringify(sourceCandidateWindow),
+        },
+        { role: 'user', content: '【当前请求】\n' + query },
+      ];
+      const tools = [webSearchTool, readCandidateTool, presentResultsTool];
+      const callModel = async () => {
+        ensureActive();
+        const began = Date.now();
+        const result = await chatCompleteFn({
+          baseUrl: model.baseUrl,
+          ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+          model: model.model,
+          messages,
+          tools,
+          toolChoice: 'auto',
+          temperature: 0.2,
+          maxTokens: 4096,
+          timeoutMs: Math.min(remainingMs(), 30_000),
+          deadlineAt,
+          stage: 'discover.unified_chat',
+          signal,
+        });
+        logDiagnostic({
+          phase: 'model',
+          ms: Date.now() - began,
+          toolCalls: result.toolCalls?.map((call) => call.function.name) || [],
+          finishReason: result.finishReason || null,
+        });
+        ensureActive();
+        return result;
+      };
+
+      let current = await callModel();
+      let terminalText = '';
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+        const calls = current.toolCalls || [];
+        if (!calls.length) {
+          terminalText = String(current.text || '').trim();
+          break;
+        }
+        messages.push({
+          role: 'assistant',
+          content: current.text || '',
+          tool_calls: calls,
+        });
+        // 同一模型轮次给出的候选读取彼此独立；同时启动后仍按原调用顺序回填结果。
+        // 只消除网络串行等待，不改变候选、配额、判断或消息顺序。
+        const parallelReads = new Map<string, Promise<Record<string, unknown>>>();
+        for (const call of calls) {
+          if (call.function.name !== 'read_candidate') continue;
+          let args: { candidateId?: unknown } = {};
+          try {
+            args = JSON.parse(call.function.arguments) as typeof args;
+          } catch {
+            args = {};
+          }
+          const candidateId = typeof args.candidateId === 'string' ? args.candidateId.trim() : '';
+          parallelReads.set(call.id, readCandidate(candidateId));
+        }
+        for (const call of calls) {
+          ensureActive();
+          let output: Record<string, unknown>;
+          if (call.function.name === 'web_search') {
+            let args: { query?: unknown } = {};
+            try {
+              args = JSON.parse(call.function.arguments) as typeof args;
+            } catch {
+              args = {};
+            }
+            const searchQuery = typeof args.query === 'string'
+              ? args.query.replace(/\s+/g, ' ').trim().slice(0, 240)
+              : '';
+            if (!searchQuery) {
+              output = { ok: false, failureReason: '搜索词为空。' };
+            } else if (!searchedQueries.has(searchQuery) && searchedQueries.size >= MAX_SEARCH_CALLS) {
+              output = { ok: false, failureReason: '本轮搜索次数已到上限，请基于现有候选交付。' };
+            } else {
+              searchedQueries.add(searchQuery);
+              const began = Date.now();
+              try {
+                const hits = await searchWeb(searchQuery);
+                const candidates: Candidate[] = [];
+                for (const hit of hits.slice(0, 6)) {
+                  if (candidateById.size >= MAX_CANDIDATES) break;
+                  const url = canonicalUrl(String(hit.url || ''));
+                  if (!url || !sourceAllows({ url })) continue;
+                  let candidateId = candidateIdByUrl.get(url);
+                  if (!candidateId) {
+                    candidateId = 'candidate_' + createHash('sha256')
+                      .update(url)
+                      .digest('hex')
+                      .slice(0, 16);
+                    const candidate: Candidate = {
+                      candidateId,
+                      title: String(hit.title || url).trim().slice(0, 240),
+                      url,
+                      snippet: String(hit.snippet || '').trim().slice(0, 700),
+                      sourceName: sourceNameOf(url),
+                      source: 'web',
+                    };
+                    candidateIdByUrl.set(url, candidateId);
+                    candidateById.set(candidateId, candidate);
+                  }
+                  const candidate = candidateById.get(candidateId);
+                  if (candidate) candidates.push(candidate);
+                }
+                output = {
+                  ok: true,
+                  query: searchQuery,
+                  candidates,
+                  note: '候选不是已确认推荐；请整体判断，必要时继续搜索。',
+                };
+                logDiagnostic({
+                  phase: 'search',
+                  query: searchQuery,
+                  ms: Date.now() - began,
+                  candidates: candidates.length,
+                });
+              } catch (error) {
+                const networkCode = classifySearchFailure(error);
+                output = {
+                  ok: false,
+                  failureReason: networkCode === 'RATE_LIMITED'
+                    ? SEARCH_QUOTA_NOTICE
+                    : '联网搜索暂时失败。',
+                  networkCode,
+                };
+                logDiagnostic({ phase: 'search_error', query: searchQuery, networkCode });
+              }
+            }
+          } else if (call.function.name === 'read_candidate') {
+            output = await parallelReads.get(call.id)!;
+          } else if (call.function.name === 'present_results') {
+            let args: { summary?: unknown; selections?: unknown; emptyConfirmed?: unknown } = {};
+            try {
+              args = JSON.parse(call.function.arguments) as typeof args;
+            } catch {
+              args = {};
+            }
+            const rawSelections = Array.isArray(args.selections) ? args.selections.slice(0, 8) : [];
+            const selections: Selection[] = [];
+            const rejectedCandidateIds: string[] = [];
+            const unverifiedEntryCandidateIds: string[] = [];
+            const seen = new Set<string>();
+            for (const raw of rawSelections) {
+              const row = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+              const candidateId = typeof row.candidateId === 'string' ? row.candidateId.trim() : '';
+              const resultKind = row.resultKind === 'recommendation' ? 'recommendation' : 'candidate';
+              const candidate = candidateById.get(candidateId);
+              const entryKind = row.entryKind === 'full' || row.entryKind === 'preview' || row.entryKind === 'platform' || row.entryKind === 'basis'
+                ? row.entryKind
+                : undefined;
+              const title = typeof row.title === 'string' ? row.title.trim().slice(0, 240) : '';
+              const identityKey = resultKind === 'recommendation'
+                ? candidateId + '\n' + title.toLocaleLowerCase()
+                : candidateId;
+              if (
+                !candidateId ||
+                !candidateById.has(candidateId) ||
+                !identityKey ||
+                seen.has(identityKey) ||
+                (resultKind === 'recommendation' && !title)
+              ) {
+                if (candidateId && !candidateById.has(candidateId)) rejectedCandidateIds.push(candidateId);
+                continue;
+              }
+              if (
+                (entryKind === 'full' || entryKind === 'preview' || entryKind === 'platform') &&
+                (resultKind !== 'candidate' || !candidate?.readContent)
+              ) {
+                unverifiedEntryCandidateIds.push(candidateId);
+                continue;
+              }
+              seen.add(identityKey);
+              selections.push({
+                candidateId,
+                why: typeof row.why === 'string' ? row.why.trim().slice(0, 120) : '',
+                placement: row.placement === 'related' ? 'related' : 'main',
+                resultKind,
+                ...(title ? { title } : {}),
+                ...(typeof row.summary === 'string' && row.summary.trim()
+                  ? { summary: row.summary.trim().slice(0, 240) }
+                  : {}),
+                ...(typeof row.contentType === 'string' && row.contentType.trim()
+                  ? { contentType: row.contentType.trim().slice(0, 80) }
+                  : {}),
+                ...(typeof row.entrancePurpose === 'string' && row.entrancePurpose.trim()
+                  ? { entrancePurpose: row.entrancePurpose.trim().slice(0, 80) }
+                  : {}),
+                ...(row.channelUse === 'watch' || row.channelUse === 'discover' || row.channelUse === 'supplement'
+                  ? { channelUse: row.channelUse }
+                  : {}),
+                ...(entryKind ? { entryKind } : {}),
+                ...(typeof row.access === 'string' && row.access.trim()
+                  ? { access: row.access.trim().slice(0, 120) }
+                  : {}),
+              });
+            }
+            if (rejectedCandidateIds.length) {
+              output = {
+                ok: false,
+                failureReason: '存在没有由 web_search 返回的 candidateId，请只用现有候选重新交付。',
+                rejectedCandidateIds,
+              };
+            } else if (unverifiedEntryCandidateIds.length) {
+              output = {
+                ok: false,
+                failureReason: '完整观看、试看/预告或平台页必须先通过 read_candidate 读取该候选；请读取后重新交付，或改为 basis。',
+                unverifiedEntryCandidateIds,
+              };
+            } else if (
+              selections.length === 0 &&
+              candidateById.size > 0 &&
+              args.emptyConfirmed !== true &&
+              !emptyDeliveryChecked
+            ) {
+              emptyDeliveryChecked = true;
+              output = {
+                ok: false,
+                failureReason: '已有真实候选。请再整体检查一次：若多个独立来源明确支持具体对象，可用 resultKind=recommendation 交付且保留依据链接；若仍无合格对象，请再次空交付并设 emptyConfirmed=true。',
+                candidateCount: candidateById.size,
+              };
+            } else {
+              delivery = {
+                summary: typeof args.summary === 'string' ? args.summary.trim().slice(0, 360) : '',
+                selections,
+              };
+              output = { ok: true, acceptedCandidateIds: selections.map((row) => row.candidateId) };
+            }
+          } else {
+            output = { ok: false, failureReason: '未知工具。' };
+          }
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(output),
+          });
+        }
+        if (delivery) break;
+        current = await callModel();
+      }
+
+      const mainCards: DiscoverCard[] = [];
+      const relatedCards: DiscoverCard[] = [];
+      for (const [index, selection] of (delivery?.selections || []).entries()) {
+        const candidate = candidateById.get(selection.candidateId);
+        if (!candidate || !isSpecificUnifiedResultUrl(candidate.url)) continue;
+        const recommendation = selection.resultKind === 'recommendation' && !!selection.title;
+        const entryKindLabel = selection.entryKind === 'full'
+          ? '完整观看入口'
+          : selection.entryKind === 'preview'
+            ? '试看 / 预告 / 片段入口'
+            : selection.entryKind === 'platform'
+              ? '作品平台页'
+              : selection.entryKind === 'basis'
+                ? '发现依据，不是观看入口'
+                : '';
+        const entryPurpose = recommendation
+          ? '暂未核实到观看入口'
+          : entryKindLabel
+            ? entryKindLabel + (selection.entrancePurpose && selection.entrancePurpose !== entryKindLabel
+              ? ' · ' + selection.entrancePurpose
+              : '')
+            : selection.entrancePurpose || '';
+        const card: DiscoverCard = {
+          itemId: !recommendation && candidate.itemId ? candidate.itemId : ('chat_' + createHash('sha256')
+            .update(generationId + '\n' + candidate.url + '\n' + (selection.title || '') + '\n' + index)
+            .digest('hex')
+            .slice(0, 20)),
+          title: recommendation ? selection.title! : candidate.title,
+          text: recommendation
+            ? selection.summary || ''
+            : selection.summary || candidate.readContent?.slice(0, 700) || candidate.snippet,
+          ...(!recommendation ? { url: candidate.resolvedUrl || candidate.url } : {}),
+          publisherDisplayName: candidate.sourceName,
+          ...(candidate.publisherSubjectId ? { publisherSubjectId: candidate.publisherSubjectId } : {}),
+          ...(candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}),
+          reason: selection.why || '由当前模型结合本次请求与来源候选整体判断。',
+          source: candidate.source,
+          ...(!recommendation
+            ? { textOrigin: candidate.readContent ? 'body' as const : 'snippet' as const }
+            : {}),
+          access: recommendation
+            ? '当前没有核实到直接入口；可查看推荐依据'
+            : selection.access || (candidate.readContent
+              ? '已读取公开页面；实际观看仍受页面显示的登录、会员、地区或 App 条件约束'
+              : '仅见搜索摘要，尚未读取页面'),
+          ...(recommendation
+            ? { basisSource: { title: candidate.title, url: candidate.url } }
+            : {}),
+          ...(selection.contentType
+            ? { contentType: selection.contentType }
+            : candidate.contentType
+              ? { contentType: candidate.contentType }
+              : {}),
+          ...(entryPurpose ? { entrancePurpose: entryPurpose } : {}),
+          ...(!recommendation && selection.channelUse ? { channelUse: selection.channelUse } : {}),
+          ...(selection.entryKind === 'preview' ? { excerpt: true } : {}),
+        };
+        if (selection.placement === 'related') relatedCards.push(card);
+        else mainCards.push(card);
+      }
+      const summary = delivery?.summary || '';
+      const structureMissing = !delivery;
+      const notice = structureMissing
+        ? '当前模型未完成结构化交付；未退回旧 RSS、分批判断或固定候选链。'
+        : summary || (mainCards.length || relatedCards.length ? '' : '本轮没有获得合格结果。');
+      const responseText = !mainCards.length && !relatedCards.length
+        ? summary || (candidateById.size === 0 ? terminalText : '')
+        : '';
+      const view = base(notice, {
+        cards: mainCards,
+        relatedCards,
+        ...(relatedCards.length ? { relatedTitle: '相关材料与补充入口' } : {}),
+        ...(responseText ? { responseText } : {}),
+        searchUsage: usage,
+      });
+      logDiagnostic({
+        phase: 'complete',
+        searches: usage.calls,
+        candidates: candidateById.size,
+        selectedMain: mainCards.length,
+        selectedRelated: relatedCards.length,
+        structureMissing,
+      });
+      commitView(view);
+      if (mainCards.length && this.currentSearchGenerationId === generationId) {
+        await rememberIntentFeed(packageRoot, mainCards, query);
+      }
+      return view;
+    } catch (error) {
+      const stopped = signal.aborted || (error as Error)?.name === 'AbortError';
+      logDiagnostic({
+        phase: 'failed',
+        stopped,
+        networkCode: classifySearchFailure(error),
+      });
+      const responseText = stopped && signal.reason === 'superseded'
+        ? ''
+        : await this.explainSeekWithoutLiveResults(query, signal);
+      return commitView(base(
+        stopped ? '这次查找已停止。' : '推荐主链调用失败；未退回旧候选链。',
+        responseText ? { responseText, searchUsage: usage } : { searchUsage: usage },
+      ));
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
+  }
+
   private async runContentSeek(
     packageRoot: string,
     query: string,
@@ -1550,7 +2568,10 @@ export class DigitalMeRuntime {
     const searchWeb = this.wrapContentSearch(rawSearch ? async (query, passedSignal) => {
       try { const hits = await rawSearch(query, passedSignal); logDiagnostic({ event: 'search', stage: 'discover.search', httpStatus: null, candidates: hits.length }); return hits; }
       catch (err) { const detail = (err as { diagnostic?: import('../infrastructure/model-http').ModelCallDiagnostic }).diagnostic;
-        logDiagnostic({ event: 'search_error', ...(detail || { stage: 'discover.search', httpStatus: null, finishReason: null, outputLength: null, parseError: null, cancellation: signal.aborted ? (signal.reason === 'user' ? 'user' : signal.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: signal.aborted ? 'cancelled' : 'network' }) }); throw err; }
+        const errorCode = /^[a-zA-Z0-9_.:-]{1,80}$/.test(String((err as Error)?.message || ''))
+          ? String((err as Error).message)
+          : undefined;
+        logDiagnostic({ event: 'search_error', ...(errorCode ? { errorCode } : {}), ...(detail || { stage: 'discover.search', httpStatus: null, finishReason: null, outputLength: null, parseError: null, cancellation: signal.aborted ? (signal.reason === 'user' ? 'user' : signal.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: signal.aborted ? 'cancelled' : 'network' }) }); throw err; }
     } : undefined, signal, usage);
     const rawChat = this.resolveContentChat();
     const chatCompleteFn: import('../subject-core/structured-distill').ChatCompleteFn | undefined = rawChat ? async (request) => {
@@ -1926,6 +2947,9 @@ export class DigitalMeRuntime {
       return view;
     } catch (err) {
       const view = failedView(err);
+      if (!signal.aborted && !view.cards.length) {
+        view.responseText = await this.explainSeekWithoutLiveResults(query, signal);
+      }
       if (generationId === this.currentSearchGenerationId) this.lastIntentView = view;
       return view;
     } finally {

@@ -72,6 +72,8 @@ export interface DiscoverPreference {
 export interface DiscoverView {
   headline: string;
   lead: string;
+  /** 没有可展示卡片时，Digital Me 对本次请求的直接答复或必要追问。 */
+  responseText?: string;
   cards: DiscoverCard[];
   relatedCards?: DiscoverCard[];
   relatedTitle?: string;

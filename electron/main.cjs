@@ -2254,6 +2254,116 @@ app.whenReady().then(async () => {
     return;
   }
 
+  if (Number(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_FEED_PAGES || 0) > 0) {
+    const pageCount = Math.min(20, Math.max(1, Number(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_FEED_PAGES || 10)));
+    const startedAt = Date.now();
+    try {
+      await bootstrapRuntime();
+      const attached = await ensureDefaultPackageAttached();
+      if (!attached.ok) throw new Error(`default_package_attach_failed:${attached.reason || "unknown"}`);
+      let result = await bus.invoke("content", { action: "discover", searchGenerationId: `feed_acceptance_${Date.now()}` });
+      let view = result && result.view ? result.view : {};
+      const generationId = String(view.searchGenerationId || "");
+      const initialCount = Array.isArray(view.cards) ? view.cards.length : 0;
+      const pages = [];
+      for (let index = 0; index < pageCount; index += 1) {
+        const pageStartedAt = Date.now();
+        let polls = 0;
+        result = await bus.invoke("content", { action: "more", searchGenerationId: generationId });
+        view = result && result.view ? result.view : {};
+        while (
+          view.replenishing === true &&
+          (!Array.isArray(view.cards) || view.cards.length === 0) &&
+          Date.now() - pageStartedAt < 20000
+        ) {
+          polls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          result = await bus.invoke("content", { action: "more", searchGenerationId: generationId });
+          view = result && result.view ? result.view : {};
+        }
+        pages.push({
+          page: index + 1,
+          elapsedMs: Date.now() - pageStartedAt,
+          polls,
+          cardCount: Array.isArray(view.cards) ? view.cards.length : 0,
+          replenishing: view.replenishing === true,
+          notice: view.notice || null,
+        });
+      }
+      console.log(JSON.stringify({
+        ok: true,
+        elapsedMs: Date.now() - startedAt,
+        initialCount,
+        pages,
+      }));
+      app.exit(0);
+    } catch (err) {
+      console.error(JSON.stringify({
+        ok: false,
+        elapsedMs: Date.now() - startedAt,
+        error: String(err && err.message ? err.message : err),
+      }));
+      app.exit(1);
+    }
+    return;
+  }
+
+  if (String(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_QUERY || "").trim()) {
+    const query = String(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_QUERY || "").trim();
+    const startedAt = Date.now();
+    try {
+      await bootstrapRuntime();
+      const attached = await ensureDefaultPackageAttached();
+      if (!attached.ok) throw new Error(`default_package_attach_failed:${attached.reason || "unknown"}`);
+      const searchGenerationId = `owner_acceptance_${Date.now()}`;
+      let result = await bus.invoke("content", {
+        action: "seek",
+        text: query,
+        searchGenerationId,
+      });
+      let view = result && result.view ? result.view : {};
+      let replenishRounds = 0;
+      while (view.replenishing === true && replenishRounds < 2 && Date.now() - startedAt < 90000) {
+        replenishRounds += 1;
+        result = await bus.invoke("content", {
+          action: "replenish",
+          searchGenerationId,
+        });
+        view = result && result.view ? result.view : {};
+      }
+      const sanitizeCards = (cards) => Array.isArray(cards)
+        ? cards.map((card) => ({
+            title: card.title || null,
+            url: card.sourceUrl || card.openUrl || card.url || null,
+            source: card.sourceLabel || card.sourceHost || null,
+          }))
+        : [];
+      console.log(JSON.stringify({
+        ok: true,
+        query,
+        elapsedMs: Date.now() - startedAt,
+        replenishRounds,
+        headline: view.headline || null,
+        notice: view.notice || null,
+        responseText: view.responseText || null,
+        replenishing: view.replenishing === true,
+        cards: sanitizeCards(view.cards),
+        relatedCards: sanitizeCards(view.relatedCards),
+        unjudgedCards: sanitizeCards(view.unjudgedCards),
+      }));
+      app.exit(0);
+    } catch (err) {
+      console.error(JSON.stringify({
+        ok: false,
+        query,
+        elapsedMs: Date.now() - startedAt,
+        error: String(err && err.message ? err.message : err),
+      }));
+      app.exit(1);
+    }
+    return;
+  }
+
   const bootInfo = await bootstrapRuntime();
   await ensureDefaultPackageAttached();
   createWindow(bootInfo);

@@ -68,6 +68,83 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     contentTypes: ['article'],
   },
   {
+    id: 'ifanr-feed',
+    label: '爱范儿',
+    kind: 'media_rss',
+    url: 'https://www.ifanr.com/feed',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'ruanyifeng-feed',
+    label: '阮一峰科技爱好者周刊',
+    kind: 'media_rss',
+    url: 'https://www.ruanyifeng.com/blog/atom.xml',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'oschina-news',
+    label: '开源中国',
+    kind: 'media_rss',
+    url: 'https://www.oschina.net/news/rss',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'freebuf-feed',
+    label: 'FreeBuf',
+    kind: 'media_rss',
+    url: 'https://www.freebuf.com/feed',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'infoq-cn-feed',
+    label: 'InfoQ 中文',
+    kind: 'media_rss',
+    url: 'https://www.infoq.cn/feed',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'tmtpost-feed',
+    label: '钛媒体',
+    kind: 'media_rss',
+    url: 'https://www.tmtpost.com/rss.xml',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'cnblogs-home-feed',
+    label: '博客园首页',
+    kind: 'media_rss',
+    url: 'https://feed.cnblogs.com/blog/sitehome/rss',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'science-news-feed',
+    label: 'Science News',
+    kind: 'media_rss',
+    url: 'https://www.science.org/rss/news_current.xml',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'google-blog-feed',
+    label: 'Google Blog',
+    kind: 'media_rss',
+    url: 'https://blog.google/rss/',
+    contentTypes: ['article', 'image'],
+  },
+  {
+    id: 'google-research-feed',
+    label: 'Google Research',
+    kind: 'media_rss',
+    url: 'https://research.google/blog/rss/',
+    contentTypes: ['article', 'image'],
+  },
+  {
+    id: 'microsoft-research-feed',
+    label: 'Microsoft Research',
+    kind: 'media_rss',
+    url: 'https://www.microsoft.com/en-us/research/feed/',
+    contentTypes: ['article', 'video'],
+  },
+  {
     id: 'douban-book-review',
     label: '豆瓣书评',
     kind: 'media_rss',
@@ -152,4 +229,14 @@ export function catalogEndpointsFor(kinds: string[]): OpenSourceEndpoint[] {
     ? OPEN_SOURCE_CATALOG.slice()
     : OPEN_SOURCE_CATALOG.filter((row) => row.contentTypes.some((type) => wanted.has(type)));
   return rows.filter((row) => allowsDefaultSupply({ url: row.url, publisher: row.label }));
+}
+
+/** 端点是否能在没有用户查询词时形成中立目录；查询型端点不得伪记默认流健康。 */
+export function supportsDefaultCatalogListing(endpoint: OpenSourceEndpoint): boolean {
+  if (endpoint.kind === 'media_rss') return true;
+  if (endpoint.kind === 'peertube_search') return true;
+  if (endpoint.kind === 'wikimedia_commons') return true;
+  if (endpoint.kind === 'itunes_rss') return true;
+  if (endpoint.kind === 'internet_archive') return true;
+  return endpoint.kind === 'bangumi_api' && /calendar/i.test(endpoint.url);
 }

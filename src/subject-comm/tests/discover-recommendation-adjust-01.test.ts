@@ -244,7 +244,9 @@ test('user expression changes default-feed search direction; a single search is 
 });
 
 test('bangumi calendar returns specific works, not a ranking article', async () => {
+  const attempts: Array<{ sourceId: string; ok: boolean; itemCount: number }> = [];
   const hits = await searchOpenWorks({
+    onSourceAttempt: (attempt) => attempts.push(attempt),
     fetchImpl: async (url) => {
       if (String(url).includes('calendar')) {
         return {
@@ -272,6 +274,7 @@ test('bangumi calendar returns specific works, not a ranking article', async () 
   assert.equal(hits[0]?.title, '哭泣少女乐队');
   assert.equal(hits[0]?.url, 'https://bgm.tv/subject/390200');
   assert.equal(hits[0]?.pageKind, 'work');
+  assert.equal(attempts.some((row) => row.sourceId === 'bangumi-calendar' && row.ok && row.itemCount === 1), true);
 });
 
 test('discover page exposes visible adjustment controls without a second profile', async () => {
@@ -1449,7 +1452,7 @@ test('default-feed merge keeps new rank in front and leftover cache for more', a
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-merge-order-'));
   const self = selfOf('我关心公开科学。');
   await writeDigitalSelf(root, self);
-  const oldCards = Array.from({ length: 8 }, (_, i) =>
+  const oldCards = Array.from({ length: 16 }, (_, i) =>
     itemOf(`ni_old_${i}`, `旧内容 ${i + 1}`, `https://news-${i}.example/old/${i}`, 'article'),
   );
   const fresh = itemOf('ni_new_front', '新补的一集', 'https://podcasts.example/new', 'audio');
@@ -1488,9 +1491,9 @@ test('default-feed merge keeps new rank in front and leftover cache for more', a
     now: NOW,
   });
   assert.equal(done.view.cards[0]?.itemId, fresh.itemId);
-  assert.ok(done.view.cards.length >= 2 && done.view.cards.length <= 6);
+  assert.equal(done.view.cards.length, 12);
   const leftover = oldCards.filter((row) => !done.view.cards.some((card) => card.itemId === row.itemId));
-  assert.ok(leftover.length >= 2);
+  assert.ok(leftover.length >= 5);
   const { readFile } = await import('node:fs/promises');
   const cache = JSON.parse(await readFile(path.join(root, 'content', 'personal-feed-cache.json'), 'utf8')) as {
     rankedIds?: string[];

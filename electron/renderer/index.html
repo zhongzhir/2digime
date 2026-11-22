@@ -16,10 +16,10 @@
       <header id="product-header" class="topbar shell-topbar" hidden>
         <p class="brand-sm">兔机米</p>
         <nav class="main-nav" aria-label="主导航">
-          <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">与兔机米</button>
-          <button type="button" class="nav-item" data-nav="discover" id="nav-discover">发现</button>
-          <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
-          <button type="button" class="nav-item" data-nav="settings" id="nav-settings">设置</button>
+          <button type="button" class="nav-item active" data-nav="chat" id="nav-chat" aria-keyshortcuts="Control+1">与兔机米</button>
+          <button type="button" class="nav-item" data-nav="discover" id="nav-discover" aria-keyshortcuts="Control+2">发现</button>
+          <button type="button" class="nav-item" data-nav="subject" id="nav-subject" aria-keyshortcuts="Control+3">数字之我</button>
+          <button type="button" class="nav-item" data-nav="settings" id="nav-settings" aria-keyshortcuts="Control+4">设置</button>
           <button type="button" class="nav-item legacy-nav" data-nav="work" id="nav-work" hidden>做事</button>
           <button type="button" class="nav-item legacy-nav" data-nav="collab" id="nav-collab" hidden>协作</button>
         </nav>
@@ -443,9 +443,11 @@
             <button type="button" class="ghost discover-switch active" data-discover-section="for-you">为你发现</button>
             <button type="button" class="ghost discover-switch" data-discover-section="later">稍后看</button>
             <button type="button" class="ghost discover-switch" data-discover-section="prefs">内容偏好</button>
+            <button type="button" class="ghost discover-switch" data-discover-section="sources">内容来源</button>
           </div>
           <section id="content-discover" class="content-discover" aria-label="发现">
             <p id="content-discover-notice" class="muted"></p>
+            <p id="content-discover-response" class="discover-response" hidden></p>
             <section id="content-discover-for-you" class="discover-section" data-discover-section="for-you">
               <div class="discover-feed-head">
                 <h2 id="content-discover-feed-title">为你发现</h2>
@@ -509,6 +511,24 @@
                 <p class="muted tiny">最近的打开、查看和搜索只会影响近期推荐，不会写进数字之我。你可以随时重置。</p>
                 <button type="button" class="ghost" id="btn-reset-recent">重置最近推荐</button>
               </div>
+            </section>
+            <section id="content-discover-sources" class="discover-section content-discover-sources" data-discover-section="sources" hidden>
+              <h2>内容来源</h2>
+              <p class="muted tiny">这里记录兔机米实际尝试过的开放来源、最近可用性和产量。停用是可逆的，不会删除历史记录。</p>
+              <form id="content-source-add-form" class="content-source-add-form">
+                <label class="field">
+                  <span>开放内容地址</span>
+                  <input id="content-source-url" type="url" inputmode="url" placeholder="https://example.com/feed.xml" required />
+                </label>
+                <label class="field">
+                  <span>名称（可选）</span>
+                  <input id="content-source-label" type="text" maxlength="120" placeholder="例如：我常看的科技站" />
+                </label>
+                <button type="submit" class="primary" id="btn-content-source-add">检查并加入</button>
+              </form>
+              <p id="content-source-notice" class="muted tiny" aria-live="polite"></p>
+              <ul id="content-source-list" class="content-source-list"></ul>
+              <p id="content-source-empty" class="muted tiny" hidden>还没有可管理的内容来源。</p>
             </section>
           </section>
         </section>

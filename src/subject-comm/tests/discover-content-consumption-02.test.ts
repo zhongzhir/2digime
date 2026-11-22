@@ -389,9 +389,12 @@ test('PROGRAMS: listing is basis, named works verified by search; unread names a
   });
   assert.ok(limited.length <= 2, `verification stops after a failed search, got ${limited.length}`);
   assert.equal(throttled.cards.length, 0);
-  assert.match(throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '', /还没有核实.*额度已经用完/);
+  assert.match(
+    throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '',
+    /还没有核实.*额度或频率限制/,
+  );
   assert.equal(throttled.trace.searchRateLimited, true);
-  assert.match(throttled.notice, /搜索额度已经用完/);
+  assert.match(throttled.notice, /额度或频率限制/);
   assert.doesNotMatch(throttled.notice, /没有找到|检查联网/);
 
   // 作品页连不上（例如证书不匹配）就不是可用的观看入口：不进主结果，在依据文章上说明打不开。
