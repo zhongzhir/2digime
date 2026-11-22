@@ -35,6 +35,14 @@ export async function appendExchange(
     ...(event.protocolRef ? { protocolRef: event.protocolRef } : {}),
     ...(event.peerDecision ? { peerDecision: event.peerDecision } : {}),
     ...(event.usedOwnCapability ? { usedOwnCapability: true } : {}),
+    ...(event.disclosureAudit
+      ? {
+          disclosureAudit: {
+            ...event.disclosureAudit,
+            fieldRefs: [...event.disclosureAudit.fieldRefs],
+          },
+        }
+      : {}),
   };
   const dir = exchangeDir(packageRoot);
   await fs.mkdir(dir, { recursive: true });

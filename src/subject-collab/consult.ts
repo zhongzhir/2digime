@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { checkDisclosure, threadPlainText } from './disclosure';
-import { appendExchange } from './exchange-store';
+import { appendExchange, bodyDigest } from './exchange-store';
+import {
+  issuePersonalContextContract,
+  revokePersonalContextGrant,
+  verifyPersonalContextContract,
+} from './personal-context-contract';
 import type { SubjectCollabNetwork } from './network';
 import type { ConsultResult, PublicSubjectCard } from './types';
 
@@ -16,17 +21,78 @@ export async function consultSubject(input: {
   goal: string;
   hopedContribution: string;
   disclosure: string;
+  contextUnderstandingIds?: string[];
 }): Promise<ConsultResult> {
   const cards = await input.network.listCards(input.selfSubjectId);
   const card = cards.find((item) => item.subjectId === input.subjectId);
   const exchangeId = `ex_${randomUUID()}`;
-  const disclosure = String(input.disclosure || '').trim();
+  if (!card || !card.reachable) {
+    await appendExchange(input.packageRoot, {
+      exchangeId,
+      kind: 'delivery_failed',
+      at: input.now,
+      fromSubjectId: input.selfSubjectId,
+      toSubjectId: input.subjectId,
+      threadId: input.threadId,
+      summary: '对方不可达，未发送个人上下文',
+      body: '',
+    });
+    return {
+      ok: false,
+      received: false,
+      exchangeId,
+      disclosed: '',
+      reply: '对方当前不可达。',
+      failureReason: '对方当前不可达。',
+    };
+  }
+
+  let issued;
+  try {
+    issued = await issuePersonalContextContract({
+      packageRoot: input.packageRoot,
+      issuerSubjectId: input.selfSubjectId,
+      recipientSubjectId: card.subjectId,
+      recipientEndpointRef: card.endpointRef,
+      taskRef: exchangeId,
+      purpose: input.goal,
+      taskContext: input.disclosure,
+      understandingIds: input.contextUnderstandingIds || [],
+      issuedAt: input.now,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : '无法编译本次个人上下文';
+    await appendExchange(input.packageRoot, {
+      exchangeId,
+      kind: 'disclosure_blocked',
+      at: input.now,
+      fromSubjectId: input.selfSubjectId,
+      toSubjectId: input.subjectId,
+      threadId: input.threadId,
+      summary: reason,
+      body: '',
+    });
+    return {
+      ok: false,
+      received: false,
+      exchangeId,
+      disclosed: '',
+      reply: reason,
+      failureReason: reason,
+    };
+  }
+  const disclosure = issued.disclosure;
   const gate = checkDisclosure({
     disclosure,
     selfContext: input.selfContext,
     threadText: threadPlainText(input.threadTurns),
   });
   if (!gate.ok) {
+    await revokePersonalContextGrant({
+      packageRoot: input.packageRoot,
+      grant: issued.grant,
+      revokedAt: input.now,
+    });
     await appendExchange(input.packageRoot, {
       exchangeId,
       kind: 'disclosure_blocked',
@@ -35,7 +101,8 @@ export async function consultSubject(input: {
       toSubjectId: input.subjectId,
       threadId: input.threadId,
       summary: gate.reason,
-      body: disclosure.slice(0, 2000),
+      body: '',
+      protocolRef: issued.contract.id,
     });
     return {
       ok: false,
@@ -46,58 +113,102 @@ export async function consultSubject(input: {
       failureReason: gate.reason,
     };
   }
-  if (!card || !card.reachable) {
+  const contractGate = verifyPersonalContextContract({
+    contract: issued.contract,
+    expectedTaskRef: exchangeId,
+    expectedIssuerSubjectId: input.selfSubjectId,
+    expectedRecipientSubjectId: card.subjectId,
+    expectedRecipientEndpointRef: card.endpointRef,
+    expectedPurpose: input.goal,
+    expectedDisclosure: disclosure,
+    now: input.now,
+    grant: issued.grant,
+  });
+  if (!contractGate.ok) {
+    await revokePersonalContextGrant({
+      packageRoot: input.packageRoot,
+      grant: issued.grant,
+      revokedAt: input.now,
+    });
     await appendExchange(input.packageRoot, {
       exchangeId,
-      kind: 'request_sent',
+      kind: 'disclosure_blocked',
       at: input.now,
       fromSubjectId: input.selfSubjectId,
-      toSubjectId: input.subjectId,
+      toSubjectId: card.subjectId,
       threadId: input.threadId,
-      summary: '对方不可达',
-      body: disclosure,
+      summary: contractGate.reason,
+      body: '',
+      protocolRef: issued.contract.id,
     });
     return {
       ok: false,
       received: false,
       exchangeId,
-      disclosed: disclosure,
-      reply: '对方当前不可达。',
-      failureReason: '对方当前不可达。',
+      disclosed: '',
+      reply: contractGate.reason,
+      failureReason: contractGate.reason,
     };
   }
 
-  const requestBody = JSON.stringify({
+  const request = {
+    exchangeId,
+    fromSubjectId: input.selfSubjectId,
+    toSubjectId: card.subjectId,
+    at: input.now,
     goal: input.goal,
     hopedContribution: input.hopedContribution,
     disclosure,
-  });
-  await appendExchange(input.packageRoot, {
-    exchangeId,
-    kind: 'request_sent',
-    at: input.now,
-    fromSubjectId: input.selfSubjectId,
-    toSubjectId: card.subjectId,
+    contextContract: issued.contract,
     threadId: input.threadId,
-    summary: `向 ${card.displayName} 发出合作请求`,
-    body: requestBody,
-  });
+  };
+  const fallbackBody = JSON.stringify(request);
+  const delivered = await input.network.deliverWithReceipt(request);
+  const response = delivered.response;
 
-  const response = await input.network.deliver({
-    exchangeId,
-    fromSubjectId: input.selfSubjectId,
-    toSubjectId: card.subjectId,
-    at: input.now,
-    goal: input.goal,
-    hopedContribution: input.hopedContribution,
-    disclosure,
-    threadId: input.threadId,
-  });
+  if (delivered.receipt.delivered) {
+    await appendExchange(input.packageRoot, {
+      exchangeId,
+      kind: 'request_sent',
+      at: input.now,
+      fromSubjectId: input.selfSubjectId,
+      toSubjectId: card.subjectId,
+      threadId: input.threadId,
+      summary: `向 ${card.displayName} 发出合作请求`,
+      body: delivered.receipt.actualBodyDigest === bodyDigest(fallbackBody) ? fallbackBody : '',
+      protocolRef: issued.contract.id,
+      disclosureAudit: {
+        contractId: issued.contract.id,
+        contentDigest: issued.contract.contentDigest,
+        actualBodyDigest: delivered.receipt.actualBodyDigest,
+        actualBytes: delivered.receipt.actualBytes,
+        recipientEndpointRef: delivered.receipt.recipientEndpointRef,
+        fieldRefs: issued.contract.fields.map((field) => field.ref),
+      },
+    });
+  } else {
+    await revokePersonalContextGrant({
+      packageRoot: input.packageRoot,
+      grant: issued.grant,
+      revokedAt: input.now,
+    });
+    await appendExchange(input.packageRoot, {
+      exchangeId,
+      kind: 'delivery_failed',
+      at: input.now,
+      fromSubjectId: input.selfSubjectId,
+      toSubjectId: card.subjectId,
+      threadId: input.threadId,
+      summary: '个人上下文未发送到接收端点',
+      body: '',
+      protocolRef: issued.contract.id,
+    });
+  }
 
   const unreachable = response.reply === '对方当前不可达。' && response.decision === 'decline';
   const received = !unreachable;
   const ok = response.decision === 'accept';
-  await appendExchange(input.packageRoot, {
+  if (received) await appendExchange(input.packageRoot, {
     exchangeId,
     kind: 'response_received',
     at: input.now,

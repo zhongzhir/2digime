@@ -1,7 +1,7 @@
 # INSTITUTIONAL-SUBJECT-COLLABORATION-01 — 机构级主体协作与做事能力
 
 **日期：** 2026-11-22  
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
 **前序地基：** `04-COLLABORATION-FOUNDATION`、`INSTITUTION-DISTRIBUTION-V01` 已接受  
 **目标：** 在不破坏 Owner 主权和单一 Talk 入口的前提下，让 2digime 能以可验证的 Digital Subject 身份接入银行、电信、大型机构和大用户平台，并通过标准 A2A 协议安全协作、完成事情。
 
@@ -84,7 +84,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - **Slice 1A 的诚实边界：** 当前对象是 `digitalme.public_subject_card.signed.v1`，不是标准 A2A Agent Card，也不是 Owner 身份证明；信任根仍是配对时保存的对端公钥。
 - **Slice 1B（本轮已实现）：** 本机先以单个加密 bundle 持久化完整新密钥，再原子切换活动 profile；对端通过旧、新 Ed25519 key 双签声明允许短暂双端点重叠，经准备、就绪、提交、提交确认完成迁移。交接点、对端旧 key 撤销和已完成记录均持久化，准备前与激活后重启都可续跑；提交后旧 endpoint/key 的真实 Relay 密文投递被拒绝。
 - **Slice 1B 的诚实边界：** 当前只验证同一 Relay 内、单方发起的 endpoint/key 轮换；不宣称跨 Relay 迁移、双方同时轮换、设备丢失后的 Owner 恢复或机构级密钥托管已经完成。
-- **Slice 1C（随后）：** 定义 Personal Context Contract：目的、接收方、最小字段、来源摘要、内容 digest、有效期、可撤销引用和实际披露审计。它是一次任务投影，不是第二份 Digital Self。
+- **Slice 1C（本轮已实现）：** 当前模型通过稳定引用选择本次任务最少的 Digital Self 条目；runtime 只从真实、仍有效的 understanding 编译 Personal Context Contract，并绑定目的、任务、接收 Subject + Endpoint、字段来源摘要、内容 digest、15 分钟默认/30 分钟上限有效期和短期 `AuthorizationGrant` 撤销引用。发送方与接收方分别记录真实请求体 digest、UTF-8 字节数、接收端点、合同和字段引用；未送达不得记成 `request_sent`。
+- **Slice 1C 的诚实边界：** 当前合同随既有已签名 Relay/E2EE 信封获得传输真实性，本身尚未独立签名或标准化；接收方可核验合同完整性、用途、接收方、端点和有效期，但尚不能远程实时查询签发方本机 Grant 的后续撤销状态。它不是 Owner 委托凭证、OpenID4VP 选择披露或标准 A2A Message。
 - 标准 A2A Agent Card 必须区分声明者、Subject、Runtime Endpoint、能力、输入输出模式与认证方案，并在 Slice 4 通过独立实现互操作后才可宣称符合标准。
 
 ### Slice 2 — 真实机构身份联邦
@@ -160,13 +161,14 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 0 现状/威胁审计已形成；
 - Slice 1A 签名公开卡、对端 key 撤销持久记录和 Relay 严格 key 绑定已实现；
 - Slice 1B 原子密钥 bundle、双签交接证明、四步 Relay 交接、撤销同步和重启恢复已实现；
-- TypeScript 构建通过；轮换、签名卡、Relay 恢复和既有远程协作定向回归 13/13 通过；
+- Slice 1C 一次任务 Personal Context Contract、短期 Grant、接收方核验和双侧实际披露审计已实现；
+- TypeScript 构建通过；Personal Context、内存/Relay/两 Owner 协作、轮换、签名卡、Relay 恢复和既有远程协作定向回归 23/23 通过；
 - 尚未 Owner 验收，尚未合并主干、推送、打包、发布或部署；
-- 尚未完成跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、真实机构登录、Owner 委托凭证或独立实现互操作。
+- 尚未完成合同独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、真实机构登录、Owner 委托凭证或独立实现互操作。
 
 ### 下一执行批次
 
-1. 由 Owner 决定是否对 Slice 1B 做当前边界内验收；未验收前不得写成产品完成；
-2. 继续 Slice 1C 的 Personal Context Contract，只投影当前协作必需上下文，并记录实际披露 digest；
-3. Slice 1C 通过后选择一个无外部费用的开发/沙箱机构身份源进入 Slice 2；选择真实机构和创建外部账号需要 Owner 另行确认；
+1. 由 Owner 决定是否对 Slice 1A–1C 做当前边界内验收；未验收前不得写成产品完成；
+2. Owner 确认后，选择一个无外部费用、无需真实机构数据的开发/沙箱机构身份源进入 Slice 2；选择真实机构、创建外部账号或接受第三方条款需要另行确认；
+3. Slice 2 只接真实 OIDC/OAuth2/SAML 身份联邦，不自建用户名密码或模拟登录冒充通过；
 4. 未通过前不扩建 UI、不做平台定制、A2A 市场、生产接入或真实机构数据试验。

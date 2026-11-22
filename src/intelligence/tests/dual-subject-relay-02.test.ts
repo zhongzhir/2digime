@@ -23,6 +23,7 @@ import { createRelayServer, FileRelayStore } from '../../relay-service/server';
 import { InboxStore } from '../../subject-comm/inbox-store';
 import { isSubjectCollabPayload } from '../../subject-comm/envelope';
 import { LocalPackageTransport } from '../../collaboration/transport';
+import { GrantStore } from '../../collaboration/grant-store';
 
 async function tempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `dm-relay-collab-${prefix}-`));
@@ -316,9 +317,23 @@ test('A 经配对目录 + Relay/E2EE 自主选择 B，网络层无完整 Digital
 
       const aEx = await listExchanges(aDir);
       const bEx = await listExchanges(bDir);
-      assert.ok(aEx.some((item) => item.kind === 'request_sent'));
+      const sentAudit = aEx.find((item) => item.kind === 'request_sent')?.disclosureAudit;
+      const receivedAudit = bEx.find((item) => item.kind === 'request_received')?.disclosureAudit;
+      assert.ok(sentAudit);
+      assert.ok(receivedAudit);
+      assert.equal(sentAudit!.contractId, receivedAudit!.contractId);
+      assert.equal(sentAudit!.contentDigest, receivedAudit!.contentDigest);
+      assert.equal(sentAudit!.actualBodyDigest, receivedAudit!.actualBodyDigest);
+      assert.equal(sentAudit!.actualBytes, receivedAudit!.actualBytes);
+      assert.ok(sentAudit!.recipientEndpointRef);
       assert.ok(aEx.some((item) => item.kind === 'response_received' && item.peerDecision === 'accept'));
       assert.ok(bEx.some((item) => item.kind === 'request_received'));
+      const contextGrant = (await (await GrantStore.open(aDir)).list()).find(
+        (grant) => grant.origin.kind === 'personal_context_contract',
+      );
+      assert.ok(contextGrant);
+      assert.equal(contextGrant!.status, 'granted');
+      assert.equal(contextGrant!.grantee.kind, 'remote_subject');
       assert.equal(JSON.stringify([...aEx, ...bEx]).includes('NEGOTIATING'), false);
       assert.equal(JSON.stringify([...aEx, ...bEx]).includes('CollabUserStatus'), false);
 

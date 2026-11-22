@@ -6,6 +6,9 @@ export type {
   PublicSubjectCard,
   CollaborationRequest,
   CollaborationResponse,
+  CollaborationDeliveryMeta,
+  CollaborationDeliveryReceipt,
+  PersonalContextDisclosureAudit,
   CollaborationExchangeEvent,
   ConsultResult,
   CollaborationDecision,
@@ -20,9 +23,24 @@ export {
 } from './signed-public-card';
 export type { SignedPublicSubjectCard, SignedPublicCardVerification } from './signed-public-card';
 export { checkDisclosure, threadPlainText } from './disclosure';
+export {
+  PERSONAL_CONTEXT_CONTRACT_KIND,
+  PERSONAL_CONTEXT_CONTRACT_SCHEMA_VERSION,
+  formatPersonalContextCandidates,
+  isPersonalContextContract,
+  issuePersonalContextContract,
+  personalContextContentDigest,
+  renderPersonalContext,
+  revokePersonalContextGrant,
+  verifyPersonalContextContract,
+} from './personal-context-contract';
+export type {
+  PersonalContextContract,
+  PersonalContextField,
+} from './personal-context-contract';
 export { appendExchange, listExchanges, bodyDigest } from './exchange-store';
 export { createInMemorySubjectNetwork } from './network';
-export type { SubjectCollabNetwork, AttachedSubject } from './network';
+export type { SubjectCollabNetwork, SubjectCollabDeliveryResult, AttachedSubject } from './network';
 export { createRelaySubjectNetwork, RELAY_COLLAB_UNREACHABLE } from './relay-network';
 export type { RelaySubjectNetwork } from './relay-network';
 export { consultSubject } from './consult';

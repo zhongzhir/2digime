@@ -16,8 +16,10 @@ import {
   type SubjectEnvelope,
 } from '../subject-comm/envelope';
 import { parseRemoteEndpointRef, remoteEndpointRef } from '../subject-comm/endpoint';
-import type { AttachedSubject, SubjectCollabNetwork } from './network';
+import type { AttachedSubject, SubjectCollabDeliveryResult, SubjectCollabNetwork } from './network';
 import type { CollaborationRequest, CollaborationResponse, PublicSubjectCard } from './types';
+import { bodyDigest } from './exchange-store';
+import { isPersonalContextContract } from './personal-context-contract';
 import { readPeerCard, readPublicCard, sanitizePublicCard, writePeerCard } from './public-card';
 import { signPublicSubjectCard, verifySignedPublicSubjectCard } from './signed-public-card';
 
@@ -26,6 +28,7 @@ const UNREACHABLE = '对方当前不可达。';
 export const RELAY_COLLAB_UNREACHABLE = UNREACHABLE;
 
 export interface RelaySubjectNetwork extends SubjectCollabNetwork {
+  deliverWithReceipt(request: CollaborationRequest): Promise<SubjectCollabDeliveryResult>;
   publishPublicCard(): Promise<void>;
   drainInbox(): Promise<number>;
   beginIdentityTransition(input?: {
@@ -59,6 +62,9 @@ function parseRequest(raw: unknown): CollaborationRequest | null {
     goal: String(o.goal || ''),
     hopedContribution: String(o.hopedContribution || ''),
     disclosure: String(o.disclosure || ''),
+    ...(isPersonalContextContract(o.contextContract)
+      ? { contextContract: o.contextContract }
+      : {}),
     threadId: String(o.threadId || ''),
   };
 }
@@ -302,7 +308,10 @@ export function createRelaySubjectNetwork(input: {
             processed += 1;
             continue;
           }
-          const response = await local.handle(request);
+          const response = await local.handle(request, {
+            recipientEndpointRef: env.to.endpointRef,
+            actualBody: JSON.stringify(payload.request),
+          });
           await sendPayload(
             env.from,
             {
@@ -383,17 +392,30 @@ export function createRelaySubjectNetwork(input: {
       }
       return cards;
     },
-    async deliver(request) {
+    async deliverWithReceipt(request): Promise<SubjectCollabDeliveryResult> {
+      const actualBody = JSON.stringify(request);
+      const baseReceipt = {
+        delivered: false,
+        recipientEndpointRef: '',
+        actualBodyDigest: bodyDigest(actualBody),
+        actualBytes: Buffer.byteLength(actualBody, 'utf8'),
+      };
       const peers = await identity.listPeers();
       const peer = peers.find((item) => item.subjectId === request.toSubjectId);
-      if (!peer) return unreachableResponse(request);
+      if (!peer) return { response: unreachableResponse(request), receipt: baseReceipt };
+      const endpointRef = remoteEndpointRef(peer.endpointId);
       const health = await relay.health();
-      if (!health.reachable) return unreachableResponse(request);
+      if (!health.reachable) {
+        return {
+          response: unreachableResponse(request),
+          receipt: { ...baseReceipt, recipientEndpointRef: endpointRef },
+        };
+      }
       const sent = await sendPayload(
         {
           subjectId: peer.subjectId,
           displayName: peer.displayName,
-          endpointRef: remoteEndpointRef(peer.endpointId),
+          endpointRef,
         },
         {
           wire: 'collab_request',
@@ -402,7 +424,17 @@ export function createRelaySubjectNetwork(input: {
         },
         request.exchangeId,
       );
-      if (!sent.delivered) return unreachableResponse(request);
+      if (!sent.delivered) {
+        return {
+          response: unreachableResponse(request),
+          receipt: { ...baseReceipt, recipientEndpointRef: endpointRef },
+        };
+      }
+      const receipt = {
+        ...baseReceipt,
+        delivered: true,
+        recipientEndpointRef: endpointRef,
+      };
       const waitMs = Number(process.env.DIGITALME_COLLAB_RESPONSE_WAIT_MS);
       const budget = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 45_000;
       const deadline = Date.now() + budget;
@@ -411,11 +443,14 @@ export function createRelaySubjectNetwork(input: {
         const hit = pending.get(request.exchangeId);
         if (hit) {
           pending.delete(request.exchangeId);
-          return hit;
+          return { response: hit, receipt };
         }
         await sleep(80);
       }
-      return unreachableResponse(request);
+      return { response: unreachableResponse(request), receipt };
+    },
+    async deliver(request) {
+      return (await network.deliverWithReceipt(request)).response;
     },
     publishPublicCard,
     drainInbox,

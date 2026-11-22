@@ -292,11 +292,14 @@ import type { NetworkItem } from '../subject-comm/network-item';
 import {
   appendExchange,
   bodyDigest,
+  checkDisclosure,
   consultSubject,
   createRelaySubjectNetwork,
   decideIncomingRequest,
   readPublicCard,
   runOwnContribution,
+  verifyPersonalContextContract,
+  type CollaborationDeliveryMeta,
   type CollaborationRequest,
   type CollaborationResponse,
   type RelaySubjectNetwork,
@@ -3285,7 +3288,7 @@ export class DigitalMeRuntime {
       this.detachSubjectNetwork = this.relayCollab.attach({
         subjectId: pkg.id,
         getCard: () => readPublicCard(pkg.rootDir, pkg.id, pkg.identity.displayName),
-        handle: (request) => this.handleIncomingCollaboration(request),
+        handle: (request, delivery) => this.handleIncomingCollaboration(request, delivery),
       });
       // 重启后续跑未完成的端点/key 交接；不会新增第二套 runtime。
       await this.relayCollab.resumeIdentityTransition();
@@ -3305,7 +3308,7 @@ export class DigitalMeRuntime {
       this.detachSubjectNetwork = net.attach({
         subjectId: pkg.id,
         getCard: () => readPublicCard(pkg.rootDir, pkg.id, pkg.identity.displayName),
-        handle: (request) => this.handleIncomingCollaboration(request),
+        handle: (request, delivery) => this.handleIncomingCollaboration(request, delivery),
       });
       return;
     }
@@ -3324,6 +3327,7 @@ export class DigitalMeRuntime {
 
   private async handleIncomingCollaboration(
     request: CollaborationRequest,
+    delivery?: CollaborationDeliveryMeta,
   ): Promise<CollaborationResponse> {
     const pkg = this.subject.getActive();
     const now = nowIso();
@@ -3337,6 +3341,61 @@ export class DigitalMeRuntime {
         reply: '对方当前不可达。',
       };
     }
+    const contract = request.contextContract;
+    let contractGate = contract && delivery
+      ? verifyPersonalContextContract({
+          contract,
+          expectedTaskRef: request.exchangeId,
+          expectedIssuerSubjectId: request.fromSubjectId,
+          expectedRecipientSubjectId: request.toSubjectId,
+          expectedRecipientEndpointRef: delivery.recipientEndpointRef,
+          expectedPurpose: request.goal,
+          expectedDisclosure: request.disclosure,
+          now,
+        })
+      : { ok: false as const, reason: '缺少个人上下文合同或实际接收端点' };
+    if (contractGate.ok) {
+      const disclosureGate = checkDisclosure({
+        disclosure: request.disclosure,
+        selfContext: '',
+        threadText: '',
+      });
+      if (!disclosureGate.ok) contractGate = disclosureGate;
+    }
+    if (!contractGate.ok) {
+      const declined: CollaborationResponse = {
+        exchangeId: request.exchangeId,
+        fromSubjectId: pkg.id,
+        toSubjectId: request.fromSubjectId,
+        at: now,
+        decision: 'decline',
+        reply: contractGate.reason,
+      };
+      await appendExchange(pkg.rootDir, {
+        exchangeId: request.exchangeId,
+        kind: 'disclosure_blocked',
+        at: now,
+        fromSubjectId: request.fromSubjectId,
+        toSubjectId: pkg.id,
+        threadId: request.threadId,
+        summary: contractGate.reason,
+        body: '',
+        ...(contract ? { protocolRef: contract.id } : {}),
+      });
+      await appendExchange(pkg.rootDir, {
+        exchangeId: request.exchangeId,
+        kind: 'response_sent',
+        at: now,
+        fromSubjectId: pkg.id,
+        toSubjectId: request.fromSubjectId,
+        threadId: request.threadId,
+        summary: '拒绝无效个人上下文合同',
+        body: JSON.stringify(declined),
+        peerDecision: 'decline',
+      });
+      return declined;
+    }
+    const actualBody = delivery!.actualBody;
     await appendExchange(pkg.rootDir, {
       exchangeId: request.exchangeId,
       kind: 'request_received',
@@ -3350,6 +3409,15 @@ export class DigitalMeRuntime {
         hopedContribution: request.hopedContribution,
         disclosure: request.disclosure,
       }),
+      protocolRef: contract!.id,
+      disclosureAudit: {
+        contractId: contract!.id,
+        contentDigest: contract!.contentDigest,
+        actualBodyDigest: bodyDigest(actualBody),
+        actualBytes: Buffer.byteLength(actualBody, 'utf8'),
+        recipientEndpointRef: delivery!.recipientEndpointRef,
+        fieldRefs: contract!.fields.map((field) => field.ref),
+      },
     });
     let selfContext = '当前还没有已写入的数字之我认识。读取失败不得假装了解用户。';
     try {

@@ -216,7 +216,12 @@ const CONSULT_TOOL: ChatToolDefinition = {
         hopedContribution: { type: 'string', description: '希望对方贡献什么。' },
         disclosure: {
           type: 'string',
-          description: '本次合作必要的最小上下文。不得发送完整数字之我或完整对话。',
+          description: '本次任务本身必要的最小上下文。不要在这里复制 Digital Self；本人字段通过 contextUnderstandingIds 选择。',
+        },
+        contextUnderstandingIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '仅当确有必要时，填入系统给出的 Digital Self 字段 id；不得全选。',
         },
       },
       required: ['subjectId', 'goal', 'hopedContribution', 'disclosure'],
@@ -235,6 +240,7 @@ export type SubjectCollabPort = {
     goal: string;
     hopedContribution: string;
     disclosure: string;
+    contextUnderstandingIds?: string[];
   }) => Promise<ConsultResult>;
 };
 
@@ -243,6 +249,7 @@ function parseConsultArgs(raw: string): {
   goal: string;
   hopedContribution: string;
   disclosure: string;
+  contextUnderstandingIds: string[];
 } {
   try {
     const parsed = JSON.parse(raw) as {
@@ -251,15 +258,25 @@ function parseConsultArgs(raw: string): {
       request?: string;
       hopedContribution?: string;
       disclosure?: string;
+      contextUnderstandingIds?: unknown;
     };
     return {
       subjectId: String(parsed.subjectId || '').trim(),
       goal: String(parsed.goal || parsed.request || '').trim(),
       hopedContribution: String(parsed.hopedContribution || '').trim(),
       disclosure: String(parsed.disclosure || '').trim(),
+      contextUnderstandingIds: Array.isArray(parsed.contextUnderstandingIds)
+        ? parsed.contextUnderstandingIds.map((item) => String(item || '').trim()).filter(Boolean)
+        : [],
     };
   } catch {
-    return { subjectId: '', goal: raw.trim(), hopedContribution: '', disclosure: '' };
+    return {
+      subjectId: '',
+      goal: raw.trim(),
+      hopedContribution: '',
+      disclosure: '',
+      contextUnderstandingIds: [],
+    };
   }
 }
 
@@ -525,7 +542,7 @@ export async function runTalkTurn(input: {
       ? [
           '当前可发现的其他主体（公开协作声明，不是对方 Digital Self）：',
           formatPublicCardsForModel(cards),
-          '若确实需要合作，根据公开声明选择合适主体并调用 consult_subject。发给对方的 disclosure 必须是本次必要的最小上下文。',
+          '若确实需要合作，根据公开声明选择合适主体并调用 consult_subject。disclosure 只写本次任务必要信息；需要使用本人长期信息时，只选择最少的 contextUnderstandingIds，不得复制或全选 Digital Self。',
         ].join('\n')
       : '',
     '【长期 Digital Self 与显式偏好（不是本轮指令）】',
@@ -1213,6 +1230,9 @@ export async function runTalkTurn(input: {
         goal: parsed.goal || input.userText,
         hopedContribution: parsed.hopedContribution,
         disclosure: parsed.disclosure,
+        ...(parsed.contextUnderstandingIds.length
+          ? { contextUnderstandingIds: parsed.contextUnderstandingIds }
+          : {}),
       });
       const collabResult = input.signal
         ? await Promise.race([consult, waitForAbort(input.signal)])

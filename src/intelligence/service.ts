@@ -20,6 +20,7 @@ import {
   saveFilesystemGrant,
 } from '../authorization/filesystem-grant';
 import { hasObservedMutation } from './talk-effects';
+import { formatPersonalContextCandidates } from '../subject-collab/personal-context-contract';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
@@ -247,9 +248,11 @@ export class TalkService {
       }
     }
     let selfContext = '当前还没有已写入的数字之我认识。读取失败不得假装了解用户。';
+    let personalContextCandidates = '';
     try {
       const self = await readDigitalSelf(pkg.rootDir, pkg.subjectId, now);
       selfContext = formatSelfContext(selectSelfContext(self, text));
+      personalContextCandidates = formatPersonalContextCandidates(self);
     } catch {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
     }
@@ -271,6 +274,14 @@ export class TalkService {
       }
     }
     const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
+    if (collab && personalContextCandidates) {
+      selfContext += [
+        '',
+        '【仅供本次外部协作选择的 Digital Self 字段引用】',
+        '只有确有必要时才把最少 ref 的末段 id 放入 contextUnderstandingIds；不得全选，不得向用户展示这些内部引用。',
+        personalContextCandidates,
+      ].join('\n');
+    }
     const grantedFolders = await listActiveFilesystemGrantFolders(pkg.rootDir);
     const contextPaths = [
       ...new Set(

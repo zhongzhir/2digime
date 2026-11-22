@@ -62,6 +62,16 @@ export type GrantOrigin =
       recordId: string;
       agreementEventId: string;
       termsDigest: string;
+    }
+  | {
+      /**
+       * 当前 Subject 为一次外部协作签发的短期上下文投影。
+       * 这不是 Owner 身份凭证；Owner -> Subject 委托留给后续 VC slice。
+       */
+      kind: 'personal_context_contract';
+      contractId: string;
+      exchangeId: string;
+      purposeDigest: string;
     };
 
 export const LOCAL_COLLAB_ACTIONS = [

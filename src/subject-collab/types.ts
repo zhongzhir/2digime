@@ -2,6 +2,8 @@
  * Subject ↔ Subject 最小合同。
  * 公开协作面 ≠ Digital Self。交换事实记录发生了什么，不是协作走到第几步。
  */
+import type { PersonalContextContract } from './personal-context-contract';
+
 export const PUBLIC_CARD_SCHEMA_VERSION = 1 as const;
 export const EXCHANGE_SCHEMA_VERSION = 1 as const;
 
@@ -31,7 +33,21 @@ export interface CollaborationRequest {
   goal: string;
   hopedContribution: string;
   disclosure: string;
+  /** 一次任务的短期投影；不是第二份 Digital Self。 */
+  contextContract?: PersonalContextContract;
   threadId: string;
+}
+
+export interface CollaborationDeliveryMeta {
+  recipientEndpointRef: string;
+  actualBody: string;
+}
+
+export interface CollaborationDeliveryReceipt {
+  delivered: boolean;
+  recipientEndpointRef: string;
+  actualBodyDigest: string;
+  actualBytes: number;
 }
 
 export interface CollaborationResponse {
@@ -52,7 +68,17 @@ export type ExchangeKind =
   | 'request_received'
   | 'response_sent'
   | 'response_received'
-  | 'disclosure_blocked';
+  | 'disclosure_blocked'
+  | 'delivery_failed';
+
+export interface PersonalContextDisclosureAudit {
+  contractId: string;
+  contentDigest: string;
+  actualBodyDigest: string;
+  actualBytes: number;
+  recipientEndpointRef: string;
+  fieldRefs: string[];
+}
 
 export interface CollaborationExchangeEvent {
   schemaVersion: typeof EXCHANGE_SCHEMA_VERSION;
@@ -70,6 +96,7 @@ export interface CollaborationExchangeEvent {
   protocolRef?: string;
   peerDecision?: CollaborationDecision;
   usedOwnCapability?: boolean;
+  disclosureAudit?: PersonalContextDisclosureAudit;
 }
 
 export interface ConsultResult {
