@@ -9,7 +9,9 @@ import { CommIdentityStore } from '../subject-comm/identity-store';
 import { RelayTransport } from '../subject-comm/relay-transport';
 import { buildEnvelope } from '../subject-comm/local-subject-transport';
 import {
+  isIdentityControlPayload,
   isSubjectCollabPayload,
+  type IdentityControlPayload,
   type SubjectCollabPayload,
   type SubjectEnvelope,
 } from '../subject-comm/envelope';
@@ -26,6 +28,14 @@ export const RELAY_COLLAB_UNREACHABLE = UNREACHABLE;
 export interface RelaySubjectNetwork extends SubjectCollabNetwork {
   publishPublicCard(): Promise<void>;
   drainInbox(): Promise<number>;
+  beginIdentityTransition(input?: {
+    endpointId?: string;
+    relayUrl?: string;
+  }): Promise<{ transitionId: string; phase: 'preparing' | 'active' | 'complete' }>;
+  resumeIdentityTransition(): Promise<{
+    transitionId?: string;
+    phase: 'idle' | 'preparing' | 'active' | 'complete';
+  }>;
   start(pollMs?: number): void;
   stopPoll(): void;
 }
@@ -131,10 +141,129 @@ export function createRelaySubjectNetwork(input: {
     return relay.send(envelope);
   };
 
+  const sendIdentityPayload = async (to: SubjectRef, payload: IdentityControlPayload) => {
+    const from = await selfRef();
+    if (!from) return { delivered: false };
+    const envelope = buildEnvelope({
+      from,
+      to,
+      kind: 'identity_control',
+      payload,
+      correlationId: payload.transitionId,
+    });
+    envelope.transportMeta = { mode: 'remote', encrypted: true };
+    return relay.send(envelope);
+  };
+
+  const resumeIdentityTransition = async (): Promise<{
+    transitionId?: string;
+    phase: 'idle' | 'preparing' | 'active' | 'complete';
+  }> => {
+    let transition = await identity.getLocalTransition();
+    if (!transition) return { phase: 'idle' };
+    const transitionId = transition.proof.statement.transitionId;
+    if (transition.phase === 'preparing') {
+      const readyPeerEndpointIds = transition.readyPeerEndpointIds;
+      const missingReady = transition.requiredPeerEndpointIds.filter(
+        (id) => !readyPeerEndpointIds.includes(id),
+      );
+      for (const endpointId of missingReady) {
+        const peer = await identity.getPeer(endpointId);
+        if (!peer) continue;
+        await sendIdentityPayload(identity.toSubjectRef(peer), {
+          wire: 'endpoint_key_prepare',
+          transitionId,
+          proof: transition.proof,
+        });
+      }
+      if (missingReady.length) return { transitionId, phase: 'preparing' };
+      transition = await identity.activateLocalTransition();
+    }
+    const missingCommitted = transition.requiredPeerEndpointIds.filter(
+      (id) => !transition.committedPeerEndpointIds.includes(id),
+    );
+    for (const endpointId of missingCommitted) {
+      const peer = await identity.getPeer(endpointId);
+      if (!peer) continue;
+      await sendIdentityPayload(identity.toSubjectRef(peer), {
+        wire: 'endpoint_key_commit',
+        transitionId,
+      });
+    }
+    if (missingCommitted.length) return { transitionId, phase: 'active' };
+    const completed = await identity.finalizeLocalTransition();
+    return { transitionId, phase: completed ? 'complete' : 'active' };
+  };
+
+  const publishPublicCard = async (): Promise<void> => {
+    if (!local) return;
+    const from = await selfRef();
+    if (!from) return;
+    const own = await readPublicCard(input.packageRoot, local.subjectId, from.displayName);
+    const card = {
+      ...own,
+      subjectId: local.subjectId,
+      displayName: from.displayName,
+      endpointRef: from.endpointRef,
+      reachable: true,
+    };
+    const signedCard = await signPublicSubjectCard({ card, identity });
+    const peers = await identity.listPeers();
+    for (const peer of peers) {
+      await sendPayload(
+        {
+          subjectId: peer.subjectId,
+          displayName: peer.displayName,
+          endpointRef: remoteEndpointRef(peer.endpointId),
+        },
+        { wire: 'public_card', card: { ...signedCard } },
+      );
+    }
+  };
+
   const drainNow = async (): Promise<number> => {
     const items = await relay.listInbox({ unreadOnly: true });
     let processed = 0;
     for (const env of items) {
+      if (env.kind === 'identity_control' && isIdentityControlPayload(env.payload)) {
+        const control = env.payload;
+        try {
+          const fromEndpointId = parseRemoteEndpointRef(env.from.endpointRef);
+          if (!fromEndpointId) continue;
+          if (control.wire === 'endpoint_key_prepare') {
+            if (!control.proof || control.proof.statement.transitionId !== control.transitionId) {
+              continue;
+            }
+            await identity.acceptPeerTransition({
+              proof: control.proof,
+              fromEndpointId,
+            });
+            await sendIdentityPayload(env.from, {
+              wire: 'endpoint_key_ready',
+              transitionId: control.transitionId,
+            });
+          } else if (control.wire === 'endpoint_key_ready') {
+            await identity.markLocalTransitionReady(control.transitionId, fromEndpointId);
+          } else if (control.wire === 'endpoint_key_commit') {
+            await identity.commitPeerTransition({
+              transitionId: control.transitionId,
+              fromEndpointId,
+            });
+            await sendIdentityPayload(env.from, {
+              wire: 'endpoint_key_committed',
+              transitionId: control.transitionId,
+            });
+          } else if (control.wire === 'endpoint_key_committed') {
+            await identity.markLocalTransitionCommitted(control.transitionId, fromEndpointId);
+          }
+          // ready 必须先以旧 profile ACK；随后才允许 resume 激活新端点。
+          await relay.acknowledge(env.envelopeId);
+          processed += 1;
+        } catch {
+          /* 无效证明或不匹配端点不得 ACK；保留用于诊断/恢复。 */
+        }
+        continue;
+      }
       if (env.kind !== 'subject_collab' || !isSubjectCollabPayload(env.payload)) continue;
       const payload = env.payload;
       try {
@@ -190,6 +319,11 @@ export function createRelaySubjectNetwork(input: {
         /* 保留未 ACK 以便重试 */
       }
     }
+    const beforeResume = await identity.getLocalTransition();
+    const progress = await resumeIdentityTransition();
+    if (beforeResume?.phase === 'preparing' && progress.phase === 'active') {
+      await publishPublicCard();
+    }
     return processed;
   };
 
@@ -209,6 +343,15 @@ export function createRelaySubjectNetwork(input: {
         if (local === peer) local = null;
       };
     },
+    async beginIdentityTransition(options = {}) {
+      const transition = await identity.prepareLocalTransition(options);
+      const progress = await resumeIdentityTransition();
+      return {
+        transitionId: transition.proof.statement.transitionId,
+        phase: progress.phase === 'idle' ? 'preparing' : progress.phase,
+      };
+    },
+    resumeIdentityTransition,
     async listCards(exceptSubjectId) {
       await drainInbox().catch(() => 0);
       const profile = await identity.getLocalProfile();
@@ -274,31 +417,7 @@ export function createRelaySubjectNetwork(input: {
       }
       return unreachableResponse(request);
     },
-    async publishPublicCard() {
-      if (!local) return;
-      const from = await selfRef();
-      if (!from) return;
-      const own = await readPublicCard(input.packageRoot, local.subjectId, from.displayName);
-      const card = {
-        ...own,
-        subjectId: local.subjectId,
-        displayName: from.displayName,
-        endpointRef: from.endpointRef,
-        reachable: true,
-      };
-      const signedCard = await signPublicSubjectCard({ card, identity });
-      const peers = await identity.listPeers();
-      for (const peer of peers) {
-        await sendPayload(
-          {
-            subjectId: peer.subjectId,
-            displayName: peer.displayName,
-            endpointRef: remoteEndpointRef(peer.endpointId),
-          },
-          { wire: 'public_card', card: { ...signedCard } },
-        );
-      }
-    },
+    publishPublicCard,
     drainInbox,
     start(pollMs = 800) {
       if (pollTimer) return;

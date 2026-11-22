@@ -3287,6 +3287,8 @@ export class DigitalMeRuntime {
         getCard: () => readPublicCard(pkg.rootDir, pkg.id, pkg.identity.displayName),
         handle: (request) => this.handleIncomingCollaboration(request),
       });
+      // 重启后续跑未完成的端点/key 交接；不会新增第二套 runtime。
+      await this.relayCollab.resumeIdentityTransition();
     }
     await this.relayCollab.publishPublicCard();
     if (this.options.autonomousCollabReceive) this.relayCollab.start(800);
@@ -4857,6 +4859,21 @@ export class DigitalMeRuntime {
         connectionLabel: health.reachable && health.ok ? '已连接' : '无法连接',
       };
     }
+    if (action === 'rotateEndpoint') {
+      this.subject.requireActive();
+      await this.ensureRelaySubjectCollab();
+      if (!this.relayCollab) throw new Error('请先连接 Relay');
+      const result = await this.relayCollab.beginIdentityTransition({
+        ...(input.relayUrl ? { relayUrl: input.relayUrl } : {}),
+      });
+      return {
+        ok: true,
+        transitionId: result.transitionId,
+        transitionPhase: result.phase,
+        status: result.phase,
+        connectionLabel: result.phase === 'complete' ? '端点已轮换' : '正在安全轮换端点',
+      };
+    }
     if (action === 'createInvite') {
       const { CommIdentityStore } = await import('../subject-comm/identity-store');
       const { createInvite } = await import('../subject-comm/invite');
@@ -4926,6 +4943,8 @@ export class DigitalMeRuntime {
     if (action === 'pullRemote') {
       if (!relay) return { fetched: 0, rejected: 0 };
       const r = await relay.pullFromRelay();
+      await this.ensureRelaySubjectCollab();
+      await this.relayCollab?.drainInbox();
       await processTransportInbox(this, transport);
       return { fetched: r.fetched, rejected: r.rejected, ok: true };
     }

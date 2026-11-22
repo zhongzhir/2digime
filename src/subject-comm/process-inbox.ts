@@ -1,5 +1,5 @@
 /**
- * 统一处理收件箱：signal / signal_response / collaboration_sync / subject_collab。
+ * 统一处理收件箱：signal / signal_response / collaboration_sync / subject_collab / identity_control。
  * ACK = 通信层；不等于业务接受。
  */
 import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';

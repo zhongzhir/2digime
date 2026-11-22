@@ -12,7 +12,7 @@
 
 **任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
 
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
 
 **详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
 
@@ -38,7 +38,7 @@
 
 `docs/reference` 的两类探索只作为外部启发，不覆盖产品宪法：HackerTube 类“个人算法”落实为平台/来源只供候选、同一个 Digital Self 与当前模型完成个人选择；Second 类“长期个人上下文”落实为一个本机可拥有、可纠正、可迁移的 Digital Self，外部 Agent/Tool/Subject 只能按目的取得短期最小投影。明确不吸收全时屏幕/键盘/OS 监控、后台 Agent 群、第二份长期记忆或中心画像。
 
-2026-11-22 已完成 Slice 0 审计和 Slice 1A 开发者验证：已配对主体的公开卡使用现有 Ed25519 身份签名，绑定 Subject、Endpoint、key id 和有效期；Relay 拒绝篡改、过期、撤销 key 及错误绑定。当前实现不是标准 A2A Agent Card 或 Owner 身份证明，尚未 Owner 验收、合并、推送、打包、发布或部署。下一顺序为 Slice 1B 密钥/端点轮换闭环、Slice 1C Personal Context Contract，再进入真实机构身份联邦。
+2026-11-22 已完成 Slice 0 审计以及 Slice 1A、1B 开发者验证：已配对主体的公开卡使用现有 Ed25519 身份签名，绑定 Subject、Endpoint、key id 和有效期；同一 Relay 内的端点/key 轮换通过旧、新 key 双签交接、准备/提交确认、持久化恢复点和对端撤销记录完成闭环，重启可续跑，提交后旧 endpoint/key 的真实 Relay 密文投递被拒绝。当前实现不是标准 A2A Agent Card、Owner 身份证明或跨 Relay 迁移协议，尚未 Owner 验收、合并、推送、打包、发布或部署。下一顺序为 Slice 1C Personal Context Contract，再进入真实机构身份联邦。
 
 ### Discover 收束结论
 

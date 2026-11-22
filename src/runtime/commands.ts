@@ -959,6 +959,7 @@ export interface CommandMap {
         | 'processInbox'
         | 'health'
         | 'configureRelay'
+        | 'rotateEndpoint'
         | 'createInvite'
         | 'acceptInvite'
         | 'listPeers'
@@ -994,6 +995,8 @@ export interface CommandMap {
       reachable?: boolean;
       capabilities?: string[];
       connectionLabel?: string;
+      transitionId?: string;
+      transitionPhase?: string;
       inviteJson?: string;
       peerDisplayName?: string;
       submitted?: number;

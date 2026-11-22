@@ -5,6 +5,7 @@
 import type { SubjectRef } from '../collaboration/schema';
 import type { CollaborationEvent, CollaborationRecord } from '../collaboration/schema';
 import type { SignalPayload, SignalResponsePayload } from './signal';
+import type { SignedKeyTransition } from './key-transition';
 
 export const SUBJECT_ENVELOPE_VERSION = 1 as const;
 
@@ -12,7 +13,8 @@ export type SubjectEnvelopeKind =
   | 'signal'
   | 'signal_response'
   | 'collaboration_sync'
-  | 'subject_collab';
+  | 'subject_collab'
+  | 'identity_control';
 
 /** 传输层协作载荷种类。不是产品协作阶段。 */
 export type SubjectCollabWire = 'public_card' | 'collab_request' | 'collab_response';
@@ -23,6 +25,19 @@ export interface SubjectCollabPayload {
   card?: Record<string, unknown>;
   request?: Record<string, unknown>;
   response?: Record<string, unknown>;
+}
+
+/** 身份层交接信号；不表示业务接受、Owner 授权或协作阶段。 */
+export type IdentityControlWire =
+  | 'endpoint_key_prepare'
+  | 'endpoint_key_ready'
+  | 'endpoint_key_commit'
+  | 'endpoint_key_committed';
+
+export interface IdentityControlPayload {
+  wire: IdentityControlWire;
+  transitionId: string;
+  proof?: SignedKeyTransition;
 }
 
 /** Local 明确 trusted；远程预留字段本轮不填、不伪造。 */
@@ -46,7 +61,8 @@ export type SubjectEnvelopePayload =
   | SignalPayload
   | SignalResponsePayload
   | CollaborationSyncPayload
-  | SubjectCollabPayload;
+  | SubjectCollabPayload
+  | IdentityControlPayload;
 
 export interface SubjectEnvelope {
   /** JsonObjectStore 主键；与 envelopeId 相同 */
@@ -75,4 +91,16 @@ export function isSubjectCollabPayload(payload: unknown): payload is SubjectColl
   if (!payload || typeof payload !== 'object') return false;
   const wire = (payload as SubjectCollabPayload).wire;
   return wire === 'public_card' || wire === 'collab_request' || wire === 'collab_response';
+}
+
+export function isIdentityControlPayload(payload: unknown): payload is IdentityControlPayload {
+  if (!payload || typeof payload !== 'object') return false;
+  const value = payload as Partial<IdentityControlPayload>;
+  if (!String(value.transitionId || '').trim()) return false;
+  return (
+    value.wire === 'endpoint_key_prepare' ||
+    value.wire === 'endpoint_key_ready' ||
+    value.wire === 'endpoint_key_commit' ||
+    value.wire === 'endpoint_key_committed'
+  );
 }
