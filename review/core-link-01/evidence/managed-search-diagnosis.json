@@ -1,0 +1,9 @@
+{
+  "search": {
+    "status": "AUTH_FAILED",
+    "httpStatus": 401,
+    "kind": "auth",
+    "message": "iqs_Retrieval.PackageExhausted"
+  },
+  "geminiSearchConfigured": true
+}

@@ -1,0 +1,20 @@
+diff --git a/src/relay-service/server.ts b/src/relay-service/server.ts
+index b133bdf..325baaf 100644
+--- a/src/relay-service/server.ts
++++ b/src/relay-service/server.ts
+@@ -409,6 +409,7 @@ export function createRelayServer(options: {
+           if (!res.writableEnded) ac.abort();
+         };
+         req.once('aborted', abortIfClientGone);
++        res.once('close', abortIfClientGone);
+         try {
+           const result = await aiInference.infer({
+             body,
+@@ -419,6 +420,7 @@ export function createRelayServer(options: {
+           if (!res.headersSent) sendJson(res, result.statusCode, result.body);
+         } finally {
+           req.off('aborted', abortIfClientGone);
++          res.off('close', abortIfClientGone);
+         }
+         return;
+       }

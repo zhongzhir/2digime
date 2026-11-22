@@ -1,0 +1,52 @@
+{
+  "kind": "real managed judgment of historical candidates; no search; no live course acceptance",
+  "source": "build\\evidence\\core-link-managed\\01-discover.json",
+  "retrievedAt": null,
+  "recordedAt": "2026-10-04T11:55:31.271Z",
+  "searchCalls": 0,
+  "clientModelCalls": 1,
+  "rows": [
+    {
+      "mode": "normal",
+      "kind": "transport",
+      "at": "2026-10-06T00:54:03.499Z",
+      "status": "PAYLOAD_REJECTED",
+      "stage": "discover.judgment",
+      "requestId": "de73564b-7658-4f60-89c5-9ee599918bbc",
+      "httpStatus": 400,
+      "finishReason": null,
+      "outputLength": null,
+      "parseError": null,
+      "cancellation": null,
+      "failure": "http"
+    },
+    {
+      "mode": "normal",
+      "kind": "attempt",
+      "stage": "discover.judgment",
+      "httpStatus": 400,
+      "parseError": null,
+      "cancellation": null,
+      "failure": "http",
+      "finishReason": null,
+      "outputLength": null,
+      "pass": 1,
+      "maxTokens": 2048,
+      "disableThinking": true,
+      "ms": 168,
+      "truncated": false,
+      "textLength": 0,
+      "parsed": false,
+      "error": "http"
+    },
+    {
+      "mode": "normal",
+      "kind": "outcome",
+      "startedAt": "2026-10-06T00:54:03.331Z",
+      "ms": 169,
+      "attempts": 1,
+      "judged": 0,
+      "unjudged": 2
+    }
+  ]
+}

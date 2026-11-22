@@ -24,8 +24,10 @@ import {
   NETWORK_ITEM_VISIBILITY_PUBLIC,
   validateNetworkItem,
   type NetworkItem,
+  type NetworkItemDiscoveryVia,
 } from './network-item';
-import { catalogEndpointsFor, type OpenSourceEndpoint } from './open-source-catalog';
+import { OPEN_SOURCE_CATALOG, catalogEndpointsFor, type OpenSourceEndpoint } from './open-source-catalog';
+import { allowsDefaultSupply } from './domestic-source-boundary';
 
 export type SourceContentKind = 'article' | 'video' | 'image' | 'audio';
 
@@ -43,6 +45,8 @@ export interface OpenMediaHit {
   author?: string;
   feedUrl?: string;
   mediaExpression?: 'full' | 'sample';
+  publishedAt?: string;
+  pageKind?: 'work' | 'guide' | 'course';
 }
 
 export type OpenMediaFetch = (
@@ -130,6 +134,40 @@ function peertubeHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit
   return out;
 }
 
+function commonsPlain(value: unknown): string {
+  const raw =
+    value && typeof value === 'object' && 'value' in (value as Record<string, unknown>)
+      ? String((value as { value?: unknown }).value || '')
+      : String(value || '');
+  return clipText(
+    raw
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\[\[(?:[^|\]]+\|)?([^\]]+)\]\]/g, '$1')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' '),
+  ).trim();
+}
+
+function commonsMeta(media: Record<string, unknown>, key: string): string {
+  const ext = media.extmetadata;
+  if (!ext || typeof ext !== 'object') return '';
+  return commonsPlain((ext as Record<string, unknown>)[key]);
+}
+
+function commonsDate(raw: string): string | undefined {
+  const text = raw.trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?/);
+  if (!match) return undefined;
+  const iso = match[2] ? `${match[1]}T${match[2]}Z` : `${match[1]}T00:00:00Z`;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return undefined;
+  return new Date(ms).toISOString();
+}
+
 function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceContentKind): OpenMediaHit[] {
   const rec = data && typeof data === 'object' ? (data as { query?: { pages?: unknown } }) : null;
   const pages = rec?.query?.pages && typeof rec.query.pages === 'object' ? rec.query.pages : {};
@@ -148,21 +186,33 @@ function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceCo
     const detected = inferContentType({ mimeType: mime, mediaUrl: originalUrl || thumbUrl });
     if (kind === 'image' && detected !== 'image') continue;
     if (kind === 'video' && detected !== 'video') continue;
+    if (kind === 'audio' && detected !== 'audio') continue;
     if (/\.(djvu|pdf)(\?|$)/i.test(originalUrl || '') || /djvu|application\/pdf/i.test(mime)) continue;
     const displayUrl = thumbUrl || originalUrl || '';
     const mediaUrl = detected === 'image' ? displayUrl : originalUrl || displayUrl;
     if (!mediaUrl) continue;
     const pageUrl =
       asSafe(`https://commons.wikimedia.org/wiki/${encodeURI(String(item.title || ''))}`) || mediaUrl;
+    const objectName = commonsMeta(media, 'ObjectName');
+    const description = commonsMeta(media, 'ImageDescription');
+    const title = clipTitle(
+      objectName && objectName.toLowerCase() !== fileTitle.toLowerCase() ? objectName : fileTitle || pageUrl,
+    );
+    const snippet =
+      description && description !== title && description.toLowerCase() !== fileTitle.toLowerCase()
+        ? description.slice(0, 400)
+        : '';
+    const publishedAt = commonsDate(commonsMeta(media, 'DateTimeOriginal'));
     out.push({
-      title: clipTitle(fileTitle || pageUrl),
+      title,
       url: pageUrl,
-      contentType: detected === 'video' ? 'video' : 'image',
+      contentType: detected === 'video' ? 'video' : detected === 'audio' ? 'audio' : 'image',
       capability: endpoint.id,
       mediaUrl,
       thumbnailUrl: displayUrl,
       ...(mime ? { mimeType: mime.slice(0, 80) } : {}),
-      snippet: clipText(fileTitle).slice(0, 400),
+      ...(snippet ? { snippet } : {}),
+      ...(publishedAt ? { publishedAt } : {}),
     });
     if (out.length >= 8) break;
   }
@@ -254,26 +304,209 @@ function peertubeListUrl(endpoint: OpenSourceEndpoint, query: string): string {
   return `${originOf(endpoint.url)}/api/v1/videos?count=8&nsfw=false`;
 }
 
-function commonsListUrl(endpoint: OpenSourceEndpoint, kind: SourceContentKind, query: string): string {
-  if (!query) {
-    if (kind === 'video') {
-      return (
-        `${endpoint.url}?action=query&format=json&generator=search` +
-        `&gsrsearch=${encodeURIComponent('filetype:video')}&gsrnamespace=6&gsrlimit=8` +
-        `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
-      );
-    }
-    return (
-      `${endpoint.url}?action=query&format=json&generator=allimages&gailimit=8` +
-      `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
-    );
+type CommonsMediaKind = 'video' | 'image' | 'audio';
+type MediaWikiContinuation = Record<string, string>;
+type CommonsCursorState = Partial<Record<CommonsMediaKind, MediaWikiContinuation | null>>;
+
+const COMMONS_CURSOR_PREFIX = 'wikimedia-commons:v1:';
+
+function mediaWikiContinuation(data: unknown): MediaWikiContinuation | null {
+  if (!data || typeof data !== 'object') return null;
+  const raw = (data as { continue?: unknown }).continue;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: MediaWikiContinuation = {};
+  for (const [key, value] of Object.entries(raw).slice(0, 8)) {
+    if (!/^[a-z][a-z0-9_]{0,31}$/i.test(key)) continue;
+    if (typeof value !== 'string' && typeof value !== 'number') continue;
+    const token = String(value).replace(/[\r\n]/g, '').slice(0, 512);
+    if (token) out[key] = token;
   }
-  const gsr = kind === 'video' ? `filetype:video ${query}` : query;
-  return (
+  return Object.keys(out).length ? out : null;
+}
+
+function commonsCursorState(cursor: string | undefined): CommonsCursorState {
+  if (!cursor || !cursor.startsWith(COMMONS_CURSOR_PREFIX)) return {};
+  try {
+    const raw = JSON.parse(cursor.slice(COMMONS_CURSOR_PREFIX.length)) as unknown;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const state: CommonsCursorState = {};
+    for (const kind of ['image', 'video', 'audio'] as const) {
+      if (!Object.prototype.hasOwnProperty.call(raw, kind)) continue;
+      const value = (raw as Record<string, unknown>)[kind];
+      if (value === null) {
+        state[kind] = null;
+        continue;
+      }
+      const continuation = mediaWikiContinuation({ continue: value });
+      if (continuation) state[kind] = continuation;
+    }
+    return state;
+  } catch {
+    return {};
+  }
+}
+
+function commonsCursorForState(state: CommonsCursorState, wanted: CommonsMediaKind[]): string | null {
+  if (wanted.length && wanted.every((kind) => state[kind] === null)) return null;
+  return `${COMMONS_CURSOR_PREFIX}${JSON.stringify(state)}`;
+}
+
+function withMediaWikiContinuation(url: string, continuation?: MediaWikiContinuation): string {
+  if (!continuation) return url;
+  const parsed = new URL(url);
+  for (const [key, value] of Object.entries(continuation)) parsed.searchParams.set(key, value);
+  return parsed.toString();
+}
+
+function commonsListUrl(
+  endpoint: OpenSourceEndpoint,
+  kind: SourceContentKind,
+  query: string,
+  continuation?: MediaWikiContinuation,
+): string {
+  let url = '';
+  if (!query) {
+    if (kind === 'video' || kind === 'audio') {
+      url =
+        `${endpoint.url}?action=query&format=json&generator=search` +
+        `&gsrsearch=${encodeURIComponent(kind === 'audio' ? 'filetype:audio' : 'filetype:video')}&gsrnamespace=6&gsrlimit=8` +
+        `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`;
+    } else {
+      url =
+        `${endpoint.url}?action=query&format=json&generator=allimages&gailimit=8` +
+        `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`;
+    }
+    return withMediaWikiContinuation(url, continuation);
+  }
+  const gsr =
+    kind === 'video' ? `filetype:video ${query}` : kind === 'audio' ? `filetype:audio ${query}` : query;
+  url =
     `${endpoint.url}?action=query&format=json&generator=search` +
     `&gsrsearch=${encodeURIComponent(gsr)}&gsrnamespace=6&gsrlimit=8` +
-    `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
-  );
+    `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`;
+  return url;
+}
+
+const ARCHIVE_CURSOR_PREFIX = 'internet-archive:page:';
+
+function archivePageFromCursor(cursor: string | undefined): number {
+  if (!cursor || !cursor.startsWith(ARCHIVE_CURSOR_PREFIX)) return 1;
+  const page = Number(cursor.slice(ARCHIVE_CURSOR_PREFIX.length));
+  return Number.isSafeInteger(page) && page >= 1 && page <= 10_000 ? page : 1;
+}
+
+function archiveCursorForPage(page: number): string {
+  return `${ARCHIVE_CURSOR_PREFIX}${page}`;
+}
+
+function archiveSearchUrl(
+  endpoint: OpenSourceEndpoint,
+  kind: 'audio' | 'video',
+  query: string,
+  page = 1,
+): string {
+  const mediatype = kind === 'video' ? 'movies' : 'audio';
+  const q = query ? `${query} AND mediatype:${mediatype}` : `mediatype:${mediatype}`;
+  return `${endpoint.url}?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&output=json&rows=4&page=${page}`;
+}
+
+function archiveDownloadUrl(identifier: string, name: string): string | undefined {
+  const id = encodeURIComponent(identifier);
+  const filePath = name
+    .split('/')
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  if (!filePath) return undefined;
+  return asSafe(`https://archive.org/download/${id}/${filePath}`);
+}
+
+function pickArchiveFile(files: unknown, kind: 'audio' | 'video'): string | undefined {
+  if (!Array.isArray(files)) return undefined;
+  const wanted = kind === 'audio' ? /\.(mp3|ogg|opus|m4a|wav|flac)$/i : /\.(mp4|webm|ogv|m4v)$/i;
+  for (const row of files) {
+    if (!row || typeof row !== 'object') continue;
+    const name = String((row as { name?: unknown }).name || '');
+    if (!wanted.test(name)) continue;
+    if (/thumb|\.torrent$|_files\.xml/i.test(name)) continue;
+    return name;
+  }
+  return undefined;
+}
+
+async function archiveHits(
+  endpoint: OpenSourceEndpoint,
+  fetchImpl: OpenMediaFetch,
+  kind: 'audio' | 'video',
+  query: string,
+  page = 1,
+): Promise<{ hits: OpenMediaHit[]; documentCount: number }> {
+  const data = await readJson(fetchImpl, archiveSearchUrl(endpoint, kind, query, page));
+  const response = data && typeof data === 'object' ? (data as { response?: { docs?: unknown } }).response : null;
+  const docs = response && Array.isArray(response.docs) ? response.docs : [];
+  const out: OpenMediaHit[] = [];
+  for (const row of docs) {
+    if (!row || typeof row !== 'object') continue;
+    const doc = row as { identifier?: unknown; title?: unknown };
+    const identifier = String(doc.identifier || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,180}$/.test(identifier)) continue;
+    const meta = await readJson(fetchImpl, `https://archive.org/metadata/${encodeURIComponent(identifier)}`);
+    const record = meta && typeof meta === 'object' ? (meta as { metadata?: unknown; files?: unknown }) : {};
+    const metadata = record.metadata && typeof record.metadata === 'object' ? (record.metadata as Record<string, unknown>) : {};
+    if (metadata['access-restricted-item'] === true || metadata['access-restricted-item'] === 'true') continue;
+    const fileName = pickArchiveFile(record.files, kind);
+    const mediaUrl = fileName ? archiveDownloadUrl(identifier, fileName) : undefined;
+    if (!mediaUrl) continue;
+    const title = clipTitle(String(doc.title || metadata.title || identifier));
+    if (!title) continue;
+    const page = asSafe(`https://archive.org/details/${encodeURIComponent(identifier)}`) || mediaUrl;
+    out.push({
+      title,
+      url: page,
+      contentType: kind,
+      capability: endpoint.id,
+      mediaUrl,
+      snippet: clipText(String(metadata.description || title)).slice(0, 400),
+    });
+    if (out.length >= 4) break;
+  }
+  return { hits: out, documentCount: docs.length };
+}
+
+export interface OpenSourceAttempt {
+  sourceId: string;
+  ok: boolean;
+  itemCount: number;
+  /** Opaque source-protocol continuation. Present only for stable, query-independent catalog streams. */
+  cursor?: string | null;
+  errorCode?: string;
+}
+
+function sourceErrorCode(error: unknown): string {
+  const code = error && typeof error === 'object' ? String((error as { code?: unknown }).code || '') : '';
+  return /^[A-Za-z0-9_.-]{1,80}$/.test(code) ? code.toLowerCase() : 'source_error';
+}
+
+function roundRobinHits(groups: OpenMediaHit[][]): OpenMediaHit[] {
+  const out: OpenMediaHit[] = [];
+  const cursors = groups.map(() => 0);
+  while (true) {
+    let added = false;
+    for (let index = 0; index < groups.length; index += 1) {
+      const cursor = cursors[index] || 0;
+      const hit = groups[index]?.[cursor];
+      if (!hit) continue;
+      cursors[index] = cursor + 1;
+      out.push(hit);
+      added = true;
+    }
+    if (!added) return out;
+  }
+}
+
+function rotateMediaExpressions(hits: OpenMediaHit[]): OpenMediaHit[] {
+  const order: SourceContentKind[] = ['image', 'video', 'audio', 'article'];
+  return roundRobinHits(order.map((kind) => hits.filter((hit) => hit.contentType === kind)));
 }
 
 export async function searchOpenMedia(input: {
@@ -281,6 +514,8 @@ export async function searchOpenMedia(input: {
   kinds: SourceContentKind[];
   fetchImpl?: OpenMediaFetch;
   endpoints?: OpenSourceEndpoint[];
+  cursorBySourceId?: Readonly<Record<string, string>>;
+  onSourceAttempt?: (attempt: OpenSourceAttempt) => void;
 }): Promise<OpenMediaHit[]> {
   const query = String(input.query || '').trim();
   const kinds = input.kinds.filter(
@@ -289,30 +524,33 @@ export async function searchOpenMedia(input: {
   if (!kinds.length) return [];
   const fetchImpl = input.fetchImpl || safePublicHttpGet;
   const endpoints = input.endpoints || catalogEndpointsFor(kinds);
-  const out: OpenMediaHit[] = [];
-  const seen = new Set<string>();
-  for (const endpoint of endpoints) {
-    const wanted = endpoint.contentTypes.filter((type) => kinds.includes(type));
-    if (!wanted.length) continue;
-    try {
-      if (endpoint.kind === 'peertube_search' && wanted.includes('video')) {
+  const batches = await Promise.all(
+    endpoints.map(async (endpoint) => {
+      const wanted = endpoint.contentTypes.filter((type) => kinds.includes(type));
+      const found: OpenMediaHit[] = [];
+      let nextCursor: string | null | undefined;
+      if (!wanted.length) return found;
+      try {
+        if (endpoint.kind === 'peertube_search' && wanted.includes('video')) {
         const hits = peertubeHits(endpoint, await readJson(fetchImpl, peertubeListUrl(endpoint, query)));
-        for (const hit of hits) {
-          if (seen.has(hit.url)) continue;
-          seen.add(hit.url);
-          out.push(hit);
-        }
+        for (const hit of hits) found.push(hit);
       } else if (endpoint.kind === 'wikimedia_commons') {
-        for (const kind of wanted) {
-          const hits = commonsHits(endpoint, await readJson(fetchImpl, commonsListUrl(endpoint, kind, query)), kind);
-          for (const hit of hits) {
-            if (seen.has(hit.url)) continue;
-            seen.add(hit.url);
-            out.push(hit);
-          }
+        const mediaKinds = wanted.filter((kind): kind is CommonsMediaKind => kind !== 'article');
+        const previous = query ? {} : commonsCursorState(input.cursorBySourceId?.[endpoint.id]);
+        const next: CommonsCursorState = { ...previous };
+        for (const kind of mediaKinds) {
+          if (!query && Object.prototype.hasOwnProperty.call(previous, kind) && previous[kind] === null) continue;
+          const data = await readJson(
+            fetchImpl,
+            commonsListUrl(endpoint, kind, query, query ? undefined : previous[kind] || undefined),
+          );
+          const hits = commonsHits(endpoint, data, kind);
+          for (const hit of hits) found.push(hit);
+          if (!query) next[kind] = mediaWikiContinuation(data);
         }
+        if (!query) nextCursor = commonsCursorForState(next, mediaKinds);
       } else if (endpoint.kind === 'itunes_podcast' && wanted.includes('audio')) {
-        if (!query) continue;
+        if (!query) return found;
         const episodeUrl =
           `${endpoint.url}?term=${encodeURIComponent(query)}&media=podcast&entity=podcastEpisode&limit=8`;
         const podcastUrl =
@@ -321,26 +559,54 @@ export async function searchOpenMedia(input: {
           ...itunesHits(endpoint, await readJson(fetchImpl, episodeUrl)),
           ...itunesHits(endpoint, await readJson(fetchImpl, podcastUrl)),
         ];
-        for (const hit of hits) {
-          const key = hit.feedUrl || hit.url;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push(hit);
-        }
+        for (const hit of hits) found.push(hit);
       } else if (endpoint.kind === 'itunes_rss' && wanted.includes('audio')) {
         const hits = itunesTopHits(endpoint, await readJson(fetchImpl, endpoint.url));
-        for (const hit of hits) {
-          if (seen.has(hit.url)) continue;
-          seen.add(hit.url);
-          out.push(hit);
+        for (const hit of hits) found.push(hit);
+      } else if (endpoint.kind === 'internet_archive') {
+        // Search-query cursors are not source-level facts. Only the query-independent catalog walk
+        // may resume from Source Portfolio on the next background ingestion.
+        const page = query ? 1 : archivePageFromCursor(input.cursorBySourceId?.[endpoint.id]);
+        let documentCount = 0;
+        for (const kind of wanted) {
+          if (kind !== 'audio' && kind !== 'video') continue;
+          const batch = await archiveHits(endpoint, fetchImpl, kind, query, page);
+          documentCount += batch.documentCount;
+          for (const hit of batch.hits) found.push(hit);
         }
+        if (!query) nextCursor = documentCount > 0 ? archiveCursorForPage(page + 1) : null;
       }
-    } catch {
+      input.onSourceAttempt?.({
+        sourceId: endpoint.id,
+        ok: true,
+        itemCount: found.length,
+        ...(nextCursor !== undefined ? { cursor: nextCursor } : {}),
+      });
+    } catch (error) {
+      input.onSourceAttempt?.({
+        sourceId: endpoint.id,
+        ok: false,
+        itemCount: 0,
+        errorCode: sourceErrorCode(error),
+      });
       /* 单个开放来源失败不阻断其它来源 */
     }
-    if (out.length >= 16) break;
+    return found;
+    }),
+  );
+  const out: OpenMediaHit[] = [];
+  const seen = new Set<string>();
+  const rotated = roundRobinHits(batches.map(rotateMediaExpressions));
+  for (const hit of rotated) {
+    const key = hit.feedUrl || hit.url;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hit);
   }
-  return out.slice(0, 16);
+  const playableFirst = [...out]
+    .filter((hit) => allowsDefaultSupply({ url: hit.url, publisher: hit.author }))
+    .sort((a, b) => Number(Boolean(b.mediaUrl)) - Number(Boolean(a.mediaUrl)));
+  return playableFirst.slice(0, query ? 16 : 24);
 }
 
 /** 无用户查询时列出开放目录样本。不是按人排序，也不从 Digital Self 抽关键词。 */
@@ -348,22 +614,31 @@ export async function listOpenCatalog(input: {
   kinds?: SourceContentKind[];
   fetchImpl?: OpenMediaFetch;
   endpoints?: OpenSourceEndpoint[];
+  cursorBySourceId?: Readonly<Record<string, string>>;
+  onSourceAttempt?: (attempt: OpenSourceAttempt) => void;
 } = {}): Promise<OpenMediaHit[]> {
   return searchOpenMedia({
     query: '',
     kinds: input.kinds && input.kinds.length ? input.kinds : ['video', 'image', 'audio'],
     ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
     ...(input.endpoints ? { endpoints: input.endpoints } : {}),
+    ...(input.cursorBySourceId ? { cursorBySourceId: input.cursorBySourceId } : {}),
+    ...(input.onSourceAttempt ? { onSourceAttempt: input.onSourceAttempt } : {}),
   });
 }
 
-export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): NetworkItem | null {
+export function networkItemFromOpenHit(
+  hit: OpenMediaHit,
+  now?: string,
+  via: NetworkItemDiscoveryVia = 'search',
+): NetworkItem | null {
   let canonical = '';
   try {
     canonical = normalizeCanonicalUrl(hit.url);
   } catch {
     return null;
   }
+  if (!allowsDefaultSupply({ url: canonical, publisher: hit.author })) return null;
   const createdAt = now || NOW_FALLBACK();
   const contentType = hit.contentType as NetworkContentType;
   const media = {
@@ -374,6 +649,7 @@ export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): Network
     ...(hit.mimeType ? { mimeType: hit.mimeType } : {}),
     ...(hit.durationSeconds != null ? { durationSeconds: hit.durationSeconds } : {}),
     ...(hit.author ? { author: hit.author } : {}),
+    ...(hit.publishedAt ? { publishedAt: hit.publishedAt } : {}),
     ...(hit.mediaExpression ? { mediaExpression: hit.mediaExpression } : {}),
     access: 'public' as const,
     consumption: consumptionFor({
@@ -390,10 +666,14 @@ export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): Network
       return hit.capability;
     }
   })();
+  const sourceEndpoint = OPEN_SOURCE_CATALOG.find((endpoint) => endpoint.id === hit.capability);
+  const sourceIdentity = sourceEndpoint ? normalizeCanonicalUrl(sourceEndpoint.url) : `open-capability:${hit.capability}`;
   const checked = validateNetworkItem({
     schemaVersion: NETWORK_ITEM_SCHEMA_VERSION,
     itemId: contentItemId(canonical),
-    publisherSubjectId: sourcePublisherId(canonical),
+    // 来源身份属于端点/供应者，不属于每一条内容 URL；否则每条内容都会伪装成一个新来源，
+    // 来源轮转、健康度和“屏蔽来源”都会失真。
+    publisherSubjectId: sourcePublisherId(sourceIdentity),
     publisherDisplayName: clipTitle(host).slice(0, 80) || 'Open source',
     kind: NETWORK_ITEM_KIND_CONTENT,
     createdAt,
@@ -409,10 +689,137 @@ export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): Network
       actor: 'owner',
       statedAt: createdAt,
       excerpt: clipText(hit.snippet || hit.title).slice(0, 400),
-      via: 'search',
+      via,
     },
   });
   return checked.ok ? checked.item : null;
+}
+
+function bangumiPage(id: unknown): string {
+  const num = Number(id);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  return `https://bgm.tv/subject/${Math.trunc(num)}`;
+}
+
+function bangumiHits(endpoint: OpenSourceEndpoint, data: unknown, limit = 8): OpenMediaHit[] {
+  const rows: unknown[] = [];
+  if (Array.isArray(data)) {
+    for (const day of data) {
+      const items = day && typeof day === 'object' ? (day as { items?: unknown }).items : null;
+      if (Array.isArray(items)) rows.push(...items);
+    }
+  } else if (data && typeof data === 'object') {
+    const list = (data as { list?: unknown }).list;
+    if (Array.isArray(list)) rows.push(...list);
+  }
+  const out: OpenMediaHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const url = asSafe(bangumiPage(item.id)) || asSafe(String(item.url || '').replace(/^http:\/\//, 'https://'));
+    if (!url) continue;
+    const title = clipTitle(String(item.name_cn || item.name || url));
+    if (!title) continue;
+    const snippet = clipText(String(item.summary || item.name || title)).slice(0, 400);
+    out.push({
+      title,
+      url,
+      contentType: 'article',
+      capability: endpoint.id,
+      snippet,
+      pageKind: 'work',
+      author: 'Bangumi',
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function wikivoyageHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit[] {
+  const rec = data && typeof data === 'object' ? (data as { query?: { search?: unknown } }) : null;
+  const rows = rec?.query?.search && Array.isArray(rec.query.search) ? rec.query.search : [];
+  const out: OpenMediaHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const title = clipTitle(String(item.title || ''));
+    if (!title) continue;
+    const url = asSafe(`https://zh.wikivoyage.org/wiki/${encodeURI(title)}`);
+    if (!url) continue;
+    out.push({
+      title,
+      url,
+      contentType: 'article',
+      capability: endpoint.id,
+      snippet: clipText(String(item.snippet || `${title} 旅行攻略`).replace(/<[^>]+>/g, ' ')).slice(0, 400),
+      pageKind: 'guide',
+      author: '维基导游',
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/** 具体作品 / 攻略页。不是自建搜索，只调用已有开放 API。 */
+export async function searchOpenWorks(input: {
+  query?: string;
+  fetchImpl?: OpenMediaFetch;
+  endpoints?: OpenSourceEndpoint[];
+  onSourceAttempt?: (attempt: OpenSourceAttempt) => void;
+} = {}): Promise<OpenMediaHit[]> {
+  const query = String(input.query || '').trim();
+  const fetchImpl = input.fetchImpl || safePublicHttpGet;
+  const endpoints = (input.endpoints || catalogEndpointsFor(['article'])).filter(
+    (row) => row.kind === 'bangumi_api' || row.kind === 'wikivoyage',
+  );
+  const batches = await Promise.all(
+    endpoints.map(async (endpoint) => {
+      try {
+        if (endpoint.kind === 'bangumi_api') {
+          if (!query && /calendar/i.test(endpoint.url)) {
+            const hits = bangumiHits(endpoint, await readJson(fetchImpl, endpoint.url), 10);
+            input.onSourceAttempt?.({ sourceId: endpoint.id, ok: true, itemCount: hits.length });
+            return hits;
+          }
+          if (query && /search\/subject/i.test(endpoint.url)) {
+            const hits = bangumiHits(
+              endpoint,
+              await readJson(fetchImpl, `${endpoint.url}/${encodeURIComponent(query)}?responseGroup=small`),
+              8,
+            );
+            input.onSourceAttempt?.({ sourceId: endpoint.id, ok: true, itemCount: hits.length });
+            return hits;
+          }
+          input.onSourceAttempt?.({ sourceId: endpoint.id, ok: true, itemCount: 0 });
+          return [];
+        }
+        if (endpoint.kind === 'wikivoyage' && query) {
+          const url = `${endpoint.url}?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=8&format=json`;
+          const hits = wikivoyageHits(endpoint, await readJson(fetchImpl, url));
+          input.onSourceAttempt?.({ sourceId: endpoint.id, ok: true, itemCount: hits.length });
+          return hits;
+        }
+        input.onSourceAttempt?.({ sourceId: endpoint.id, ok: true, itemCount: 0 });
+      } catch (error) {
+        input.onSourceAttempt?.({
+          sourceId: endpoint.id,
+          ok: false,
+          itemCount: 0,
+          errorCode: sourceErrorCode(error),
+        });
+        return [];
+      }
+      return [];
+    }),
+  );
+  const out: OpenMediaHit[] = [];
+  const seen = new Set<string>();
+  for (const hit of batches.flat()) {
+    if (seen.has(hit.url) || !allowsDefaultSupply({ url: hit.url, publisher: hit.author })) continue;
+    seen.add(hit.url);
+    out.push(hit);
+  }
+  return out.slice(0, 16);
 }
 
 export function catalogFeedUrls(kinds: string[]): string[] {

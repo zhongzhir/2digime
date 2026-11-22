@@ -131,4 +131,160 @@ test('UI empty copy is projected from notice, not a hardcoded Settings lie', asy
   assert.equal(js.includes('目前还没有可展示的内容'), false);
   assert.equal(html.includes('目前还没有可展示的内容'), false);
   assert.match(js, /resetRecent/);
+  assert.match(html, /data-discover-section="sources"/);
+  assert.match(html, /id="content-source-add-form"/);
+  assert.match(js, /action: 'sourceList'/);
+  assert.match(js, /action: 'sourceAdd'/);
+  assert.match(js, /action: 'sourceToggle'/);
+});
+
+test('content source management lists and reversibly toggles the same portfolio', async () => {
+  const pkgDir = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'dm-source-management-')), 'pkg');
+  const runtime = createDigitalMeRuntime({ registerOpenAiStub: false, searchCapability: false });
+  try {
+    const bus = createCommandBus(runtime);
+    await bus.invoke('subject.createPackage', { displayName: '来源管理', targetDir: pkgDir });
+    const listed = await bus.invoke('content', { action: 'sourceList' });
+    assert.ok((listed.sources || []).length >= 10);
+    const first = listed.sources![0]!;
+
+    const disabled = await bus.invoke('content', {
+      action: 'sourceToggle',
+      sourceId: first.id,
+      enabled: false,
+    });
+    assert.equal(disabled.sources?.find((row) => row.id === first.id)?.enabled, false);
+    assert.match(String(disabled.sourceNotice || ''), /已停用/);
+
+    const enabled = await bus.invoke('content', {
+      action: 'sourceToggle',
+      sourceId: first.id,
+      enabled: true,
+    });
+    assert.equal(enabled.sources?.find((row) => row.id === first.id)?.enabled, true);
+    assert.match(String(enabled.sourceNotice || ''), /已启用/);
+
+    const rejected = await bus.invoke('content', {
+      action: 'sourceAdd',
+      url: 'http://example.com/feed.xml',
+      title: '不安全来源',
+    });
+    assert.match(String(rejected.sourceNotice || ''), /HTTPS/);
+    assert.equal(rejected.sources?.some((row) => row.label === '不安全来源'), false);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test('a low personal-feed queue schedules neutral supply prefetch without replacing the visible page', async () => {
+  const pkgDir = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'dm-low-water-runtime-')), 'pkg');
+  let searchCalls = 0;
+  let signalSearch!: () => void;
+  const searchStarted = new Promise<void>((resolve) => {
+    signalSearch = resolve;
+  });
+  const runtime = createDigitalMeRuntime({
+    registerOpenAiStub: false,
+    searchCapability: false,
+    contentChat: showAllChat(),
+    contentSearch: async () => {
+      searchCalls += 1;
+      signalSearch();
+      return [];
+    },
+  });
+  try {
+    const bus = createCommandBus(runtime);
+    await bus.invoke('subject.createPackage', { displayName: '低水位补量', targetDir: pkgDir });
+    const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));
+    for (const item of FEED_01_SEED_ITEMS.slice(0, 18)) await store.put(item);
+
+    const opened = await bus.invoke('content', { action: 'discover', searchGenerationId: 'sg_low_water' });
+    assert.equal(opened.view.cards.length, 12);
+    assert.equal(opened.view.replenishing, undefined);
+    const visibleIds = opened.view.cards.map((card) => card.itemId);
+    await Promise.race([
+      searchStarted,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('low-water prefetch did not start')), 2_000)),
+    ]);
+    assert.equal(searchCalls, 1);
+
+    const reused = await bus.invoke('content', { action: 'asked', itemId: visibleIds[0]! });
+    assert.deepEqual(reused.view.cards.map((card) => card.itemId), visibleIds);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test('background personal preselection joins the only feed queue after the current queue is exhausted', async () => {
+  const pkgDir = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prefetched-ranking-')), 'pkg');
+  const delegate = showAllChat();
+  let selectionCalls = 0;
+  let backgroundSelectionCalls = 0;
+  let searchCalls = 0;
+  const runtime = createDigitalMeRuntime({
+    registerOpenAiStub: false,
+    searchCapability: false,
+    contentChat: async (input) => {
+      const blob = input.messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('给这些公开候选排序')) {
+        selectionCalls += 1;
+        if (blob.includes('后台候选')) backgroundSelectionCalls += 1;
+      }
+      return delegate(input);
+    },
+    contentSearch: async () => {
+      searchCalls += 1;
+      return Array.from({ length: 6 }, (_, index) => ({
+        title: `后台候选 ${index + 1}`,
+        url: `https://prefetch-${index + 1}.example.org/articles/${index + 1}`,
+        snippet: `这是后台补入并等待 Digital Self 选择的公开候选 ${index + 1}。`,
+      }));
+    },
+  });
+  try {
+    const bus = createCommandBus(runtime);
+    await bus.invoke('subject.createPackage', { displayName: '后台个人预排序', targetDir: pkgDir });
+    const overview = await bus.invoke('subject.getOverview', {});
+    await writeDigitalSelf(pkgDir, selfOf(overview.subjectId));
+    const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));
+    for (const item of FEED_01_SEED_ITEMS.slice(0, 18)) await store.put(item);
+
+    const first = await bus.invoke('content', { action: 'discover', searchGenerationId: 'sg_prefetched_ranking' });
+    assert.equal(first.view.cards.length, 12);
+    const delivered = new Set(first.view.cards.map((card) => card.itemId));
+
+    let prefetchedMore: typeof first | null = null;
+    const readyDeadline = Date.now() + 5_000;
+    while (Date.now() < readyDeadline) {
+      const more = await bus.invoke('content', { action: 'more' });
+      if (more.view.cards.some((card) => /^后台候选 /.test(card.title))) {
+        prefetchedMore = more;
+        break;
+      }
+      if (!more.view.cards.length && more.view.replenishing) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        continue;
+      }
+      assert.ok(more.view.cards.length >= 1, 'the existing ranked queue must drain before the prefetched page');
+      for (const card of more.view.cards) {
+        assert.equal(delivered.has(card.itemId), false, 'existing queue pages must not repeat delivered cards');
+        delivered.add(card.itemId);
+      }
+    }
+
+    assert.ok(prefetchedMore, 'the background personal-selection package must join after the existing queue');
+    assert.equal(prefetchedMore.view.append, true);
+    assert.equal(prefetchedMore.view.cards.filter((card) => /^后台候选 /.test(card.title)).length, 6);
+    assert.deepEqual(
+      prefetchedMore.view.cards.filter((card) => delivered.has(card.itemId)).map((card) => card.itemId),
+      [],
+      'the prefetched page must not repeat any delivered item',
+    );
+    assert.ok(selectionCalls >= 1, 'personal candidates must use Digital Self selection');
+    assert.ok(backgroundSelectionCalls >= 1, 'background candidates must be selected before they join the feed queue');
+    assert.ok(searchCalls >= 1, 'low-water background work must obtain new neutral supply');
+  } finally {
+    await runtime.stop();
+  }
 });

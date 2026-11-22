@@ -2,9 +2,35 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-09-14（PUBLIC-ALPHA-CONTENT-RELEASE-01 进行中；前序 CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 已 ACCEPTED。下文 2026-09-12 及更早条目仍为历史）
+最后更新：2026-10-04（Discover QUALITY-09 已提交并打包 `8d888b09`。暂停扩来源和连续打包，转入使用反馈观察，见 `docs/reviews/使用反馈-5.md`。产品试用基线仍是 `230cfc6`。仍是限定试用接受，不是质量通过，不是 95 分位达标。未 push、未发布。）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
+
+## 当前状态 / Discover 限定试用（2026-10-04）
+
+- 裁定：`DISCOVER_PERSONAL_FEED_LIMITED_TRIAL_ACCEPTED`
+- 关联试用版本：产品提交 `230cfc6`；打包目录 `release-staging/v2-tujimi-20261003T111446Z-230cfc69`
+- 工作区：`D:\Projects\dm-discover-personal-feed-01` / `build/discover-personal-feed-01`
+- **只接受这次隔离试用范围内的 Discover 节目搜索与入口核实。** 不得写成 `DISCOVER_PERSONAL_FEED_ACCEPTED`、全部产品验收通过、或市场 95 分位达标。
+- 未 push、未发布。
+- 当前工程线：产品提交 `8d888b0`；试用包 `release-staging/v2-tujimi-20261004T081507Z-8d888b09`。QUALITY-08 / `fbe30f41` 不再作为合并候选（该包只有课程 / 撤销 / 默认流）。
+- Owner 已令：暂停扩来源和连续打包。转入使用反馈驱动的改善，见 `docs/reviews/使用反馈-5.md`。后续重点观察，不预写成已通过：
+  1. 推荐调整是否持续带来符合用户关注点的新内容
+  2. 课程、节目等具体对象与入口是否准确
+  3. 浏览是否丰富、顺畅，避免重复和单一来源占满
+- 已完成批次（不再当下一步施工面）：
+  1. 卡片排版 — 已做（`65ae831`）
+  2. 信息来源 + 行为闭环 — 见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`
+  3. 大众供给 + 调整推荐 — 见 `docs/audits/DISCOVER-ADJUST-03.md`；交付修复见 `DISCOVER-DELIVERY-04.md`
+  4. 信息质量 — QUALITY-05 至 QUALITY-09。当前试用包 `8d888b09`，审计见 `docs/audits/DISCOVER-QUALITY-09.md`
+  5. 运行可靠性（配额、取消、迟写、CASE R3）— 继续跟踪，不单独开一轮施工
+
+已知仍开放的缺陷（限定试用接受时一并记下，不是已修好）：
+
+- 托管搜索无剩余额度查询；缓存命中仍计次；安装默认 30 次/小时
+- 节目主结果仍偏少（模型把不少播放页标 `unverified`）
+- 全量套件相对 `6d55579` 多 1 条：`CASE R3` 真实文档 Do（复跑仍失败，原因未定）
+- Discover 子集仍有 4 条陈旧失败 + 基线已有的 Electron「使用反馈（2）」对话项
 
 ## 当前状态 / 最新里程碑（2026-09-11）
 

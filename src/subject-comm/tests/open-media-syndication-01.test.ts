@@ -137,6 +137,20 @@ function selfOf(): DigitalSelf {
   };
 }
 
+test('PeerTube default audio/mp4 rendition does not replace the video enclosure', () => {
+  const rss = `<?xml version="1.0"?><rss version="2.0"><channel><title>Videos</title>
+<item>
+  <title>Flyby</title>
+  <link>https://framatube.org/w/abc</link>
+  <description>A video page.</description>
+  <enclosure url="https://framatube.org/download/videos/generate/abc" type="video/mp4" length="100"/>
+  <media:content url="https://cdn.example.org/audio-only.mp4" type="audio/mp4" medium="video" height="0" isDefault="true" duration="15"/>
+</item></channel></rss>`;
+  const media = parseFeed(rss).items[0]?.media;
+  assert.equal(media?.contentType, 'video');
+  assert.equal(media?.mediaUrl, 'https://framatube.org/download/videos/generate/abc');
+});
+
 test('RSS ENCLOSURE: audio/video/image MIME become contentType; missing type stays unknown; unsafe URL dropped', async () => {
   const audio = parseFeed(AUDIO_RSS).items[0]!;
   assert.equal(audio.media?.contentType, 'audio');

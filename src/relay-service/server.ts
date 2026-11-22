@@ -22,7 +22,13 @@ import {
 import { createAliyunIqsWebDiscoveryProvider } from '../capability/adapters/aliyun-iqs-web-discovery';
 import { createAliyunOpenSearchWebDiscoveryProvider } from '../capability/adapters/aliyun-opensearch-web-discovery';
 import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
-import { webDiscoveryProviderFromConnector } from '../capability/web-discovery';
+import {
+  WebDiscoveryError,
+  webDiscoveryProviderFromConnector,
+  type WebDiscoveryProvider,
+  type WebDiscoverySearchInput,
+  type WebDiscoveryHit,
+} from '../capability/web-discovery';
 import { createWebDiscoveryGateway } from './web-discovery-gateway';
 import { createFileAiAllowanceStore } from './ai-allowance';
 import { createManagedAiGateway } from './ai-inference-gateway';
@@ -253,6 +259,8 @@ export function resolveManagedAiGateway(
     maxInputChars: Number.isFinite(maxInputChars) ? maxInputChars : 100_000,
     concurrency: Number.isFinite(concurrency) ? concurrency : 8,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 90_000,
+    ...(env.MANAGED_AI_STRUCTURED_THINKING === 'disabled' ? { structuredThinking: { type: 'disabled' as const } } : {}),
+    ...(env.MANAGED_AI_TOOL_THINKING === 'disabled' ? { toolThinking: { type: 'disabled' as const } } : {}),
     log: logSafe,
   });
 }
@@ -261,8 +269,56 @@ function emptyManagedGateway(): ReturnType<typeof createWebDiscoveryGateway> {
   return createWebDiscoveryGateway({ log: logSafe });
 }
 
+/**
+ * Provider failover stays entirely inside the Relay. The app still consumes one
+ * WEB_DISCOVERY capability, and no provider is allowed to rank for a person.
+ */
+export function createFailoverWebDiscoveryProvider(
+  providers: WebDiscoveryProvider[],
+  log: (event: string, fields: Record<string, string | number | boolean | undefined>) => void = logSafe,
+): WebDiscoveryProvider {
+  const chain = providers.filter((provider, index, rows) =>
+    !!provider && rows.findIndex((row) => row.id === provider.id) === index,
+  );
+  if (!chain.length) {
+    throw new WebDiscoveryError('TEMPORARY_UNAVAILABLE', 'MANAGED_PROVIDER_SECRET_REQUIRED', 503);
+  }
+  return {
+    id: chain.length === 1 ? chain[0]!.id : 'managed-failover',
+    async search(input: WebDiscoverySearchInput): Promise<WebDiscoveryHit[]> {
+      let lastError: unknown = new WebDiscoveryError(
+        'TEMPORARY_UNAVAILABLE',
+        'MANAGED_PROVIDER_SECRET_REQUIRED',
+        503,
+      );
+      for (let index = 0; index < chain.length; index += 1) {
+        const provider = chain[index]!;
+        try {
+          const hits = await provider.search(input);
+          if (index > 0) {
+            log('web_discovery_failover_ok', { provider: provider.id, attempt: index + 1 });
+          }
+          return hits;
+        } catch (err) {
+          lastError = err;
+          const typed = err as { status?: string; httpStatus?: number };
+          log('web_discovery_failover', {
+            provider: provider.id,
+            attempt: index + 1,
+            status: String(typed.status || 'PROVIDER_ERROR').slice(0, 40),
+            httpStatus: Number.isFinite(Number(typed.httpStatus)) ? Number(typed.httpStatus) : undefined,
+            hasNext: index + 1 < chain.length,
+          });
+        }
+      }
+      throw lastError;
+    },
+  };
+}
+
 export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = process.env) {
   const providerId = managedWebDiscoveryProviderId(env);
+  const providers: WebDiscoveryProvider[] = [];
   if (providerId === 'aliyun-opensearch' || providerId === 'aliyun' || providerId === 'opensearch') {
     const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || '').trim();
     const endpoint = String(env.WEB_DISCOVERY_PROVIDER_ENDPOINT || '').trim();
@@ -270,24 +326,19 @@ export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = proce
     const serviceId = String(env.WEB_DISCOVERY_PROVIDER_SERVICE_ID || '').trim();
     if (!apiKey || !endpoint) {
       logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_ENDPOINT_REQUIRED' });
-      return emptyManagedGateway();
-    }
-    try {
-      return createWebDiscoveryGateway({
-        provider: createAliyunOpenSearchWebDiscoveryProvider({
+    } else {
+      try {
+        providers.push(createAliyunOpenSearchWebDiscoveryProvider({
           apiKey,
           endpoint,
           ...(workspace ? { workspace } : {}),
           ...(serviceId ? { serviceId } : {}),
-        }),
-        log: logSafe,
-      });
-    } catch {
-      logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
-      return emptyManagedGateway();
+        }));
+      } catch {
+        logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
+      }
     }
-  }
-  if (
+  } else if (
     providerId === 'aliyun-iqs' ||
     providerId === 'iqs' ||
     providerId === 'iqs-unified' ||
@@ -296,32 +347,45 @@ export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = proce
     const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || '').trim();
     if (!apiKey) {
       logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_SECRET_REQUIRED' });
-      return emptyManagedGateway();
-    }
-    const endpoint = String(env.WEB_DISCOVERY_PROVIDER_ENDPOINT || '').trim();
-    try {
-      return createWebDiscoveryGateway({
-        provider: createAliyunIqsWebDiscoveryProvider({
+    } else {
+      const endpoint = String(env.WEB_DISCOVERY_PROVIDER_ENDPOINT || '').trim();
+      const configuredEngine = String(env.WEB_DISCOVERY_IQS_ENGINE_TYPE || '').trim();
+      const engineType =
+        configuredEngine === 'CNLiteBasic' || configuredEngine === 'CNAuto' || configuredEngine === 'Generic'
+          ? configuredEngine
+          : undefined;
+      try {
+        providers.push(createAliyunIqsWebDiscoveryProvider({
           apiKey,
           ...(endpoint ? { endpoint } : {}),
+          ...(engineType ? { engineType } : {}),
           log: logSafe,
-        }),
-        log: logSafe,
-      });
-    } catch {
-      logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
-      return emptyManagedGateway();
+        }));
+      } catch {
+        logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
+      }
     }
   }
-  const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || env.GEMINI_API_KEY || '').trim();
-  if (!apiKey) return emptyManagedGateway();
-  const model = String(env.WEB_DISCOVERY_PROVIDER_MODEL || env.GEMINI_SEARCH_MODEL || env.GEMINI_MODEL || '').trim();
-  const connector = createGeminiSearchConnector({
-    apiKey,
-    ...(model ? { model } : {}),
-  });
+
+  // GEMINI_API_KEY is an independent server-side credential. When IQS/OpenSearch
+  // is primary it becomes a mature-provider fallback; when Gemini is primary it
+  // remains the only provider. No secret or provider choice crosses into the app.
+  const geminiApiKey = String(
+    providerId === 'gemini'
+      ? env.WEB_DISCOVERY_PROVIDER_API_KEY || env.GEMINI_API_KEY || ''
+      : env.GEMINI_API_KEY || '',
+  ).trim();
+  if (geminiApiKey && (providerId === 'gemini' || providers.length > 0)) {
+    const model = String(env.GEMINI_SEARCH_MODEL || env.GEMINI_MODEL || env.WEB_DISCOVERY_PROVIDER_MODEL || '').trim();
+    const connector = createGeminiSearchConnector({
+      apiKey: geminiApiKey,
+      ...(model ? { model } : {}),
+    });
+    providers.push(webDiscoveryProviderFromConnector(connector, 'gemini'));
+  }
+  if (!providers.length) return emptyManagedGateway();
   return createWebDiscoveryGateway({
-    provider: webDiscoveryProviderFromConnector(connector, 'gemini'),
+    provider: createFailoverWebDiscoveryProvider(providers, logSafe),
     log: logSafe,
   });
 }
@@ -409,6 +473,7 @@ export function createRelayServer(options: {
           if (!res.writableEnded) ac.abort();
         };
         req.once('aborted', abortIfClientGone);
+        res.once('close', abortIfClientGone);
         try {
           const result = await aiInference.infer({
             body,
@@ -416,9 +481,10 @@ export function createRelayServer(options: {
             signal: ac.signal,
             ...(requestId ? { requestId } : {}),
           });
-          if (!res.headersSent) sendJson(res, result.statusCode, result.body);
+          if (!res.headersSent && !res.destroyed && !ac.signal.aborted) sendJson(res, result.statusCode, result.body);
         } finally {
           req.off('aborted', abortIfClientGone);
+          res.off('close', abortIfClientGone);
         }
         return;
       }

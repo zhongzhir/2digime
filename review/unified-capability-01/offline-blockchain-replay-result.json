@@ -1,0 +1,343 @@
+{
+  "task": "DIGITALME-UNIFIED-CAPABILITY-01 offline blockchain replay",
+  "startedAt": "2026-10-11T02:00:24.783Z",
+  "head": "2d3732fa7129c2340f8afdaeabf25993c6b6f267",
+  "sourceResponseId": "resp_d6e35c64-e621-9212-94ce-321a793c09a0",
+  "isolatedUserData": "C:\\Users\\46554\\AppData\\Local\\Temp\\digitalme-blockchain-replay-i1qrjE",
+  "fixture": "review/unified-capability-01/offline-blockchain-replay-input.json",
+  "productNetworkCalls": 0,
+  "cards": [
+    {
+      "itemId": "responses_c4f1a75df17ed52e1251",
+      "title": "2026 Digital Asset Outlook: Dawn of the Institutional Era",
+      "url": "https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era",
+      "publishedDay": "2025-12-15",
+      "textOrigin": "body",
+      "sourceLines": [
+        "Grayscale Research · 2025-12-15",
+        "已读取正文。"
+      ],
+      "excerpt": "Grayscale 发布 32 分钟长文年度展望报告，核心判断 2026 年将终结四年周期进入机构化牛市。从宏观避险需求与监管明确两大支柱出发，提出十大投资主题（稳定币、资产代币化、隐私方案、AI 融合等），并明确将量子计算风险和数字资产国库（DAT）列为'红鲱鱼'。 • 2026 年加密市场将持续牛市，四年周期可能终结 • 宏观需求：政府债务上升推动比特币等稀缺数字资产的避险配置 • 监管明确正驱动机构资金进入公共区块链 • 量子计算和 DAT 对 2026 年市场影响有限"
+    },
+    {
+      "itemId": "responses_577a1aecb80e080a8b41",
+      "title": "Navigating Crypto in 2026",
+      "url": "https://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/",
+      "publishedDay": "2026-01-01",
+      "textOrigin": "body",
+      "sourceLines": [
+        "Pantera Capital · 2026-01-01",
+        "已读取正文。"
+      ],
+      "excerpt": "Pantera Capital 的区块链季报。上半部分复盘 2025 年市场：BTC 跌 6%、ETH 跌 11%、Solana 跌 34%、中位数代币跌 79%——非 BTC 代币市场自 2024 年 12 月即进入熊市。下半部分由管理合伙人 Paul Veradittakit 给出 2026 年九大预测：RWA 爆发（TVL 或翻倍）、AI 重塑链上安全、数字资产 IPO 大年等。 • 2025 年非比特币代币市场中位数下跌 79%，自 2024 年 12 月起已处熊市 • 2026 年 RWA 总锁仓量（当时 $16.6B）可能翻倍以上 • SEC 创新豁免将推动代币化股票加速增长 • 2026 年可能成为史上最大加密 IPO 年"
+    },
+    {
+      "itemId": "responses_4524a0aa65f6803ea84b",
+      "title": "8 Expert Insights on Crypto in 2026",
+      "url": "https://oakresearch.io/en/reports/markets/8-expert-insights-crypto-2026",
+      "publishedDay": "2026-01-01",
+      "textOrigin": "body",
+      "sourceLines": [
+        "OAK Research · 2026-01-01",
+        "已读取正文。"
+      ],
+      "excerpt": "OAK Research 联合 Castle Labs 和 Hazeflow 推出的 180 页年度报告精华，邀请 8 位顶级加密专家逐一分享 2026 年关键趋势：RWA 链上总值从 2022 年的 $3B 增长到 2025 年 11 月的 $36B；链上信用与 TradFi 竞争；链上新银行（neobank）概念；稳定币迈向万亿美元市值；以太坊基金会治理改革等。 • 链上 RWA 总值从 2022 年 $3B 增至 2025 年 11 月约 $36B • 链上新银行有望把 DeFi 收益产品变成消费级金融产品 • 稳定币正成为链上金融的记账单位、支付媒介和结算层 • 比特币已完成从加密原生逻辑向宏观资产的转变"
+    },
+    {
+      "itemId": "responses_bf4d7754b712254d24b5",
+      "title": "A digital economy at an inflection point: What to expect for digital assets in 2026",
+      "url": "https://www.weforum.org/stories/financial-and-monetary-systems/digital-economy-inflection-point-what-to-expect-for-digital-assets-in-2026/",
+      "publishedDay": "2026-09-21",
+      "textOrigin": "body",
+      "sourceLines": [
+        "World Economic Forum · 2026-09-21",
+        "已读取正文。"
+      ],
+      "excerpt": "世界经济论坛分析文章指出 2026 年是数字资产从试验走向基础设施的拐点年。三大趋势：监管明确化推动规模化采用、资产代币化重塑资本市场、区块链日益嵌入企业核心运营。强调互操作性、全球协调和公私合作是负责任采用的关键优先项。 • 2026 年整个资产类别可能实现链上可交易，重塑资本流动和投资流动性 • 企业和机构将把区块链嵌入核心运营和资产负债表基础设施 • 互操作性（多链生态与跨链桥接）是下一阶段优先事项"
+    },
+    {
+      "itemId": "responses_6706724a4572d4d19c84",
+      "title": "區塊鏈重點動態 2026 年 10 月 8 日早參考",
+      "url": "https://m.cnyes.com/news/id/6624795",
+      "publishedDay": "2026-10-08",
+      "textOrigin": "body",
+      "sourceLines": [
+        "金色财经 / 钜亨网 · 2026-10-08",
+        "已读取正文。"
+      ],
+      "excerpt": "金色财经发布的当日行业综述：指出区块链行业处于'合规化、规模化、深度融合'转型关键期；高性能公链竞争加剧（ICP 实际 TPS 达 980.3 居首）；路易威登确认大规模启用加密 NFC 芯片标志区块链溯源在高端零售初步落地；Bitget 因第三方零日漏洞被盗 3.875 亿美元凸显供应链安全风险。 • 行业正从'技术探索'向'合规化、规模化、深度融合'转型 • Bitget 因第三方安全产品零日漏洞被盗 3.875 亿美元 • 高性能公链 ICP 实际 TPS 达 980.3 位居榜首 • LV 是目前唯一公开确认大规模启用加密 NFC 晶片的奢侈品牌"
+    }
+  ],
+  "checks": {
+    "adapterReceivedOneResponsesRequest": true,
+    "adapterConfigurationPreserved": true,
+    "exactlyFiveSpecificArticlesRemain": true,
+    "bothHomepagesRejected": true,
+    "contentStorageMatchesVisibleCards": true,
+    "allSourcesBoundToExactTraceUrl": true,
+    "allBodyStatesMatchTrace": true,
+    "everyDisplayedDateHasReadSourceEvidence": true,
+    "legalArticleQueryParametersSurvive": true,
+    "structuralSearchPageStillRejected": true,
+    "noUnexpectedNetwork": true
+  },
+  "failures": [],
+  "configuration": {
+    "modelReady": true,
+    "model": "qwen3.8-flash",
+    "host": "ws-ok2fv132ihswnia7.cn-beijing.maas.aliyuncs.com"
+  },
+  "subjectDir": "C:\\Users\\46554\\AppData\\Local\\Temp\\digitalme-blockchain-replay-i1qrjE\\subjects\\default",
+  "notice": "已完成区块链最新报道与深度分析检索。 2 项仅指向站点首页或搜索页，未作为具体文章展示。",
+  "diagnostic": {
+    "at": "2026-10-11T02:00:26.390Z",
+    "generationId": "sg_mv36eqk1_hiyavpk9",
+    "event": "unified_responses",
+    "query": "找一些关于区块链的最新报道和深度分析文章。",
+    "trace": {
+      "provider": "responses",
+      "responseId": "replay_resp_d6e35c64-e621-9212-94ce-321a793c09a0",
+      "status": "completed",
+      "elapsedMs": 24,
+      "firstToolCallMs": 24,
+      "webSearchCalls": 1,
+      "webExtractorCalls": 3,
+      "functionCalls": 1,
+      "usage": {
+        "inputTokens": 30067,
+        "outputTokens": 3665,
+        "reasoningTokens": 873,
+        "totalTokens": 33732,
+        "estimatedCostCny": 0.0379491
+      },
+      "sources": [
+        {
+          "url": "https://panteracapital.com/blockchain-letter/navigating-crypto-in-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=5FUftOaKSwE",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.weforum.org/stories/financial-and-monetary-systems/digital-economy-inflection-point-what-to-expect-for-digital-assets-in-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://mercuryo.io/explore/learn/crypto-trends-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://scalablesolutions.io/blog/posts/blockchain-updates-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=CZYCUiVlXmE",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.fastcompany.com/91612027/fintech-cryptocurrency-blockchain-next-big-things-in-tech-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://blog.kraken.com/crypto-education/crypto-markets-in-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://oakresearch.io/en/reports/markets/8-expert-insights-crypto-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.wublock123.com/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://artistic709.medium.com/%E5%9C%A8-2026-%E5%B9%B4-%E6%90%9E%E5%8D%80%E5%A1%8A%E9%8F%88%E9%82%84%E6%98%AF%E6%9C%89%E6%84%8F%E7%BE%A9%E7%9A%84%E5%97%8E-da69592be39f",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://blockcast.it/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://news.cnyes.com/news/id/6623593",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.chaincatcher.com/news",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.binance.com/zh-CN/blog/all/2101230134524981863",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://spacedev.io/blog/blockchain-trends-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=4EcH0BSpGiM",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://smartym.pro/articles/blockchain-technology-trends-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.grandviewresearch.com/industry-analysis/blockchain-technology-market",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.sciencedirect.com/science/article/pii/S1319157822000891",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.appventurez.com/blog/blockchain-technology-trends",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=waWcCcBJsWc",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.investopedia.com/terms/b/blockchain.asp",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.fortunebusinessinsights.com/industry-reports/blockchain-market-100072",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.facebook.com/fb-answers/blockchain-technology-trends-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://appers.com.au/top-10-blockchain-trends-to-follow-in-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://m.cnyes.com/news/id/6624795",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.zqsxw.com/22515.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://x.com/Foresight_News/article/2072142296532066643",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.hongkong-fintech.hk/cn/insights/news/news-2026/consensus-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://tech.china.com/articles/20260620/202606201898103.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.prnewswire.com/apac/zh/news-releases/cypher-asia-202622-302874563.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.antier.com/zh-CN/%E5%8D%9A%E5%AE%A2/2026%E5%B9%B4%E6%8E%A8%E5%8A%A8%E4%BC%81%E4%B8%9A%E8%BD%AC%E5%9E%8B%E7%9A%84%E5%8D%81%E5%A4%A7%E5%8C%BA%E5%9D%97%E9%93%BE%E5%AE%9E%E9%99%85%E5%BA%94%E7%94%A8%E6%A1%88%E4%BE%8B/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.techflowpost.com/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.gate.com/zh/news/detail/16232818",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://artistic709.medium.com/%E5%9C%A8-2026-%E5%B9%B4-%E6%90%9E%E5%8D%80%E5%A0%8A%E9%8F%88%E9%82%84%E6%98%AF%E6%9C%89%E6%84%8F%E7%BE%A9%E7%9A%84%E5%97%8E-da69592be39f",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        }
+      ]
+    },
+    "responseStatus": "complete"
+  },
+  "contentStorage": {
+    "version": 1,
+    "lastView": {
+      "itemIds": [
+        "responses_c4f1a75df17ed52e1251",
+        "responses_577a1aecb80e080a8b41",
+        "responses_4524a0aa65f6803ea84b",
+        "responses_bf4d7754b712254d24b5",
+        "responses_6706724a4572d4d19c84"
+      ],
+      "generatedAt": "2026-10-11T02:00:26.393Z",
+      "mode": "intent",
+      "query": "找一些关于区块链的最新报道和深度分析文章。"
+    }
+  },
+  "adapterRequests": [
+    {
+      "at": "2026-10-11T02:00:26.357Z",
+      "method": "POST",
+      "url": "https://ws-ok2fv132ihswnia7.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/responses",
+      "model": "qwen3.8-flash",
+      "maxOutputTokens": 8192,
+      "stream": true,
+      "store": false,
+      "tools": [
+        "web_search",
+        "web_extractor",
+        "present_results"
+      ]
+    }
+  ],
+  "passed": true,
+  "completedAt": "2026-10-11T02:00:27.339Z"
+}

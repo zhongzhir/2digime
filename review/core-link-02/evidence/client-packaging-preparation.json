@@ -1,0 +1,19 @@
+{
+  "head": "b38f16f0df056f2f74db34bbc5dd8dcdca2c1fed",
+  "observedBuild": "8d888b09",
+  "integrationContainsObservedBaseline": true,
+  "checkedFiles": [
+    "scripts/build-packaged.cjs",
+    "scripts/apply-brand.cjs",
+    "scripts/run-packaged-trial-smoke.cjs",
+    "electron/main.cjs",
+    "electron/preload.cjs",
+    "node_modules/electron-builder/cli.js"
+  ],
+  "missing": [],
+  "modelCalls": 0,
+  "searchCalls": 0,
+  "packageBuilt": false,
+  "pushed": false,
+  "published": false
+}

@@ -8,6 +8,7 @@ import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { normalizeCanonicalUrl, clipText, clipTitle, contentItemId, sourcePublisherId } from './content-canonical';
 import { ingestSource, type IngestRecord, type IngestSourceInput } from './content-ingest';
 import { discoverFeedHints, parsePageMetadata, type FeedHint, type PageMetadata } from './page-metadata';
+import { isGenericHubUrl, isSiteEntranceUrl } from './discover-intent';
 import {
   NETWORK_ITEM_KIND_CONTENT,
   NETWORK_ITEM_SCHEMA_VERSION,
@@ -237,6 +238,51 @@ export async function discoverOpenWebSource(input: {
   };
 }
 
+/** 网站首页继续取它声明的 feed。搜索结果页不走这里。没有 feed 就返回空，不把首页本身当成报道。 */
+export async function ingestDiscoveredEntrance(input: {
+  url: string;
+  store: NetworkItemStore;
+  limit?: number;
+  fetchImpl?: typeof safePublicHttpGet;
+  signal?: AbortSignal;
+}): Promise<NetworkItem[] | null> {
+  if (input.signal?.aborted) return [];
+  if (!isSiteEntranceUrl(input.url)) return null;
+  const fetchImpl = input.fetchImpl || safePublicHttpGet;
+  let fetched;
+  try {
+    fetched = await fetchImpl(input.url, {
+      accept: 'text/html, application/xhtml+xml, application/rss+xml, application/atom+xml, */*;q=0.1',
+    });
+  } catch {
+    return [];
+  }
+  if (fetched.status < 200 || fetched.status >= 300) return [];
+  const feeds = discoverFeedHints(fetched.body || '', fetched.finalUrl || input.url).slice(0, 2);
+  const items: NetworkItem[] = [];
+  const limit = Math.min(Math.max(input.limit ?? 8, 1), 12);
+  for (const feed of feeds) {
+    try {
+      const ingested = await ingestSource({
+        sourceUrl: feed.url,
+        store: input.store,
+        fetchImpl,
+        limit,
+        via: 'autodiscovery',
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      for (const item of ingested.items) {
+        if (item.content.url && (isSiteEntranceUrl(item.content.url) || isGenericHubUrl(item.content.url))) continue;
+        items.push(item);
+        if (items.length >= limit) return items;
+      }
+    } catch {
+      /* 一个 feed 失败不放弃另一个 */
+    }
+  }
+  return items;
+}
+
 export async function ingestOpenWebSource(input: {
   url: string;
   store: NetworkItemStore;
@@ -327,11 +373,30 @@ export async function ingestOpenWebSource(input: {
   return { discovery, records, items };
 }
 
+function isMissingExcerpt(text: string): boolean {
+  return /^(来自 [^，]+，)?(页面|搜索结果)没有单独摘录。$/.test(text.trim());
+}
+
+/** 页面没有正文摘录时，保留搜索结果里的说明，并标明它不是页面正文。 */
+export function preferProviderSnippet(item: NetworkItem, snippet: string | undefined): NetworkItem {
+  const current = String(item.content.text || '');
+  if (!isMissingExcerpt(current)) return item;
+  const snip = String(snippet || '').trim();
+  if (!snip || snip === String(item.content.title || '').trim()) return item;
+  const text = clipText(`${snip}（页面正文没有单独摘录，这是搜索结果里的说明。）`);
+  return {
+    ...item,
+    content: { ...item.content, text },
+    provenance: { ...item.provenance, excerpt: text.slice(0, 400) },
+  };
+}
+
 export async function indexSearchHits(input: {
   hits: ExternalSeekHit[];
   store: NetworkItemStore;
   now?: string;
   limit?: number;
+  via?: NetworkItemDiscoveryVia;
 }): Promise<NetworkItem[]> {
   const now = input.now || new Date().toISOString();
   const items: NetworkItem[] = [];
@@ -352,8 +417,12 @@ export async function indexSearchHits(input: {
         return canonical;
       }
     })();
+    if (/^(title|untitled|undefined|null)$/i.test(String(hit.title || '').trim())) continue;
     const title = clipTitle(hit.title || canonical);
-    const text = clipText(hit.snippet || hit.title || canonical);
+    const snippet = String(hit.snippet || '').trim();
+    const text = snippet && snippet !== title
+      ? clipText(snippet)
+      : clipText(`来自 ${host}，搜索结果没有单独摘录。`);
     const raw: NetworkItem = {
       schemaVersion: NETWORK_ITEM_SCHEMA_VERSION,
       itemId: contentItemId(canonical),
@@ -368,7 +437,7 @@ export async function indexSearchHits(input: {
         actor: 'owner',
         statedAt: now,
         excerpt: text.slice(0, 400),
-        via: 'search',
+        via: input.via || 'search',
       },
     };
     const checked = validateNetworkItem(raw);

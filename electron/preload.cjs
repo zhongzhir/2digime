@@ -54,6 +54,17 @@ contextBridge.exposeInMainWorld("digitalMe", {
     ipcRenderer.on("domain:event", handler);
     return () => ipcRenderer.removeListener("domain:event", handler);
   },
+  onCapabilityProgress(listener) {
+    const handler = (_evt, event) => {
+      try {
+        listener(event || {});
+      } catch {
+        /* renderer listener faults must not break bridge */
+      }
+    };
+    ipcRenderer.on("shell:capability-progress", handler);
+    return () => ipcRenderer.removeListener("shell:capability-progress", handler);
+  },
   onBoot(listener) {
     const handler = (_evt, info) => listener(info);
     ipcRenderer.on("shell:boot", handler);
@@ -101,6 +112,7 @@ contextBridge.exposeInMainWorld("digitalMe", {
     listSessions: () => ipcRenderer.invoke("shell:conversationListSessions"),
     createSession: () => ipcRenderer.invoke("shell:conversationCreateSession"),
     openSession: (id) => ipcRenderer.invoke("shell:conversationOpenSession", { id }),
+    manage: (input) => ipcRenderer.invoke("shell:conversationManage", input),
     cancel: () => ipcRenderer.invoke("shell:conversationCancel"),
   },
   cancelWorkRequest: (requestId) =>
@@ -120,5 +132,18 @@ contextBridge.exposeInMainWorld("digitalMe", {
     const handler = (_evt, info) => listener(info);
     ipcRenderer.on("shell:open-help", handler);
     return () => ipcRenderer.removeListener("shell:open-help", handler);
+  },
+  onFolderAccess(listener) {
+    const show = (_evt, info) => listener(info || {});
+    const hide = () => listener(null);
+    ipcRenderer.on("shell:folder-access", show);
+    ipcRenderer.on("shell:folder-access-dismiss", hide);
+    return () => {
+      ipcRenderer.removeListener("shell:folder-access", show);
+      ipcRenderer.removeListener("shell:folder-access-dismiss", hide);
+    };
+  },
+  replyFolderAccess(id, allowed) {
+    ipcRenderer.send("shell:folder-access-reply", { id, allowed: allowed === true });
   },
 });

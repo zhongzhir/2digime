@@ -20,6 +20,8 @@ export interface PinnedPublicDestination {
 }
 
 export interface SafePublicHttpDeps {
+  signal?: AbortSignal;
+  deadlineAt?: number;
   lookupAddresses?: LookupAddressesFn;
   timeoutMs?: number;
   maxBodyBytes?: number;
@@ -36,11 +38,22 @@ export interface SafePublicHttpGetResult {
   status: number;
   body: string;
   finalUrl: string;
+  /** 响应协议事实；统一为小写键，供 ETag / Last-Modified 条件刷新使用。 */
+  headers?: Record<string, string>;
 }
 
 const DEFAULT_MAX_REDIRECTS = 3;
 const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
 const DEFAULT_TIMEOUT_MS = 20_000;
+
+function responseHeaders(input: Record<string, string | string[] | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const text = Array.isArray(value) ? value.join(', ') : String(value || '');
+    if (text) out[key.toLowerCase()] = text;
+  }
+  return out;
+}
 
 export async function defaultLookupAddresses(hostname: string): Promise<string[]> {
   const host = String(hostname || '').trim().replace(/^\[|\]$/g, '');
@@ -280,6 +293,19 @@ function ipv6InCidr(value: bigint, base: string, bits: number): boolean {
   return value >> shift === baseVal >> shift;
 }
 
+export function decodePublicBody(body: Buffer, contentType: string): string {
+  const headerCharset = /charset\s*=\s*"?([a-z0-9._-]+)/i.exec(contentType)?.[1]?.toLowerCase();
+  const head = body.subarray(0, 4096).toString('latin1');
+  const metaCharset = /charset\s*=\s*["']?\s*([a-z0-9._-]+)/i.exec(head)?.[1]?.toLowerCase();
+  const raw = headerCharset || metaCharset || 'utf-8';
+  const charset = raw === 'gb2312' || raw === 'gbk' || raw === 'x-gbk' ? 'gb18030' : raw === 'utf8' ? 'utf-8' : raw;
+  try {
+    return new TextDecoder(charset).decode(body);
+  } catch {
+    return body.toString('utf8');
+  }
+}
+
 function releaseResponse(res: IncomingMessage): void {
   res.resume();
   res.destroy();
@@ -294,9 +320,15 @@ export async function safePublicHttpGet(
   redirectLeft = DEFAULT_MAX_REDIRECTS,
   deps: SafePublicHttpDeps = {},
 ): Promise<SafePublicHttpGetResult> {
+  const deadlineAt = deps.deadlineAt ?? Date.now() + (deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const checkActive = () => {
+    if (deps.signal?.aborted || Date.now() >= deadlineAt) throw Object.assign(new Error('request stopped'), { name: 'AbortError', code: deps.signal?.aborted ? 'cancelled' : 'timeout' });
+  };
+  checkActive();
   const dest = await assertSafePublicDestination(url, deps.lookupAddresses ?? defaultLookupAddresses);
+  checkActive();
   const parsed = dest.url;
-  const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = Math.min(deps.timeoutMs ?? DEFAULT_TIMEOUT_MS, deadlineAt - Date.now());
   const maxBodyBytes = deps.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const reqHeaders = {
     accept: 'text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.1',
@@ -312,15 +344,21 @@ export async function safePublicHttpGet(
       headers: reqHeaders,
     });
     const status = hopped.status;
+    checkActive();
     const loc = String(hopped.headers?.location || hopped.headers?.Location || '');
     if (status >= 300 && status < 400 && loc) {
       if (redirectLeft <= 0) {
         throw Object.assign(new Error('重定向次数过多'), { code: 'redirect' });
       }
       const next = resolvePublicRedirect(parsed.toString(), loc);
-      return safePublicHttpGet(next, headers, redirectLeft - 1, deps);
+      return safePublicHttpGet(next, headers, redirectLeft - 1, { ...deps, deadlineAt });
     }
-    return { status, body: hopped.body, finalUrl: parsed.toString() };
+    return {
+      status,
+      body: hopped.body,
+      finalUrl: parsed.toString(),
+      headers: responseHeaders(hopped.headers || {}),
+    };
   }
   return new Promise((resolve, reject) => {
     const lib = parsed.protocol === 'https:' ? https : http;
@@ -334,6 +372,7 @@ export async function safePublicHttpGet(
         lookup: createPinnedLookup(dest.pin, dest.family),
         headers: reqHeaders,
         timeout: timeoutMs,
+        ...(deps.signal ? { signal: deps.signal } : {}),
       },
       (res: IncomingMessage) => {
         const status = res.statusCode || 0;
@@ -351,7 +390,7 @@ export async function safePublicHttpGet(
             reject(Object.assign(err instanceof Error ? err : new Error(String(err)), { code: 'ssrf' }));
             return;
           }
-          safePublicHttpGet(next, headers, redirectLeft - 1, deps).then(resolve, reject);
+          safePublicHttpGet(next, headers, redirectLeft - 1, { ...deps, deadlineAt }).then(resolve, reject);
           return;
         }
         const type = String(res.headers['content-type'] || '').toLowerCase();
@@ -369,19 +408,32 @@ export async function safePublicHttpGet(
         res.on('data', (c: Buffer) => {
           size += c.length;
           if (size > maxBodyBytes) {
-            req.destroy(Object.assign(new Error('响应过大'), { code: 'too_large' }));
+            req.destroy(
+              Object.assign(new Error('响应过大'), {
+                code: 'too_large',
+                status,
+                finalUrl: parsed.toString(),
+              }),
+            );
             return;
           }
           chunks.push(Buffer.from(c));
         });
         res.on('end', () => {
-          resolve({ status, body: Buffer.concat(chunks).toString('utf8'), finalUrl: parsed.toString() });
+          resolve({
+            status,
+            body: decodePublicBody(Buffer.concat(chunks), type),
+            finalUrl: parsed.toString(),
+            headers: responseHeaders(res.headers),
+          });
         });
       },
     );
     req.on('timeout', () => {
       req.destroy(new Error('timeout'));
     });
+    const absoluteTimer = setTimeout(() => req.destroy(Object.assign(new Error('request deadline'), { code: 'timeout' })), Math.max(1, deadlineAt - Date.now()));
+    req.once('close', () => clearTimeout(absoluteTimer));
     req.on('error', reject);
   });
 }

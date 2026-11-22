@@ -19,12 +19,14 @@ import {
 export const ALIYUN_IQS_PROVIDER_ID = 'aliyun-iqs';
 export const ALIYUN_IQS_UNIFIED_SEARCH_ORIGIN = 'https://cloud-iqs.aliyuncs.com';
 export const ALIYUN_IQS_UNIFIED_SEARCH_PATH = '/search/unified';
-export const ALIYUN_IQS_ENGINE_TYPE = 'Generic';
+export const ALIYUN_IQS_ENGINE_TYPE = 'CNAuto';
+export type AliyunIqsEngineType = 'CNLiteBasic' | 'CNAuto' | 'Generic';
 const IQS_FIRST_STAGE_MAX_RESULTS = 10;
 
 export interface AliyunIqsWebDiscoveryOptions {
   apiKey: string;
   endpoint?: string;
+  engineType?: AliyunIqsEngineType;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   log?: (event: string, fields: Record<string, string | number | boolean | undefined>) => void;
@@ -118,6 +120,9 @@ function unifiedSearchUrl(raw: string): string {
 
 function classifyHttp(status: number, code: string): WebDiscoveryError {
   const labeled = `${code || status}`.slice(0, 60);
+  if (/PackageExhausted/i.test(code)) {
+    return new WebDiscoveryError('RATE_LIMITED', `iqs_${labeled}`, status);
+  }
   if (status === 401 || status === 403 || /unauthoriz|forbidden|invalid.*key|accessdenied|apikey/i.test(code)) {
     return new WebDiscoveryError('AUTH_FAILED', `iqs_${labeled || 'auth'}`, status === 403 ? 403 : 401);
   }
@@ -144,6 +149,7 @@ export function createAliyunIqsWebDiscoveryProvider(
   const apiKey = String(options.apiKey || '').trim();
   const url = unifiedSearchUrl(options.endpoint || '');
   const timeoutMs = options.timeoutMs ?? 8_000;
+  const engineType = options.engineType || ALIYUN_IQS_ENGINE_TYPE;
   const fetchImpl = options.fetchImpl || fetch;
   const log = options.log || (() => undefined);
   if (!apiKey || !url) {
@@ -176,7 +182,7 @@ export function createAliyunIqsWebDiscoveryProvider(
             },
             body: JSON.stringify({
               query,
-              engineType: ALIYUN_IQS_ENGINE_TYPE,
+              engineType,
               contents: {
                 mainText: false,
                 markdownText: false,

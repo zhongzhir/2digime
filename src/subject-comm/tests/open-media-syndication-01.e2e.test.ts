@@ -95,7 +95,7 @@ test('real schema.org VideoObject page and official oEmbed', async (t) => {
   const meta = html ? parsePageMetadata(html, PEERTUBE_WATCH) : parsePageMetadata('', PEERTUBE_WATCH);
   assert.equal(meta.schemaType, 'VideoObject');
   assert.equal(item.content.contentType, 'video');
-  assert.equal(item.content.mediaProvenance, 'media_rss');
+  assert.equal(item.content.mediaProvenance, 'schema_org');
   assert.ok(item.content.mediaUrl);
   const card = cardFromNetworkItem(item, '公开视频');
   assert.equal(card.contentType, 'video');

@@ -62,7 +62,9 @@ test('429 / quota maps to RATE_LIMITED and Feed does not throw', async () => {
     now: NOW,
   });
   assert.equal(result.view.networking, 'RATE_LIMITED');
-  assert.equal(result.reasonCode, 'NETWORK_TEMPORARY_ERROR');
+  assert.equal(result.reasonCode, 'NETWORK_RATE_LIMITED');
+  assert.match(result.view.notice, /搜索额度已经用完/);
+  assert.equal(/没有找到|检查联网/.test(result.view.notice), false);
 });
 
 test('zero-start runtime uses managed gateway without Gemini BYOK; payload is query only', async () => {

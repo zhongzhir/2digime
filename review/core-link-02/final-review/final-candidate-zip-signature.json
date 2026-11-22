@@ -1,0 +1,20 @@
+{
+  "buildId": "v2-tujimi-20261007T085929Z-10724f0a",
+  "success": true,
+  "signatures": {
+    "setup": "NotSigned",
+    "exe": "NotSigned"
+  },
+  "zip": [
+    {
+      "name": "兔机米.exe",
+      "matchesUnpacked": true,
+      "sha256": "8f4a4fb36adadaf5490ddeb6c7db938efa285c4cf72a58930124cf69b8e41c1e"
+    },
+    {
+      "name": "resources/app.asar",
+      "matchesUnpacked": true,
+      "sha256": "e75ea04704959a263d5d062d1eb0758bfba19ffecfb265e53fef0c702874c0c1"
+    }
+  ]
+}

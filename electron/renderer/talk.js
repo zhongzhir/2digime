@@ -7,7 +7,6 @@
   let contentContext = null;
   const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
   const DOING_TEXT = '正在替你做';
-  const CHECKING_TEXT = '正在查看结果';
   let sendGeneration = 0;
   let viewEpoch = 0;
   let sending = false;
@@ -243,7 +242,7 @@
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'ghost';
-    clear.textContent = '清除';
+    clear.textContent = '移除待带入对象';
     clear.addEventListener('click', () => {
       contentContext = null;
       renderContentContext();
@@ -345,8 +344,11 @@
         void client.openPath(file.path).then((out) => {
           if (out && out.opened === false && typeof client.revealPath === 'function') {
             void client.revealPath(file.path);
+            setNotice('文件未能直接打开，已在文件夹中显示。');
+            return;
           }
-        });
+          setNotice('已打开 ' + (file.title || basename(file.path)) + '。');
+        }).catch(() => setNotice('文件未能打开。'));
       } else if (client && typeof client.revealPath === 'function') {
         void client.revealPath(file.path);
       }
@@ -378,7 +380,7 @@
     const turns = (lastView && lastView.turns) || [];
     for (const turn of turns) {
       const li = document.createElement('li');
-      li.className = turn.role === 'user' ? 'chat-turn-user' : 'chat-turn-assistant';
+      li.className = turn.role === 'user' ? 'chat-turn chat-turn-user' : 'chat-turn chat-turn-assistant';
       const role = document.createElement('p');
       role.className = 'talk-role';
       role.textContent = turn.role === 'user' ? '你' : assistantRoleName;
@@ -392,7 +394,7 @@
     }
     if (pending && pending.userText) {
       const userLi = document.createElement('li');
-      userLi.className = 'chat-turn-user';
+      userLi.className = 'chat-turn chat-turn-user';
       const role = document.createElement('p');
       role.className = 'talk-role';
       role.textContent = '你';
@@ -404,7 +406,7 @@
       list.appendChild(userLi);
       if (!pending.failed) {
         const wait = document.createElement('li');
-        wait.className = 'chat-turn-assistant talk-processing';
+        wait.className = 'chat-turn chat-turn-assistant talk-processing';
         wait.setAttribute('data-talk-processing', '1');
         const waitRole = document.createElement('p');
         waitRole.className = 'talk-role';
@@ -431,6 +433,31 @@
   function setDoingText(text) {
     const el = document.querySelector('[data-talk-doing]');
     if (el) el.textContent = text;
+  }
+
+  function progressText(stage) {
+    if (stage === 'request_started' || stage === 'reasoning') return '正在理解你的请求';
+    if (stage === 'searching') return '正在搜索公开来源';
+    if (stage === 'reading_source') return '正在读取来源正文';
+    if (stage === 'answering') return '正在整理结果';
+    if (stage === 'waiting_permission') return '等待你确认访问范围';
+    if (stage === 'cancelled') return '已取消';
+    if (stage === 'failed') return '本次处理未完成';
+    return '';
+  }
+
+  function bindCapabilityProgress() {
+    const client = api();
+    if (!client || typeof client.onCapabilityProgress !== 'function' || document.documentElement.dataset.talkProgressBound) return;
+    document.documentElement.dataset.talkProgressBound = '1';
+    client.onCapabilityProgress((event) => {
+      if (!event || event.surface !== 'talk') return;
+      if (String(event.requestId || '') !== 'talk_' + sendGeneration) return;
+      const text = progressText(String(event.stage || ''));
+      if (!text) return;
+      setDoingText(text);
+      setNotice(text);
+    });
   }
 
   async function invokeTalk(payload) {
@@ -464,6 +491,10 @@
     setCancelVisible(false);
     const send = $('btn-chat-send');
     if (send) send.disabled = false;
+    const client = api();
+    if (client && client.conversation && typeof client.conversation.cancel === 'function') {
+      void client.conversation.cancel();
+    }
     renderView(lastView);
     setNotice('已取消。');
   }
@@ -497,15 +528,10 @@
         : trimmed;
     renderView(lastView, { userText: pendingText, doingText: DOING_TEXT });
     let watchdog = 0;
-    let checkTimer = 0;
     try {
-    const payload = { text: withContentContext(trimmed) };
+    const payload = { text: contentContext && contentContext.contentIds ? trimmed : withContentContext(trimmed), requestId: 'talk_' + generation };
+    if (contentContext && contentContext.contentIds) payload.contentIds = contentContext.contentIds.slice();
     if (paths.length) payload.contextPaths = paths;
-      checkTimer = setTimeout(() => {
-        if (generation !== sendGeneration || epoch !== viewEpoch) return;
-        setDoingText(CHECKING_TEXT);
-        setNotice(CHECKING_TEXT);
-      }, 8000);
       const result = await Promise.race([
         invokeTalk(payload),
         new Promise((_, reject) => {
@@ -518,6 +544,8 @@
       if (sessionAtSend && still && still !== sessionAtSend) return;
       if (generation !== sendGeneration) return;
       renderView(result && result.view);
+      contentContext = null;
+      renderContentContext();
       await refreshSessions();
     } catch (err) {
       if (epoch !== viewEpoch) return;
@@ -539,7 +567,6 @@
       setNotice(facingError(err));
     } finally {
       if (watchdog) clearTimeout(watchdog);
-      if (checkTimer) clearTimeout(checkTimer);
       if (epoch === viewEpoch && generation === sendGeneration) {
         sending = false;
         setCancelVisible(false);
@@ -594,12 +621,48 @@
     setContentContext: setContentContext,
   };
 
+  function bindFolderAccess() {
+    const client = api();
+    const box = $('folder-access-dialog');
+    if (!client || typeof client.onFolderAccess !== 'function' || !box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    let currentId = '';
+    const hide = () => {
+      currentId = '';
+      box.hidden = true;
+    };
+    client.onFolderAccess((info) => {
+      if (!info || !info.id) {
+        hide();
+        return;
+      }
+      currentId = String(info.id);
+      const message = $('folder-access-message');
+      const pathEl = $('folder-access-path');
+      if (message) message.textContent = `允许访问${info.label || '这个文件夹'}？`;
+      if (pathEl) pathEl.textContent = String(info.path || '');
+      box.hidden = false;
+    });
+    const reply = (allowed) => {
+      if (!currentId) return;
+      const id = currentId;
+      hide();
+      if (typeof client.replyFolderAccess === 'function') client.replyFolderAccess(id, allowed);
+    };
+    const allow = $('btn-folder-allow');
+    const deny = $('btn-folder-deny');
+    if (allow) allow.addEventListener('click', () => reply(true));
+    if (deny) deny.addEventListener('click', () => reply(false));
+  }
+
   function start() {
     hideLegacyChrome();
     bindAutosize();
     bindComposerKeys();
     bindAttach();
     bindConnectAi();
+    bindFolderAccess();
+    bindCapabilityProgress();
     void refresh();
   }
 

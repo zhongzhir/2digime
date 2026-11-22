@@ -179,7 +179,14 @@ function mediaFromItem(node: unknown): OpenMediaFields | undefined {
   }
   const title = textNode(child(node, ['media:title']));
   const description = textNode(child(node, ['media:description']));
-  return mergeOpenMedia(fromMedia, enclosure, {
+  const playable =
+    fromMedia?.contentType === 'video' &&
+    fromMedia.mimeType?.toLowerCase().startsWith('audio/') &&
+    enclosure?.contentType === 'video' &&
+    enclosure.mediaUrl
+      ? { ...fromMedia, mediaUrl: enclosure.mediaUrl, mimeType: enclosure.mimeType }
+      : fromMedia;
+  return mergeOpenMedia(playable, enclosure, {
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     ...(playerUrl ? { embedUrl: playerUrl } : {}),
     ...(title || description ? { mediaProvenance: fromMedia?.mediaProvenance || enclosure?.mediaProvenance || 'media_rss' } : {}),

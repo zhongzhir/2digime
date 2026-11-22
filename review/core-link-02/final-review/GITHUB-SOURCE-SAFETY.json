@@ -1,0 +1,7 @@
+{
+  "scan": "unpublished reachable blobs",
+  "objects": 1198,
+  "textBlobs": 654,
+  "suspiciousPaths": [],
+  "credentialPatternFindings": []
+}

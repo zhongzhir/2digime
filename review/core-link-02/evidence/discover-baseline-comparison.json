@@ -1,0 +1,20 @@
+{
+  "cb84ea4": {
+    "exitCode": 1
+  },
+  "b9cf67f": {
+    "exitCode": 1
+  },
+  "restored": true,
+  "modules": [
+    "src/capability/managed-ai-client.ts",
+    "src/capability/web-discovery-client.ts",
+    "src/infrastructure/model-http.ts",
+    "src/runtime/digitalme-runtime.ts",
+    "src/subject-comm/content-seek.ts",
+    "src/subject-comm/discover-intent.ts",
+    "src/subject-comm/discover-search-generation.ts",
+    "src/subject-comm/structured-call.ts",
+    "src/work-runtime/public-http-safety.ts"
+  ]
+}

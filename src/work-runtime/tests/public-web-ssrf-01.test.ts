@@ -17,6 +17,7 @@ import {
   formatPublicWebFailureActionable,
   isBlockedPublicIp,
   resolvePublicRedirect,
+  safePublicHttpGet,
 } from '../public-web-query';
 import { createBingHtmlSearchConnector } from '../../capability/adapters/bing-html-search';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
@@ -91,16 +92,26 @@ test('自定义域名解析到内网/ULA/link-local 均被拒绝', async () => {
 
 test('公网 IP 允许钉死并请求；Host/SNI 保持原域名', async () => {
   const seen: Array<{ pin: string; servername: string; host: string }> = [];
-  const result = await defaultSafePublicHttpGet('https://example.com/path', undefined, 3, {
+  const result = await safePublicHttpGet('https://example.com/path', undefined, 3, {
     lookupAddresses: lookupOf({ 'example.com': ['8.8.8.8'] }),
     transport: async ({ pin, servername, url, headers }) => {
       seen.push({ pin, servername, host: String(headers.host || '') });
       assert.equal(url.hostname, 'example.com');
-      return { status: 200, body: 'public-ok', headers: { 'content-type': 'text/plain' } };
+      return {
+        status: 200,
+        body: 'public-ok',
+        headers: {
+          'content-type': 'text/plain',
+          ETag: '"public-v1"',
+          'Last-Modified': 'Tue, 10 Nov 2026 08:00:00 GMT',
+        },
+      };
     },
   });
   assert.equal(result.status, 200);
   assert.equal(result.body, 'public-ok');
+  assert.equal(result.headers?.etag, '"public-v1"');
+  assert.equal(result.headers?.['last-modified'], 'Tue, 10 Nov 2026 08:00:00 GMT');
   assert.equal(seen[0]?.pin, '8.8.8.8');
   assert.equal(seen[0]?.servername, 'example.com');
   assert.match(seen[0]?.host || '', /example\.com/);

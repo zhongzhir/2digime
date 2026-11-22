@@ -6164,6 +6164,19 @@
   if (els.navSettings) els.navSettings.addEventListener("click", () => setNav("settings"));
   els.navWork.addEventListener("click", () => setNav("work"));
   if (els.navCollab) els.navCollab.addEventListener("click", () => setNav("collab"));
+  document.addEventListener("keydown", (ev) => {
+    if (!ev.ctrlKey || ev.altKey || ev.metaKey || ev.shiftKey) return;
+    const destination = {
+      Digit1: "chat",
+      Digit2: "discover",
+      Digit3: "subject",
+      Digit4: "settings",
+    }[ev.code];
+    if (!destination) return;
+    ev.preventDefault();
+    if (destination === "chat") setChatGuideMode("normal");
+    setNav(destination);
+  });
   // 设置/帮助为次级入口，不在主导航平权
   els.newTask.addEventListener("click", () => {
     setNav("work");
@@ -6438,21 +6451,11 @@
     if (!els.chatSessionList || !api.conversation || typeof api.conversation.listSessions !== "function") return;
     try {
       const listed = await api.conversation.listSessions();
-      const sessions = (listed && listed.sessions) || [];
-      const currentId = listed && listed.currentId;
-      els.chatSessionList.innerHTML = "";
-      for (const session of sessions) {
-        const li = document.createElement("li");
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "ghost";
-        if (session.id === currentId) btn.classList.add("active");
-        btn.textContent = session.title || "新对话";
-        btn.addEventListener("click", () => {
-          void openChatSession(session.id);
+      if (window.ChatSessions && typeof window.ChatSessions.render === "function") {
+        window.ChatSessions.render(els.chatSessionList, listed, {
+          open: (id) => void openChatSession(id),
+          manage: (input) => manageChatSession(input),
         });
-        li.appendChild(btn);
-        els.chatSessionList.appendChild(li);
       }
     } catch {
       /* 会话列表失败不阻断当前对话 */
@@ -6460,6 +6463,38 @@
   }
 
   window.refreshChatSessions = refreshChatSessions;
+
+  // 改名、归档、项目、删除。若这次操作改变了当前对话（删除当前对话），重新载入对话面板。
+  async function manageChatSession(input) {
+    if (!api.conversation || typeof api.conversation.manage !== "function") {
+      throw new Error("暂时无法管理对话。");
+    }
+    const before = await api.conversation.listSessions();
+    const listed = await api.conversation.manage(input);
+    if (before && listed && before.currentId !== listed.currentId) {
+      resetChatComposer();
+      if (window.TalkPage && typeof window.TalkPage.onSessionChange === "function") {
+        await window.TalkPage.onSessionChange();
+      } else {
+        await refreshChatPanel();
+      }
+    }
+    await refreshChatSessions();
+    if (els.chatStatus) {
+      const notes = {
+        delete: "已删除这场对话。它产出的文件和数字之我里的内容都还在。",
+        rename: "已改名。",
+        archive: "已归档，可在列表底部的「已归档」里取回。",
+        unarchive: "已取回。",
+        move: "已更新所属项目。",
+        createProject: "已建立项目。",
+        renameProject: "已改名。",
+        removeProject: "已解散项目，里面的对话都还在。",
+      };
+      if (notes[input.op]) els.chatStatus.textContent = notes[input.op];
+    }
+    return listed;
+  }
 
   async function createChatSession() {
     const generation = ++chatGeneration;

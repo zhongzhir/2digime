@@ -101,9 +101,9 @@ test('Electron Discover cold start uses live Gemini + DeepSeek without specifyin
         })});
       }
     })()`);
-    await harness.page.locator('.content-discover-card .content-discover-actions button', { hasText: '打开' }).first().click();
+    await harness.page.locator('.content-discover-card .content-discover-actions button.primary').first().click();
     const opened = (await harness.page.evaluate(`window.__openedUrls || []`)) as string[];
-    assert.match(String(opened[0] || first.url), /^https:\/\//);
+    assert.equal(opened[0], first.url);
 
     let viaSearch = false;
     const walk = async (dir: string) => {

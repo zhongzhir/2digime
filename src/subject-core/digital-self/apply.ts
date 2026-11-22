@@ -137,17 +137,18 @@ function applyOneTell(
 
   const replace = findLive(self, proposal.replacesId);
   if (replace) {
+    const mustAsk = inferredMustAsk(proposal);
     const item = makeItem({
       text,
       facet: proposal.facet || replace.facet,
-      status: proposal.origin === 'user_statement' ? 'current' : 'candidate',
-      confirmed: proposal.origin === 'user_statement',
+      status: mustAsk ? 'needs_ask' : proposal.origin === 'user_statement' ? 'current' : 'candidate',
+      confirmed: !mustAsk && proposal.origin === 'user_statement',
       origin: proposal.origin,
       actor: proposal.origin === 'user_statement' ? 'owner' : 'model',
       now,
       ...(proposal.excerpt ? { excerpt: proposal.excerpt } : {}),
     });
-    if (proposal.origin !== 'user_statement') {
+    if (!mustAsk && proposal.origin !== 'user_statement') {
       item.status = inferredMustAsk(proposal) ? 'needs_ask' : 'candidate';
       item.confirmed = false;
     }
@@ -170,7 +171,8 @@ function applyOneTell(
   if (dup) return { asked: false, conflict: false };
 
   if (proposal.origin === 'user_statement') {
-    if (proposal.isSensitive === true) {
+    // 模型标明必须询问、敏感或边界时，不得把这条理解直接写成已确认。
+    if (inferredMustAsk(proposal)) {
       const item = makeItem({
         text,
         facet: proposal.facet,

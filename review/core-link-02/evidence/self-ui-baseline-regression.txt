@@ -1,0 +1,32 @@
+(node:23236) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✖ Electron：数字之我最小闭环 10 项真实验收 (3242.0258ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3328.0635
+
+✖ failing tests:
+
+test at build\evidence\goal-scope-baseline-229d0921\dist\subject-core\tests\digital-self-01.electron.test.js:109:25
+✖ Electron：数字之我最小闭环 10 项真实验收 (3242.0258ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '最近它又了解了你这些'
+  - '当前理解'
+  
+      at TestContext.<anonymous> (D:\Projects\Digital Me\.task-worktrees\core-link-01\build\evidence\goal-scope-baseline-229d0921\dist\subject-core\tests\digital-self-01.electron.test.js:179:26)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '最近它又了解了你这些',
+    expected: '当前理解',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

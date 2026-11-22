@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryNetworkItemStore } from '../../relay-service/network-item-store';
 import { discoverFeedHints, parsePageMetadata } from '../page-metadata';
+import { decodePublicBody } from '../../work-runtime/public-http-safety';
 import {
   discoverOpenWebSource,
   ingestOpenWebSource,
   indexSearchHits,
   parseSitemapLocs,
+  preferProviderSnippet,
   proposeOpenWebQueries,
 } from '../open-web-discovery';
 import { ingestSource } from '../content-ingest';
@@ -74,11 +76,36 @@ test('page metadata prefers canonical, OpenGraph, JSON-LD; does not keep full bo
   assert.equal(/full article body/.test(meta.description), false);
 });
 
-test('missing metadata falls back to title/url', () => {
+test('gb18030 page title is decoded instead of kept as mojibake', () => {
+  const bytes = Buffer.from(
+    'PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0iZ2IxODAzMCI+PHRpdGxlPsS+0Me087rssN88L3RpdGxlPjwvaGVhZD48Ym9keT48cD7V4srH0rvGqr2yxL7Qx7Tzuuyw37fnsam3ts6nus2527LiwPrKt7XE1f3OxKOs1+O5u7Oky/nS1Lvhsbu1sbPJ1arCvKGjsrmz5LnbsuK8x8K8oaM8L3A+PC9ib2R5PjwvaHRtbD4=',
+    'base64',
+  );
+  const decoded = decodePublicBody(bytes, 'text/html');
+  const meta = parsePageMetadata(decoded, 'https://example.org/jupiter');
+  assert.equal(meta.title, '木星大红斑');
+  assert.match(meta.description, /木星大红斑/);
+  assert.equal(meta.mediaUrl, undefined);
+  assert.equal(meta.thumbnailUrl, undefined);
+  assert.equal(decoded.includes('\uFFFD'), false);
+});
+
+test('placeholder title is not a real title, and a slogan in the page chrome yields to the article paragraph', () => {
+  const html = `<html><head><title>Title</title>
+    <meta property="og:description" content="打开世界的一扇窗">
+    </head><body><header>打开世界的一扇窗</header><article><p>${'这是正文第一段，讲的是南极科考队本周的航线和取样。'.repeat(2)}</p></article></body></html>`;
+  const meta = parsePageMetadata(html, 'https://example.org/story');
+  assert.equal(meta.title, '');
+  assert.match(meta.description, /南极科考队/);
+  assert.equal(/打开世界的一扇窗/.test(meta.description), false);
+});
+
+test('missing metadata keeps the title and does not copy it into the excerpt', () => {
   const meta = parsePageMetadata('<html><head><title>Only title</title></head></html>', 'https://example.org/plain');
   assert.equal(meta.canonicalUrl, 'https://example.org/plain');
   assert.equal(meta.title, 'Only title');
-  assert.equal(meta.description, 'Only title');
+  assert.equal(meta.description, '');
+  assert.equal(meta.publishedAt, undefined);
 });
 
 test('duplicate canonical URLs collapse', () => {
@@ -250,4 +277,17 @@ test('proposeOpenWebQueries only returns short topical queries, not a Digital Se
   });
   assert.deepEqual(queries, ['fusion energy progress', 'public science news']);
   assert.equal(queries.some((row) => /张三|12 号/.test(row)), false);
+});
+
+test('a failed page excerpt keeps the provider note and marks that the body was not extracted', async () => {
+  const store = new MemoryNetworkItemStore();
+  const [item] = await indexSearchHits({
+    store,
+    hits: [{ title: '夸克百科', url: 'https://page.example.org/baike' }],
+  });
+  assert.match(item!.content.text, /没有单独摘录/);
+  const kept = preferProviderSnippet(item!, '木星大红斑是木星大气中的风暴。');
+  assert.match(kept.content.text, /木星大红斑是木星大气中的风暴/);
+  assert.match(kept.content.text, /页面正文没有单独摘录/);
+  assert.equal(preferProviderSnippet(kept, '另一段'), kept);
 });

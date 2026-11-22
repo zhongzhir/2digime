@@ -1,0 +1,50 @@
+{
+  "kind": "read-only ECS Workbench UI, whitelisted fields transcribed",
+  "windowCST": [
+    "2026-10-06 08:57:00",
+    "2026-10-06 09:00:00"
+  ],
+  "rows": [
+    {
+      "event": "ai_inference",
+      "status": "AVAILABLE",
+      "latencyMs": 10361,
+      "inputTokens": 1023,
+      "outputTokens": 0
+    },
+    {
+      "event": "ai_inference",
+      "status": "AVAILABLE",
+      "latencyMs": 10630,
+      "inputTokens": 1023,
+      "outputTokens": 0
+    },
+    {
+      "event": "ai_inference",
+      "status": "AVAILABLE",
+      "latencyMs": 10525,
+      "inputTokens": 1023,
+      "outputTokens": 0
+    },
+    {
+      "event": "ai_inference",
+      "status": "AVAILABLE",
+      "latencyMs": 19777,
+      "inputTokens": 1023,
+      "outputTokens": 0
+    }
+  ],
+  "requestCorrelation": "No requestId or finishReason in journal rows. Window/order corroboration only, not per-request proof.",
+  "rejectedWindow": {
+    "startCST": "08:53:30",
+    "endCST": "08:55:00",
+    "rows": 0
+  },
+  "deployedSourceChecks": {
+    "reqAbortedListener": true,
+    "responseCloseListener": false,
+    "fixedProviderTimeout": true,
+    "thinkingPresent": false,
+    "defaultRetryTwo": true
+  }
+}

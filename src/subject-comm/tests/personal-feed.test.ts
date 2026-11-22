@@ -7,10 +7,17 @@ import type { DigitalSelf } from '../../subject-core/digital-self/types';
 import { validateNetworkItem, type NetworkItem } from '../network-item';
 import {
   discoveryIntentsFromModelText,
+  diverseFeedCandidates,
   ensurePersonalFeed,
   personalFeedCachePath,
 } from '../personal-feed';
 import { FEED_01_SEED_ITEMS } from './subject-network-feed-01-seed';
+import { laterCards, listLaterItems, saveLaterItem } from '../later-items';
+import {
+  ensureContentSourcePortfolio,
+  recordContentSourceAttempts,
+  setContentSourceEnabled,
+} from '../content-source-portfolio';
 
 const NOW = '2026-09-18T08:00:00.000Z';
 
@@ -276,7 +283,7 @@ test('search queries come from the model, not a hardcoded fallback or Digital Se
   assert.deepEqual(silent, []);
 });
 
-test('cold open shows preparing then replenish persists directory inventory', async () => {
+test('cold open ingests catalog before return, not after more', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-cold-'));
   const queries: string[] = [];
   const stored: NetworkItem[] = [];
@@ -289,7 +296,7 @@ test('cold open shows preparing then replenish persists directory inventory', as
     createdAt: NOW,
     visibility: 'public',
     content: { title: 'Public fusion note', text: 'A public lab update.', url: 'https://example.org/fusion-open' },
-    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
   });
   if (!web.ok) throw new Error(web.reason);
 
@@ -304,16 +311,22 @@ test('cold open shows preparing then replenish persists directory inventory', as
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
     searchWeb: async (query) => {
       queries.push(query);
-      return [{ title: 'Public fusion note', url: 'https://example.org/fusion-open', snippet: 'lab' }];
+      throw new Error('first screen must not wait for search');
     },
+    ingestHit: async () => {
+      stored.splice(0, stored.length, web.item);
+      return [web.item];
+    },
+    reloadItems: async () => stored,
+    getItem: async (itemId) => stored.find((row) => row.itemId === itemId),
     mode: 'open',
     now: NOW,
   });
-  assert.equal(opened.view.cards.length, 0);
-  assert.equal(opened.view.replenishing, true);
-  assert.equal(opened.view.notice, '');
+  assert.ok(opened.view.cards.length >= 1);
+  assert.equal(opened.view.cards[0]?.url, 'https://example.org/fusion-open');
+  assert.equal(opened.reasonCode, 'REPLENISHED');
   assert.equal(queries.length, 0);
-  assert.equal((opened.view.supplyTrace || []).some((row) => row.event === 'OPEN_DISCOVER'), true);
+  assert.equal((opened.view.supplyTrace || []).some((row) => row.event === 'FIRST_CARD_VISIBLE'), true);
 
   const filled = await ensurePersonalFeed({
     packageRoot: root,
@@ -340,7 +353,7 @@ test('cold open shows preparing then replenish persists directory inventory', as
   assert.ok(filled.view.cards.length >= 1);
   assert.equal(filled.view.cards[0]?.url, 'https://example.org/fusion-open');
   assert.equal(stored[0]?.content.url, 'https://example.org/fusion-open');
-  assert.equal(stored[0]?.provenance.via, 'search');
+  assert.equal(stored[0]?.provenance.via, 'feed');
   assert.equal(JSON.stringify(stored).includes('preferencevector'), false);
 
   const replayQueries: string[] = [];
@@ -370,6 +383,42 @@ test('cold open shows preparing then replenish persists directory inventory', as
 test('zero-key Discover lists open catalog without a model and does not ask for API Key', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-zerokey-'));
   const stored: NetworkItem[] = [];
+  const fetchOpenMedia = async (url: string) => {
+    if (url.includes('commons.wikimedia.org')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          query: {
+            pages: {
+              '1': {
+                title: 'File:OpenLab.jpg',
+                imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/o.jpg', mime: 'image/jpeg' }],
+              },
+            },
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('rss/toppodcasts')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          feed: {
+            entry: [
+              {
+                title: { label: 'Public tech podcast' },
+                id: { label: 'https://podcasts.apple.com/cn/podcast/public-tech/id1' },
+                summary: { label: 'weekly' },
+              },
+            ],
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
   const opened = await ensurePersonalFeed({
     packageRoot: root,
     digitalSelf: selfOf('subj_a'),
@@ -377,81 +426,85 @@ test('zero-key Discover lists open catalog without a model and does not ask for 
     preferences: [],
     feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
     networking: 'AVAILABLE',
-    fetchOpenMedia: async () => ({ status: 200, body: '{}', finalUrl: 'https://example.org' }),
-    mode: 'open',
-    now: NOW,
-  });
-  assert.equal(opened.view.cards.length, 0);
-  assert.equal(opened.view.replenishing, true);
-  assert.equal(/API Key|连接 AI/.test(opened.view.notice || ''), false);
-
-  const filled = await ensurePersonalFeed({
-    packageRoot: root,
-    digitalSelf: selfOf('subj_a'),
-    items: [],
-    preferences: [],
-    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
-    networking: 'AVAILABLE',
-    searchWeb: async () => {
-      throw new Error('managed search down');
-    },
-    fetchOpenMedia: async (url) => {
-      if (url.includes('/api/v1/videos')) {
-        return {
-          status: 200,
-          body: JSON.stringify({
-            data: [{ name: 'Open science talk', url: 'https://framatube.org/w/zero-start', description: 'public video' }],
-          }),
-          finalUrl: url,
-        };
-      }
-      if (url.includes('commons.wikimedia.org')) {
-        return {
-          status: 200,
-          body: JSON.stringify({
-            query: {
-              pages: {
-                '1': {
-                  title: 'File:OpenLab.jpg',
-                  imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/o.jpg', mime: 'image/jpeg' }],
-                },
-              },
-            },
-          }),
-          finalUrl: url,
-        };
-      }
-      if (url.includes('rss/toppodcasts')) {
-        return {
-          status: 200,
-          body: JSON.stringify({
-            feed: {
-              entry: [
-                {
-                  title: { label: 'Public tech podcast' },
-                  id: { label: 'https://podcasts.apple.com/cn/podcast/public-tech/id1' },
-                  summary: { label: 'weekly' },
-                },
-              ],
-            },
-          }),
-          finalUrl: url,
-        };
-      }
-      return { status: 404, body: '{}', finalUrl: url };
-    },
+    fetchOpenMedia,
     putNetworkItem: async (item) => {
       stored.push(item);
     },
     reloadItems: async () => stored,
     getItem: async (itemId) => stored.find((row) => row.itemId === itemId),
-    mode: 'replenish',
+    mode: 'open',
     now: NOW,
   });
-  assert.ok(filled.view.cards.length >= 1, 'open catalog should produce visible cards');
-  assert.equal(filled.reasonCode, 'REPLENISHED');
-  assert.equal(/API Key|请配置|连接 AI/.test(filled.view.notice || ''), false);
+  assert.ok(opened.view.cards.length >= 1, 'first screen must show catalog without more');
+  assert.equal(/API Key|请配置|连接 AI/.test(opened.view.notice || ''), false);
   assert.equal(JSON.stringify(stored).includes('preferencevector'), false);
+});
+
+test('zero-key catalog ingestion resumes the persisted Internet Archive cursor', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-archive-cursor-'));
+  const sources = await ensureContentSourcePortfolio(root, '2026-09-18T07:00:00.000Z');
+  for (const source of sources) {
+    if (source.id !== 'internet-archive') {
+      await setContentSourceEnabled(root, source.id, false, '2026-09-18T07:00:00.000Z');
+    }
+  }
+  await recordContentSourceAttempts(root, '2026-09-18T07:00:00.000Z', [
+    {
+      sourceId: 'internet-archive',
+      ok: true,
+      itemCount: 0,
+      cursor: 'internet-archive:page:2',
+    },
+  ]);
+
+  const requestedPages: string[] = [];
+  const stored: NetworkItem[] = [];
+  const fetchOpenMedia = async (url: string) => {
+    if (url.includes('advancedsearch.php')) {
+      const parsed = new URL(url);
+      const page = parsed.searchParams.get('page') || '';
+      const kind = (parsed.searchParams.get('q') || '').includes('movies') ? 'video' : 'audio';
+      requestedPages.push(page);
+      return {
+        status: 200,
+        body: JSON.stringify({
+          response: { docs: [{ identifier: `archive-${kind}-${page}`, title: `${kind} page ${page}` }] },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('/metadata/')) {
+      const video = url.includes('archive-video-');
+      return {
+        status: 200,
+        body: JSON.stringify({ metadata: {}, files: [{ name: video ? 'clip.mp4' : 'track.mp3' }] }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+
+  const opened = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_archive_cursor'),
+    items: [],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    fetchOpenMedia,
+    putNetworkItem: async (item) => {
+      stored.push(item);
+    },
+    reloadItems: async () => stored,
+    getItem: async (itemId) => stored.find((item) => item.itemId === itemId),
+    mode: 'open',
+    now: NOW,
+  });
+
+  assert.deepEqual(requestedPages, ['2', '2']);
+  assert.equal(opened.view.cards.length > 0, true);
+  const after = await ensureContentSourcePortfolio(root, NOW);
+  assert.equal(after.find((source) => source.id === 'internet-archive')?.cursor, 'internet-archive:page:3');
 });
 
 test('managed search fault keeps an existing feed and still tries open catalog', async () => {
@@ -495,4 +548,529 @@ test('managed search fault keeps an existing feed and still tries open catalog',
   assert.equal(failed.view.cards.length, seeded.view.cards.length);
   assert.ok(catalogTried >= 1);
   assert.equal(/API Key|请配置 Gemini/.test(failed.view.notice || ''), false);
+});
+
+test('selection failure still shows the items already fetched', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-unranked-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 3);
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(result.view.cards.length, items.length);
+  assert.match(result.view.notice || '', /没能排好顺序/);
+  assert.match(result.view.notice || '', /不同来源/);
+});
+
+test('同一来源的重复章节不会占满排序失败时的第一页', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-diverse-'));
+  const items: NetworkItem[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: `ni_novel_${i}`,
+      publisherSubjectId: 'pub_novel',
+      publisherDisplayName: '一部小说',
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: {
+        title: `霸体诀 第${i + 1}章`,
+        text: `第${i + 1}章正文`,
+        url: `https://audio.example/novel/${i + 1}`,
+        contentType: 'audio',
+      },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  for (const [id, title, host] of [
+    ['ni_paper', '世界新闻一则', 'https://www.thepaper.cn/news/story'],
+    ['ni_ithome', '另一则广播', 'https://www.ithome.com/story'],
+  ] as const) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: id,
+      publisherSubjectId: `pub_${id}`,
+      publisherDisplayName: id,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: title, url: host, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  const titles = result.view.cards.map((card) => card.title);
+  const novelCards = titles.filter((title) => title.includes('霸体诀'));
+  assert.ok(novelCards.length <= 2, titles.join(' | '));
+  assert.ok(titles.some((title) => title.includes('世界新闻')));
+  assert.ok(titles.some((title) => title.includes('另一则广播')));
+});
+
+test('已保存的屏蔽会从下一轮缓存页移除，不喜欢的一条不再排在前面', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-block-cache-'));
+  const items: NetworkItem[] = [];
+  for (const [itemId, publisherSubjectId, title] of [
+    ['ni_novel', 'pub_novel', '霸体诀 第1章'],
+    ['ni_bbc', 'pub_bbc', '世界新闻一则'],
+    ['ni_npr', 'pub_npr', '另一则广播'],
+  ] as const) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId,
+      publisherSubjectId,
+      publisherDisplayName: publisherSubjectId,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: title, url: `https://example.com/${itemId}`, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    now: NOW,
+  };
+  const first = await ensurePersonalFeed({
+    ...base,
+    chatComplete: async () => ({ text: 'not json' }),
+    mode: 'reset',
+  });
+  assert.ok(first.view.cards.some((card) => card.title.includes('霸体诀')));
+  const second = await ensurePersonalFeed({
+    ...base,
+    chatComplete: async () => {
+      throw new Error('reuse must not ask the model');
+    },
+    mode: 'reuse',
+    preferenceRows: [
+      {
+        id: 'block-novel',
+        kind: 'block',
+        targetType: 'source',
+        target: 'pub_novel',
+        text: '不再看来源 一部小说',
+        origin: 'user_action',
+        updatedAt: NOW,
+      },
+      {
+        id: 'reduce-bbc',
+        kind: 'reduce',
+        targetType: 'item',
+        target: 'ni_bbc',
+        text: '不喜欢这一条',
+        origin: 'user_action',
+        updatedAt: NOW,
+      },
+    ],
+  });
+  const titles = second.view.cards.map((card) => card.title);
+  assert.equal(titles.some((title) => title.includes('霸体诀')), false);
+  assert.ok(titles.includes('另一则广播'));
+  assert.ok(titles.includes('世界新闻一则'));
+  assert.notEqual(titles[0], '世界新闻一则');
+});
+
+test('ranked ignore stays available instead of being dropped', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-rank-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 3);
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({
+      text: JSON.stringify({
+        decisions: items.map((item, index) => ({
+          itemId: item.itemId,
+          decision: index === 0 ? 'ignore' : 'show',
+          reason: index === 0 ? '先排后' : '先看',
+        })),
+      }),
+    }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(result.view.cards.length, items.length);
+  assert.equal(result.view.cards.some((card) => card.reason === '先排后'), true);
+});
+
+test('more returns only unseen cards, or says there is nothing new', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-more-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 8);
+  const first = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'open',
+    now: NOW,
+  });
+  const seen = new Set(first.view.cards.map((row) => row.itemId));
+  const more = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'more',
+    now: NOW,
+  });
+  if (!more.view.cards.length) {
+    assert.match(more.view.notice, /暂时没有更多新内容/);
+  } else {
+    assert.equal(
+      more.view.cards.every((card) => !seen.has(card.itemId)),
+      true,
+    );
+  }
+});
+
+test('不同作品不会因为都有章节号就被收成同一部', () => {
+  const items: NetworkItem[] = [];
+  for (const work of ['霸体诀', '雪中悍刀行']) {
+    for (let i = 1; i <= 4; i += 1) {
+      const checked = validateNetworkItem({
+        schemaVersion: 1,
+        itemId: `ni_${work}_${i}`,
+        publisherSubjectId: 'pub_audio',
+        publisherDisplayName: '有声书',
+        kind: 'content',
+        createdAt: NOW,
+        visibility: 'public',
+        content: {
+          title: `${work} 第${i}章`,
+          text: `${work}第${i}章`,
+          url: `https://audio.example/${encodeURIComponent(work)}/${i}`,
+          contentType: 'audio',
+        },
+        provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+      });
+      if (!checked.ok) throw new Error(checked.reason);
+      items.push(checked.item);
+    }
+  }
+  const other = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_news',
+    publisherSubjectId: 'pub_news',
+    publisherDisplayName: '新闻',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title: '今日新闻', text: '新闻正文', url: 'https://news.example/today', contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  if (!other.ok) throw new Error(other.reason);
+  items.push(other.item);
+  const picked = diverseFeedCandidates(items, 12, 2);
+  assert.ok(picked.filter((item) => item.content.title.includes('霸体诀')).length >= 3);
+  assert.ok(picked.filter((item) => item.content.title.includes('雪中悍刀行')).length >= 3);
+});
+
+test('搜索结果不会因为进了同一目录就占据默认流', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-search-'));
+  const feed = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_feed',
+    publisherSubjectId: 'pub_feed',
+    publisherDisplayName: '目录',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title: '目录里的文章', text: '目录正文', url: 'https://example.org/feed-story', contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  const search = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_search',
+    publisherSubjectId: 'pub_search',
+    publisherDisplayName: '搜索',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title: '木星搜索残留', text: '搜索正文', url: 'https://example.org/jupiter', contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!feed.ok || !search.ok) throw new Error('item');
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items: [search.item, feed.item],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  const titles = result.view.cards.map((card) => card.title);
+  assert.equal(titles.includes('目录里的文章'), true);
+  assert.equal(titles.includes('木星搜索残留'), false);
+});
+
+test('换一批采用新供给，临时搜索不进入默认流；没有新增时如实说明', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-batch-'));
+  const make = (itemId: string, title: string, via: 'feed' | 'search') => {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId,
+      publisherSubjectId: `pub_${itemId}`,
+      publisherDisplayName: title,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: `${title}正文`, url: `https://example.org/${itemId}`, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    return checked.item;
+  };
+  const first = make('ni_a', '目录文章甲', 'feed');
+  const added = make('ni_b', '新补充的文章', 'feed');
+  const search = make('ni_c', '临时搜索残留', 'search');
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    preferences: [] as [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    mode: 'open' as const,
+    now: NOW,
+  };
+  const opened = await ensurePersonalFeed({ ...base, items: [first] });
+  assert.equal(opened.view.cards.some((card) => card.title === '目录文章甲'), true);
+  const same = await ensurePersonalFeed({ ...base, items: [first], mode: 'refresh' });
+  assert.match(same.view.notice, /没有换出不同的内容/);
+  const refreshed = await ensurePersonalFeed({ ...base, items: [first, added, search], mode: 'refresh' });
+  const titles = refreshed.view.cards.map((card) => card.title);
+  assert.equal(titles.includes('新补充的文章'), true);
+  assert.equal(titles.includes('临时搜索残留'), false);
+});
+
+test('稍后看记住稳定标识，来源不在目录里时仍保留', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-later-'));
+  await saveLaterItem(root, {
+    itemId: 'ni_saved',
+    url: 'https://example.org/saved',
+    title: '稍后再看的文章',
+    text: '摘要',
+    publisher: 'Example',
+    savedAt: NOW,
+  });
+  const rows = await listLaterItems(root);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.url, 'https://example.org/saved');
+  const cards = laterCards(rows, new Set());
+  assert.equal(cards[0]!.unavailable, true);
+  assert.match(cards[0]!.text, /来源暂时打不开/);
+});
+
+test('默认推荐去掉境外核心来源，稍后看仍保留并标明状态', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-boundary-'));
+  const items: NetworkItem[] = [];
+  for (const [id, title, url, publisher] of [
+    ['ni_ok', '国内科技一则', 'https://www.ithome.com/0/123.htm', 'IT之家'],
+    ['ni_bbc', 'BBC 世界新闻', 'https://www.bbc.com/news/world-123', 'BBC'],
+    ['ni_epoch', '大纪元一则', 'https://www.epochtimes.com/gb/n.html', '大纪元'],
+  ] as const) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: id,
+      publisherSubjectId: `pub_${id}`,
+      publisherDisplayName: publisher,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: title, url, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  const titles = result.view.cards.map((card) => card.title);
+  assert.equal(titles.includes('国内科技一则'), true);
+  assert.equal(titles.includes('BBC 世界新闻'), false);
+  assert.equal(titles.includes('大纪元一则'), false);
+
+  await saveLaterItem(root, {
+    itemId: 'ni_bbc',
+    url: 'https://www.bbc.com/news/world-123',
+    title: 'BBC 世界新闻',
+    text: '已收藏',
+    publisher: 'BBC',
+    savedAt: NOW,
+  });
+  const later = laterCards(await listLaterItems(root), new Set(['ni_bbc']));
+  assert.equal(later.length, 1);
+  assert.equal(later[0]!.unavailable, false);
+  assert.equal(later[0]!.sourceBoundary, 'excluded_from_default');
+  assert.match(later[0]!.reason || '', /不在国内默认供给/);
+});
+
+test('ranking empty still shows already-fetched directory cards', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-rank-empty-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 6);
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  const ranked = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async () => ({ text: '{"decisions":[]}' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'replenish',
+    now: NOW,
+  });
+  assert.ok(ranked.view.cards.length >= 1);
+  assert.equal(ranked.view.cards.some((card) => !card.title), false);
+});
+
+function itemAt(id: string, publisher: string, title: string): NetworkItem {
+  const checked = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: id,
+    publisherSubjectId: publisher,
+    publisherDisplayName: publisher,
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title, text: title, url: `https://${publisher}.example/${id}`, contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  if (!checked.ok) throw new Error(checked.reason);
+  return checked.item;
+}
+
+test('block source is filtered on reset, refresh and more', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-block-paths-'));
+  const blockedSource = Array.from({ length: 4 }, (_, i) => itemAt(`ni_gone_${i}`, 'pub_gone', `屏蔽来源 ${i + 1}`));
+  const keepSource = Array.from({ length: 8 }, (_, i) => itemAt(`ni_keep_${i}`, 'pub_keep', `保留来源 ${i + 1}`));
+  const items = [...blockedSource, ...keepSource];
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    now: NOW,
+  };
+  const opened = await ensurePersonalFeed({ ...base, mode: 'open' });
+  assert.ok(opened.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'));
+  const prefs = [
+    {
+      id: 'block-gone',
+      kind: 'block' as const,
+      targetType: 'source' as const,
+      target: 'pub_gone',
+      text: '不再看来源 屏蔽来源',
+      origin: 'user_action' as const,
+      updatedAt: NOW,
+    },
+  ];
+  const afterReset = await ensurePersonalFeed({ ...base, mode: 'reset', preferenceRows: prefs });
+  assert.equal(afterReset.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'), false);
+  const afterRefresh = await ensurePersonalFeed({ ...base, mode: 'refresh', preferenceRows: prefs });
+  assert.equal(afterRefresh.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'), false);
+  const afterMore = await ensurePersonalFeed({ ...base, mode: 'more', preferenceRows: prefs });
+  assert.equal(afterMore.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'), false);
+  if (!afterMore.view.cards.length) {
+    assert.match(afterMore.view.notice, /暂时没有更多新内容/);
+  }
+});
+
+test('more appends leftover ranked ids, or says the pool is exhausted', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-more-left-'));
+  const items = Array.from({ length: 16 }, (_, i) => itemAt(`ni_more_${i}`, `pub_more_${i}`, `连续 ${i + 1}`));
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    now: NOW,
+  };
+  const first = await ensurePersonalFeed({ ...base, mode: 'open' });
+  assert.ok(first.view.cards.length >= 1);
+  const seen = new Set(first.view.cards.map((card) => card.itemId));
+  const more = await ensurePersonalFeed({ ...base, mode: 'more' });
+  if (seen.size >= items.length) {
+    assert.equal(more.view.cards.length, 0);
+    assert.match(more.view.notice, /暂时没有更多新内容/);
+  } else if (!more.view.cards.length) {
+    assert.match(more.view.notice, /暂时没有更多新内容/);
+  } else {
+    assert.equal(more.view.cards.every((card) => !seen.has(card.itemId)), true);
+  }
 });

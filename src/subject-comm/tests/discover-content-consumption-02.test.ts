@@ -255,7 +255,7 @@ test('DISCOVERY: honest empty when consume has no object', async () => {
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.cards.length, 0);
-  assert.match(sought.notice, /没有找到可以直接/);
+  assert.match(sought.notice, /没有找到这个视频节目本身/);
   assert.equal(sought.relatedCards.some((card) => card.itemId === COMMENTARY.itemId), true);
 });
 
@@ -273,12 +273,399 @@ test('ASK 2DIGIME: renderer preserves content context without auto-send', async 
   assert.equal(/iframe/i.test(ui), false);
 });
 
-test('REGRESSION: no hub crawler / mentioned-object factory / site listing table', async () => {
+// 原意（CONTENT-SOURCE-CAPABILITY-GATE-01）：不在读不到正文的入口页上"猜片名再搜"，不爬站、不收链接、不写站点表。
+// 从这次实际读到的片单/评论里由模型点名作品、再用现有搜索核实一次，是允许的；名字必须出现在原文里。
+test('REGRESSION: no hub crawler / link harvest / site listing table', async () => {
   const seekSrc = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/content-seek.ts'), 'utf8');
   const intentSrc = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/discover-intent.ts'), 'utf8');
-  assert.equal(/puppeteer|playwright|crawlSite|extractMentionedObjects|querySelectorAll\(['"]a/i.test(seekSrc), false);
-  assert.equal(intentSrc.includes('extractMentionedObjects'), false);
+  assert.equal(/puppeteer|playwright|crawlSite|querySelectorAll\(['"]a/i.test(seekSrc), false);
   assert.equal(/youtube\.com|bilibili|iqiyi|douyin/i.test(seekSrc + intentSrc), false);
+});
+
+test('PROGRAMS: listing is basis, named works verified by search; unread names and unverified works are not programs', async () => {
+  const listing = itemOf({
+    id: 'ni_listing_doc',
+    title: '周末纪录片片单',
+    text: '这份片单推荐《河西走廊》，豆瓣口碑很好，共十集；还推荐《人生七年》，跟拍几十年。适合周末慢慢看。',
+    url: 'https://example.org/list/weekend-docs',
+  });
+  const searched: string[] = [];
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      query: string;
+      candidates?: Array<{ id: string; url: string }>;
+      sources?: Array<{ id: string }>;
+    };
+    if (system.includes('取出被明确点名')) {
+      const sourceId = user.sources![0]!.id;
+      return {
+        text: JSON.stringify({
+          works: [
+            { title: '河西走廊', kind: '纪录片', medium: 'video', sourceId, basis: '片单说口碑很好，共十集。', searchQuery: '河西走廊 纪录片' },
+            { title: '人生七年', kind: '纪录片', medium: 'video', sourceId, basis: '片单说跟拍几十年。', searchQuery: '人生七年 纪录片' },
+            { title: '地球脉动', kind: '纪录片', medium: 'video', sourceId, basis: '评分 9.9', searchQuery: '地球脉动' },
+          ],
+        }),
+      };
+    }
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: row.url.includes('/list/') ? 'LISTING' : row.url.includes('/show/') ? 'SERIES' : 'COMMENTARY',
+            medium: row.url.includes('/show/') ? 'video' : 'article',
+            entrance: row.url.includes('/show/') ? 'full' : 'none',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '适合周末看的纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 纪录片 片单'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      searched.push(q);
+      if (q.includes('河西走廊')) return [{ title: '河西走廊 第1集', url: 'https://tv.example.org/show/hexi', snippet: '纪录片正片' }];
+      if (q.includes('人生七年')) return [{ title: '人生七年 影评', url: 'https://news.example.org/review/7up', snippet: '一篇影评' }];
+      return [{ title: listing.content.title, url: listing.content.url!, snippet: listing.content.text }];
+    },
+    ingestHit: async () => [listing],
+  });
+  // 名字不在原文里的《地球脉动》不会被拿去搜索，也不会出现。
+  assert.equal(searched.some((q) => q.includes('地球脉动')), false);
+  const program = sought.cards.find((card) => card.url === 'https://tv.example.org/show/hexi');
+  assert.ok(program, 'verified program page becomes a card');
+  assert.equal(program!.contentType, 'video');
+  assert.equal(program!.basisSource?.url, 'https://example.org/list/weekend-docs');
+  assert.match(program!.reason, /周末纪录片片单/);
+  // 片单本身不冒充节目。
+  assert.equal(sought.cards.some((card) => card.url === 'https://example.org/list/weekend-docs'), false);
+  // 只找到影评的《人生七年》列为"提到过、未核实"，不进主结果。
+  assert.equal(sought.cards.some((card) => /人生七年/.test(card.title)), false);
+  const mention = sought.relatedCards.find((card) => card.url === 'https://example.org/list/weekend-docs');
+  assert.ok(mention, 'the listing stays as related basis');
+  assert.match(mention!.reason, /《人生七年》.*还没有核实/);
+  assert.equal(mention!.title, '周末纪录片片单');
+  assert.equal(/评分|9\.9/.test(JSON.stringify(sought.cards)), false);
+
+  // 搜索有配额：核实遇到限流就停，不再继续发；没核实的仍标在依据文章上。
+  const limited: string[] = [];
+  const throttled = await seekContent({
+    query: '适合周末看的纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 纪录片 片单'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('片单')) return [{ title: listing.content.title, url: listing.content.url!, snippet: listing.content.text }];
+      limited.push(q);
+      throw Object.assign(new Error('rate_limited'), { status: 429 });
+    },
+    ingestHit: async () => [listing],
+  });
+  assert.ok(limited.length <= 2, `verification stops after a failed search, got ${limited.length}`);
+  assert.equal(throttled.cards.length, 0);
+  assert.match(
+    throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '',
+    /还没有核实.*额度或频率限制/,
+  );
+  assert.equal(throttled.trace.searchRateLimited, true);
+  assert.match(throttled.notice, /额度或频率限制/);
+  assert.doesNotMatch(throttled.notice, /没有找到|检查联网/);
+
+  // 作品页连不上（例如证书不匹配）就不是可用的观看入口：不进主结果，在依据文章上说明打不开。
+  // 读取端返回 403 之类状态不代表浏览器里打不开，仍算入口。
+  const opened: string[] = [];
+  const unreachable = await seekContent({
+    query: '适合周末看的纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 纪录片 片单'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('河西走廊')) return [{ title: '河西走廊 第1集', url: 'https://tv.example.org/show/hexi', snippet: '纪录片正片' }];
+      if (q.includes('人生七年')) return [{ title: '人生七年 第1集', url: 'https://tv.example.org/show/7up', snippet: '纪录片正片' }];
+      return [{ title: listing.content.title, url: listing.content.url!, snippet: listing.content.text }];
+    },
+    openPage: async (url) => {
+      opened.push(url);
+      if (url.includes('/show/hexi')) {
+        throw Object.assign(new Error("Hostname/IP does not match certificate's altnames"), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
+      }
+      return { status: 403, body: '', finalUrl: url };
+    },
+    ingestHit: async () => [listing],
+  });
+  assert.ok(opened.includes('https://tv.example.org/show/hexi'));
+  assert.equal(unreachable.cards.some((card) => card.url === 'https://tv.example.org/show/hexi'), false);
+  assert.ok(unreachable.cards.some((card) => card.url === 'https://tv.example.org/show/7up'), '403 from the reader still counts as an entrance');
+  assert.match(
+    unreachable.relatedCards.find((card) => card.url === listing.content.url)?.reason || '',
+    /《河西走廊》，找到的作品页目前打不开/,
+  );
+});
+
+test('CONDITIONS: a work whose stated conditions the model cannot confirm stays visible and is labeled 未核实', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: 'PRIMARY_CONTENT',
+            medium: 'video',
+            conditions: row.url.includes('/silent/') ? 'unconfirmed' : 'met',
+            basis: row.url.includes('/silent/') ? '材料没有评分或口碑，还没确认是否高分。' : '材料写明口碑很好。',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '值得一看的高分科幻电影',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '科幻电影',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '高分',
+      searchQueries: ['高分 科幻电影'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: 'A Trip to the Moon (1902)', url: 'https://films.example.org/silent/moon', snippet: '一部早期科幻默片' },
+      { title: '高分科幻 正片', url: 'https://tv.example.org/show/scifi', snippet: '口碑很好的科幻电影正片' },
+    ],
+  });
+  assert.ok(sought.cards.some((card) => card.url === 'https://tv.example.org/show/scifi'));
+  const maybe = sought.cards.find((card) => card.url === 'https://films.example.org/silent/moon');
+  assert.ok(maybe, 'unconfirmed work stays as a candidate');
+  assert.notEqual(maybe!.objectFidelity, 'PRIMARY_CONTENT');
+  assert.equal(maybe!.conditionStatus, 'unconfirmed');
+  assert.match(String(maybe!.conditionNote || maybe!.reason), /未核实|还没确认/);
+});
+
+test('JUDGE PAGES: duplicates merge first, later pages are judged, candidates not sent stay visible as not judged', async () => {
+  const albumHits = () => [
+    ...Array.from({ length: 20 }, (_, i) => ({
+      title: `古典专辑 第${i + 1}张`,
+      url: `https://music.example.org/album/${i + 1}`,
+      snippet: '一张古典音乐专辑，可在线收听。',
+    })),
+    // 同一站点、标题完全相同的另一条链接：合并，不重复送判断。
+    { title: '古典专辑 第1张', url: 'https://music.example.org/album/1?from=share', snippet: '同一张专辑' },
+    { title: '古典专辑 第2张', url: 'https://music.example.org/mirror/2', snippet: '同一张专辑' },
+  ];
+  const intent = {
+    intent: 'consume',
+    topic: '古典音乐',
+    requestedMedia: ['audio'],
+    objectWanted: 'work_itself',
+    freshness: 'unspecified',
+    popularityClaim: false,
+    searchQueries: ['古典音乐 专辑'],
+    suggestTalk: false,
+  } as never;
+  const judgeWith = (primaryIds: (id: string, url: string) => boolean, sent: string[]): ChatCompleteFn => async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      sent.push(...(user.candidates || []).map((row) => row.id));
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: primaryIds(row.id, row.url) ? 'PRIMARY_CONTENT' : 'UNRELATED',
+            medium: 'audio',
+            conditions: 'none',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+
+  // 第一页主结果不够一屏：继续判断第二页，20 条都判断过。
+  const sentAll: string[] = [];
+  const paged = await seekContent({
+    query: '经典古典音乐专辑',
+    items: [],
+    intent,
+    chatComplete: judgeWith((_id, url) => /album\/[1-4]$/.test(url), sentAll),
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => albumHits(),
+  });
+  assert.equal(sentAll.length, 20);
+  assert.equal(new Set(sentAll).size, 20);
+  assert.equal(paged.trace.duplicates, 2);
+  assert.equal(paged.trace.judgePages, 2);
+  assert.equal(paged.trace.notSentToJudge, undefined);
+  assert.equal(paged.unjudgedCards.length, 0);
+
+  // 第一页已经够一屏：后面不再判断，没送去的仍列出，标明还没判断，不算无关。
+  const sentFirst: string[] = [];
+  const stopped = await seekContent({
+    query: '经典古典音乐专辑',
+    items: [],
+    intent,
+    chatComplete: judgeWith(() => true, sentFirst),
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => albumHits(),
+  });
+  assert.equal(sentFirst.length, 16);
+  assert.equal(stopped.trace.notSentToJudge, 4);
+  assert.equal(stopped.trace.judgePages, 1);
+  assert.equal(stopped.unjudgedCards.length, 4);
+  assert.ok(stopped.unjudgedCards.every((card) => /还没送去判断，不代表不相关/.test(card.reason)));
+  assert.equal(stopped.trace.unrelated, 0);
+
+  // 剩余时间不够再判一页：同样停下，并如实列出。
+  const sentLate: string[] = [];
+  const late = await seekContent({
+    query: '经典古典音乐专辑',
+    items: [],
+    intent,
+    chatComplete: judgeWith((_id, url) => /album\/1$/.test(url), sentLate),
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => albumHits(),
+    deadlineAt: Date.now() + 5_000,
+  });
+  assert.equal(sentLate.length, 16);
+  assert.equal(late.trace.notSentToJudge, 4);
+  assert.equal(late.unjudgedCards.length, 4);
+});
+
+test('ENTRANCE: excerpts are labeled and ranked after full programs; unconfirmed "full episode" reposts are not confirmed entrances', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url: string }>;
+      sources?: Array<{ id: string }>;
+    };
+    if (system.includes('取出被明确点名')) {
+      const sourceId = user.sources![0]!.id;
+      return {
+        text: JSON.stringify({
+          works: [
+            { title: '大江大河', kind: '电视剧', medium: 'video', sourceId, basis: '片单说口碑很好。', searchQuery: '大江大河 正片' },
+            { title: '山海情', kind: '电视剧', medium: 'video', sourceId, basis: '片单说值得追。', searchQuery: '山海情 正片' },
+          ],
+        }),
+      };
+    }
+    if (system.includes('判断每个候选')) {
+      // 模型依据页面证据给出 entrance；这里用固定页面模拟模型的判断结果。
+      const entranceOf = (url: string) =>
+        url.includes('/official/') ? 'full' : url.includes('/clip/') ? 'excerpt' : url.includes('/repost/') ? 'unverified' : 'none';
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: row.url.includes('/list/') ? 'LISTING' : 'PRIMARY_CONTENT',
+            medium: row.url.includes('/list/') ? 'article' : 'video',
+            conditions: 'none',
+            entrance: entranceOf(row.url),
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const listingText = '这份周末追剧片单推荐《大江大河》，豆瓣口碑很好；还推荐《山海情》，讲西海固移民，值得追。都适合周末一口气看完。';
+  const sought = await seekContent({
+    query: '适合周末追的国产剧',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '国产剧',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 国产剧'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('大江大河')) {
+        return [
+          { title: '大江大河 精彩片段', url: 'https://tv.example.org/clip/djdh', snippet: '第3集片段' },
+          { title: '大江大河 第1集', url: 'https://tv.example.org/official/djdh', snippet: '出品方官方频道正片' },
+        ];
+      }
+      if (q.includes('山海情')) {
+        return [{ title: '山海情 HD高清全集', url: 'https://blog.example.net/repost/shq', snippet: '全集在线看' }];
+      }
+      return [
+        { title: '周末追剧片单', url: 'https://example.org/list/weekend', snippet: listingText },
+        { title: '某剧 片段合集', url: 'https://tv.example.org/clip/other', snippet: '剪辑片段' },
+        { title: '某剧 第1集', url: 'https://tv.example.org/official/other', snippet: '平台正片' },
+        { title: '某剧 高清全集', url: 'https://blog.example.net/repost/other', snippet: '全集' },
+      ];
+    },
+  });
+  const urls = sought.cards.map((card) => card.url);
+  // 节目核实优先取完整入口：同一部作品有正片就不用片段。
+  assert.ok(urls.includes('https://tv.example.org/official/djdh'));
+  assert.equal(urls.includes('https://tv.example.org/clip/djdh'), false);
+  // 只找到来源不明的"高清全集"页：不算核实到的观看入口，在依据文章上说明。
+  assert.equal(urls.includes('https://blog.example.net/repost/shq'), false);
+  const listing = sought.relatedCards.find((card) => card.url === 'https://example.org/list/weekend');
+  assert.match(listing?.reason || '', /《山海情》，找到的页面没能确认是完整节目或可信来源/);
+  // 主路径：片段保留并标明，排在完整节目后面；来源不明的全集页不进主结果。
+  const clip = sought.cards.find((card) => card.url === 'https://tv.example.org/clip/other');
+  assert.ok(clip, 'a clip stays, labeled');
+  assert.equal(clip!.excerpt, true);
+  assert.ok(urls.indexOf('https://tv.example.org/official/other') < urls.indexOf('https://tv.example.org/clip/other'));
+  assert.equal(urls.includes('https://blog.example.net/repost/other'), false);
+  const repost = sought.relatedCards.find((card) => card.url === 'https://blog.example.net/repost/other');
+  assert.match(repost?.reason || '', /没能确认这是完整节目或来自可信来源/);
 });
 
 test('REGRESSION: Media RSS / JSON Feed / schema.org / oEmbed still parse', async () => {
@@ -339,4 +726,268 @@ test('STATE/UI: later and explicit preference stay explicit; opened is not a pre
   assert.equal(pref.includes("origin: 'user_action'"), true);
   assert.match(runtime, /action === 'open' \|\| action === 'later'/);
   assert.match(runtime, /action === 'boost' \|\| action === 'reduce' \|\| action === 'follow' \|\| action === 'block'/);
+  assert.match(ui, /action === 'adjust' \|\| action === 'adjustKeep' \|\| action === 'adjustRevoke'/);
+  assert.match(ui, /followReplenish\(client, activeSearchGenerationId\)/);
+});
+
+test('TYPE/STYLE: a bangumi page that is not a light manju stays nearby; excerpts stay labeled', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string; title?: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => {
+            const wushan = /雾山五行/.test(String(row.title || row.url || ''));
+            return {
+              id: row.id,
+              role: 'SERIES',
+              medium: 'video',
+              conditions: wushan ? 'unmet' : 'unconfirmed',
+              entrance: wushan ? 'full' : 'excerpt',
+              basis: wushan
+                ? '来源写的是国风热血动画，不是轻松古风漫剧。'
+                : '来源只提供片段，完整一集未核实。',
+            };
+          }),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '有没有气氛轻松的古风国创漫剧可以追',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '古风国创漫剧',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '气氛轻松的古风国创漫剧',
+      searchQueries: ['古风 国创 漫剧'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: '雾山五行', url: 'https://m.bilibili.com/bangumi/play/ss34410', snippet: '国风热血动画，五行家族对抗妖兽。' },
+      { title: '花手情缘 片段', url: 'https://3g.sina.com.cn/clip/huashou', snippet: 'AI 古风搞笑漫剧片段。' },
+    ],
+  });
+  assert.equal(sought.cards.some((card) => /雾山五行/.test(card.title)), false);
+  const nearby = sought.relatedCards.find((card) => /雾山五行/.test(card.title));
+  assert.ok(nearby);
+  assert.equal(nearby!.conditionStatus, 'unmet');
+  assert.match(String(nearby!.conditionNote || nearby!.reason), /不完全符合|不是轻松古风漫剧/);
+  const clip = [...sought.cards, ...sought.relatedCards].find((card) => /花手情缘/.test(card.title));
+  assert.ok(clip);
+  assert.equal(clip!.excerpt, true);
+  assert.match(String(clip!.entrancePurpose || ''), /部分匹配|片段/);
+  assert.match(String(clip!.conditionNote || clip!.entrancePurpose || ''), /部分匹配|片段/);
+  assert.match(sought.notice, /没有找到完全符合|相近选择/);
+});
+
+test('WATCH PAGE: an official series page without RSS or a media file is still a delivered entrance', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: 'SERIES',
+            medium: 'article',
+            conditions: 'unconfirmed',
+            entrance: 'full',
+            channel: 'watch',
+            basis: '出品方节目页，没有写是否免会员。',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '周末和小学孩子看一部自然纪录片，不想开会员',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '适合小学孩子，不想开会员',
+      searchQueries: ['自然 纪录片 节目'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      {
+        title: '自然的力量 第1集',
+        url: 'https://tv.example.org/series/nature-1',
+        snippet: '出品方纪录片合集页，可在原站观看。没有直链文件。',
+      },
+    ],
+  });
+  const page = sought.cards.find((card) => card.url === 'https://tv.example.org/series/nature-1');
+  assert.ok(page, 'official page without a media file is still delivered');
+  assert.equal(page!.conditionStatus, 'unconfirmed');
+  assert.match(String(page!.conditionNote || page!.reason), /免会员|未核实/);
+  assert.match(String(page!.conditionNote || ''), /官方入口只说明能去原站打开/);
+  assert.match(String(page!.entrancePurpose || ''), /完整入口|原站/);
+});
+
+test('CLAIMS: listing free/public-domain wording is not copied; official page stays unconfirmed', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string }>;
+      sources?: Array<{ id: string }>;
+    };
+    if (system.includes('取出被明确点名')) {
+      return {
+        text: JSON.stringify({
+          works: [
+            {
+              title: '森林日记',
+              kind: '纪录片',
+              medium: 'video',
+              sourceId: user.sources![0]!.id,
+              basis: '片单说免费全集无广告。',
+              searchQuery: '森林日记 纪录片',
+            },
+          ],
+        }),
+      };
+    }
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: String(row.url || '').includes('/list/') ? 'LISTING' : 'SERIES',
+            medium: String(row.url || '').includes('/list/') ? 'article' : 'video',
+            conditions: String(row.url || '').includes('/list/') ? 'none' : undefined,
+            entrance: String(row.url || '').includes('/play/') ? 'full' : 'none',
+            channel: String(row.url || '').includes('/list/') ? 'discover' : 'watch',
+            basis: String(row.url || '').includes('/list/')
+              ? '这是片单，不是观看页。'
+              : '节目页没有写是否免费或已获授权。',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const listingText = '周末亲子必看纪录片片单详细介绍：《森林日记》被写成免费全集无广告，还说公共领域可下载。这只是文章说法。';
+  const sought = await seekContent({
+    query: '周末和小学孩子看一部自然纪录片，不想开会员',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '适合小学孩子，不想开会员',
+      searchQueries: ['自然 纪录片'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('森林日记')) {
+        return [{ title: '森林日记', url: 'https://tv.example.org/play/forest', snippet: '官方节目页' }];
+      }
+      return [{ title: '免费纪录片盘点', url: 'https://reviews.example.org/list/free-docs', snippet: listingText }];
+    },
+  });
+  const official = sought.cards.find((card) => card.url === 'https://tv.example.org/play/forest');
+  assert.ok(official);
+  assert.equal(official!.conditionStatus, 'unconfirmed');
+  assert.match(String(official!.conditionNote || ''), /未核实|官方入口只说明能去原站打开/);
+  assert.equal(/免费全集|公共领域|无广告/.test(String(official!.conditionNote || '')), false);
+  const listing = sought.relatedCards.find((card) => /list\/free-docs/.test(card.url || ''));
+  assert.ok(listing);
+  assert.equal(sought.cards.some((card) => /list\/free-docs/.test(card.url || '')), false);
+});
+
+test('CHANNEL: official watch beats a supplement library; supplement-only is labeled', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: 'SERIES',
+            medium: 'video',
+            conditions: 'unconfirmed',
+            entrance: 'full',
+            channel: /openlib/.test(String(row.url || '')) ? 'supplement' : 'watch',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const both = await seekContent({
+    query: '适合家人一起看的自然纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['自然 纪录片'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: '江河纪事 开放库', url: 'https://openlib.example.org/details/river', snippet: '可下载拷贝以及节目介绍，方便对照来源。' },
+      { title: '江河纪事', url: 'https://tv.example.org/show/river', snippet: '官方节目页，可在原站打开完整一集。' },
+    ],
+  });
+  assert.equal(both.cards.some((card) => card.url === 'https://tv.example.org/show/river'), true);
+  assert.equal(both.cards.some((card) => /openlib/.test(card.url || '')), false);
+
+  const onlyLib = await seekContent({
+    query: '适合家人一起看的自然纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['自然 纪录片'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: '江河纪事 开放库', url: 'https://openlib.example.org/details/river', snippet: '可下载拷贝' },
+    ],
+  });
+  const extra = onlyLib.cards.find((card) => /openlib/.test(card.url || ''));
+  assert.ok(extra);
+  assert.match(String(extra!.entrancePurpose || ''), /补充入口/);
+  assert.match(onlyLib.notice, /补充入口|国内官方/);
 });

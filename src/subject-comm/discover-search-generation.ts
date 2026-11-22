@@ -24,6 +24,43 @@ export function createSearchGenerationId(): string {
   return `sg_${Date.now().toString(36)}_${randomBytes(4).toString('hex')}`;
 }
 
+/** 背景补充必须在截止时间内进入成功或失败终态，不能一直停在进行中。 */
+export const BACKGROUND_SEEK_DEADLINE_MS = 40_000;
+
+/** 一次搜索从开始到终态共用这一个截止点；各阶段只用剩余时间，不各自重新计时。 */
+export const SEEK_DEADLINE_MS = 60_000;
+
+export function settleBackgroundSeek<T>(
+  work: Promise<T | null>,
+  deadlineMs = BACKGROUND_SEEK_DEADLINE_MS,
+  abort?: AbortController,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      abort?.signal.removeEventListener('abort', onAbort);
+      resolve(value);
+    };
+    const onAbort = () => finish(null);
+    const timer = setTimeout(() => {
+      abort?.abort('deadline');
+      finish(null);
+    }, Math.max(1, deadlineMs));
+    if (abort?.signal.aborted) {
+      finish(null);
+      return;
+    }
+    abort?.signal.addEventListener('abort', onAbort, { once: true });
+    work.then(
+      (row) => finish(row),
+      () => finish(null),
+    );
+  });
+}
+
 export function canonicalCardKey(card: Pick<DiscoverCard, 'itemId' | 'url'>): string {
   const url = String(card.url || '').trim();
   if (url) {
@@ -74,7 +111,7 @@ export function fidelityOf(card: DiscoverCard): ObjectFidelityKind {
   if (raw === 'PRIMARY_CONTENT' || raw === 'ABOUT_CONTENT' || raw === 'UNRELATED') {
     return raw;
   }
-  if (hasDirectMediaRepresentation(card)) return 'PRIMARY_CONTENT';
+  // 能否直接播放只决定怎么看，不代表和这次请求相关。
   return 'ABOUT_CONTENT';
 }
 
@@ -197,6 +234,33 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
     { cards: incoming.cards || [], relatedCards: incoming.relatedCards || [] },
   );
   const related = merged.relatedCards;
+  const unjudgedSeen = new Set<string>();
+  const incomingHasBody =
+    (incoming.cards || []).length + (incoming.relatedCards || []).length + (incoming.unjudgedCards || []).length > 0;
+  const keptCurrent = (current.unjudgedCards || []).filter(
+    (card) =>
+      !(
+        incomingHasBody &&
+        (String(card.itemId || '').startsWith('snippet_') || String(card.itemId || '').startsWith('news_'))
+      ),
+  );
+  const accessSeen = new Set<string>();
+  const accessCards = [...(current.accessCards || []), ...(incoming.accessCards || [])].filter((card) => {
+    const key = String(card.itemId || card.url || '');
+    if (!key || accessSeen.has(key)) return false;
+    accessSeen.add(key);
+    return true;
+  }).slice(0, 8);
+  const unjudged = [...keptCurrent, ...(incoming.unjudgedCards || [])].filter((card) => {
+    const key = String(card.itemId || card.url || '');
+    if (!key || unjudgedSeen.has(key) || accessSeen.has(key)) return false;
+    if (card.accessState === 'challenge' || card.accessState === 'login' || card.accessState === 'unreadable') return false;
+    unjudgedSeen.add(key);
+    return true;
+  }).slice(0, 8);
+  const notice = merged.cards.length
+    ? (incoming.cards.length ? incoming.notice : '') || (current.cards.length ? current.notice : '')
+    : incoming.notice || current.notice;
   return {
     ...incoming,
     ...(current.searchGenerationId ? { searchGenerationId: current.searchGenerationId } : {}),
@@ -207,7 +271,14 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
     cards: merged.cards,
     relatedCards: related,
     ...(related.length ? { relatedTitle: incoming.relatedTitle || current.relatedTitle || '相关介绍' } : {}),
-    notice: merged.cards.length ? incoming.notice || current.notice : current.notice || incoming.notice,
+    unjudgedCards: unjudged,
+    accessCards,
+    ...(unjudged.length
+      ? { unjudgedTitle: incoming.unjudgedTitle || current.unjudgedTitle || '这些还没完成判断，不是已确认的推荐' }
+      : {}),
+    notice:
+      notice ||
+      (unjudged.length ? '还有一些结果这轮没有完成判断，没有放进推荐。' : ''),
     ...(typeof incoming.replenishing === 'boolean' ? { replenishing: incoming.replenishing } : {}),
   };
 }

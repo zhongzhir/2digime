@@ -43,11 +43,13 @@ export const READ_FILE_TOOL: ChatToolDefinition = {
   function: {
     name: 'read_file',
     description:
-      '读取本次已授权文件的真实正文。Office/PDF 走抽取；其余文件在大小限制内按文本读取。不总结、不筛选、不按扩展名决定能不能读。',
+      '读取本次已授权文件的一段真实正文。Office/PDF 走抽取；其余文件在大小限制内按文本读取。不总结、不筛选。返回 coverage：full 表示这次内容覆盖已抽出的全文；excerpt 表示只返回了这一段，用 nextOffset 继续读，complete 为 false 时不能当作全文；failed 表示这次没有读到正文。',
     parameters: {
       type: 'object',
       properties: {
         path: { type: 'string', description: '授权范围内的相对路径、文件名，或已授权文件的绝对路径。' },
+        offset: { type: 'number', description: '从抽出的正文第几个字符开始。省略则从 0 开始。' },
+        limit: { type: 'number', description: '这一段最多返回的字符数，不超过 12000。省略则返回一段。' },
       },
       required: ['path'],
     },
@@ -81,8 +83,8 @@ export function classifyAuthorizedPaths(contextPaths?: string[]): AuthorizedFs {
     try {
       if (!existsSync(candidate)) continue;
       const st = statSync(candidate);
-      if (st.isDirectory()) folders.push(candidate);
-      else if (st.isFile()) files.push(candidate);
+      if (st.isDirectory()) folders.push(canonicalizeFolderPath(candidate));
+      else if (st.isFile()) files.push(canonicalizeFolderPath(candidate));
     } catch {
       /* skip */
     }
@@ -145,25 +147,29 @@ export function resolveProposedAccessPath(
   return { ok: true, abs: canonical, label: canonical };
 }
 
-export function describeAuthorizedFs(auth: AuthorizedFs): string {
-  if (!auth.folders.length && !auth.files.length) {
+export function describeAuthorizedFs(writeAuth: AuthorizedFs, readAuth: AuthorizedFs = writeAuth): string {
+  if (!writeAuth.folders.length && !writeAuth.files.length && !readAuth.files.length && !readAuth.folders.length) {
     return [
       '当前没有已授权的可写文件夹。',
-      '若目标需要在用户电脑上创建或修改文件，调用 request_folder_access，由主人确认一次访问范围。',
-      '不要让主人自己运行命令、安装开发工具、或把 PowerShell/终端步骤交给主人。',
+      '需要在电脑上创建或修改文件、且现有授权覆盖不了目标路径时，调用 request_folder_access。',
+      '已经覆盖的路径不要再次申请。不要让主人自己运行命令。',
     ].join('\n');
   }
-  const lines = ['主人已授权的路径（不要再要用户贴正文、列文件或自己运行命令）：'];
-  if (auth.folders.length) {
-    lines.push('可读写文件夹（write_file / list_directory 的授权根）：');
-    for (const folder of auth.folders) lines.push(`- ${folder}`);
-    if (auth.folders.length > 1) {
+  const lines = ['已有可复用的本机授权。覆盖范围内不要再次申请，也不要扩大到相邻目录。'];
+  if (writeAuth.folders.length) {
+    lines.push('可写入文件夹（write_file 的授权根；不是已附材料，不要去翻里面的其它文稿）：');
+    for (const folder of writeAuth.folders) lines.push(`- ${folder}`);
+    if (writeAuth.folders.length > 1) {
       lines.push('有多个可写根时，write_file 必须填写 root，且必须是上列某一个绝对路径。');
     }
   }
-  if (auth.files.length) {
+  if (readAuth.folders.length) {
+    lines.push('可列出的文件夹（list_directory）：');
+    for (const folder of readAuth.folders) lines.push(`- ${folder}`);
+  }
+  if (readAuth.files.length) {
     lines.push('可读文件：');
-    for (const file of auth.files) lines.push(`- ${file}`);
+    for (const file of readAuth.files) lines.push(`- ${file}`);
   }
   return lines.join('\n');
 }
@@ -199,8 +205,8 @@ export function resolveAuthorizedWritePath(
   let root: string | undefined;
   if (asked) {
     if (asked.includes('..')) return { ok: false, reason: '路径超出授权目录。' };
-    const resolvedAsked = path.resolve(asked);
-    root = roots.find((item) => path.resolve(item) === resolvedAsked);
+    const resolvedAsked = canonicalizeFolderPath(path.resolve(asked));
+    root = roots.find((item) => folderCovers(item, resolvedAsked) && folderCovers(resolvedAsked, item));
     if (!root) {
       return {
         ok: false,
@@ -394,44 +400,92 @@ export async function runListDirectory(auth: AuthorizedFs, rawArgs: string): Pro
   }
 }
 
+const READ_SEGMENT_CHARS = 12_000;
+
+function parseReadWindow(rawArgs: string): { path: string; offset: number; limit: number } {
+  try {
+    const parsed = JSON.parse(rawArgs) as { path?: string; relativePath?: string; offset?: number; limit?: number };
+    const offset = Number(parsed.offset);
+    const limit = Number(parsed.limit);
+    return {
+      path: String(parsed.path || parsed.relativePath || '').trim(),
+      offset: Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0,
+      limit:
+        Number.isFinite(limit) && limit > 0
+          ? Math.min(Math.floor(limit), READ_SEGMENT_CHARS)
+          : READ_SEGMENT_CHARS,
+    };
+  } catch {
+    return { path: String(rawArgs || '').trim(), offset: 0, limit: READ_SEGMENT_CHARS };
+  }
+}
+
+function readSlicePayload(input: {
+  abs: string;
+  text: string;
+  offset: number;
+  limit: number;
+  extractTruncated: boolean;
+}): string {
+  const total = input.text.length;
+  const start = Math.min(Math.max(0, input.offset), total);
+  const end = Math.min(total, start + input.limit);
+  const content = input.text.slice(start, end);
+  const reachedStoredEnd = end >= total;
+  const complete = reachedStoredEnd && start === 0 && !input.extractTruncated;
+  return JSON.stringify({
+    actualSuccess: true,
+    ok: true,
+    capabilityId: 'read_file',
+    path: input.abs,
+    coverage: complete ? 'full' : 'excerpt',
+    offset: start,
+    length: content.length,
+    total,
+    ...(reachedStoredEnd ? {} : { nextOffset: end }),
+    complete,
+    extractTruncated: input.extractTruncated,
+    content,
+  });
+}
+
 export async function runReadFile(auth: AuthorizedFs, rawArgs: string): Promise<string> {
-  const resolved = resolveAuthorizedFile(auth, parsePathArg(rawArgs));
+  const window = parseReadWindow(rawArgs);
+  const resolved = resolveAuthorizedFile(auth, window.path);
   if (!resolved.ok) {
     return JSON.stringify({
       actualSuccess: false,
       ok: false,
       capabilityId: 'read_file',
+      coverage: 'failed',
       failureReason: resolved.reason,
     });
   }
   const outcome = await extractFile(resolved.abs);
   if (outcome.status === 'ok' && outcome.text) {
-    return JSON.stringify({
-      actualSuccess: true,
-      ok: true,
-      capabilityId: 'read_file',
-      path: resolved.abs,
-      length: outcome.length,
-      truncated: outcome.truncated === true,
-      content: outcome.text,
+    return readSlicePayload({
+      abs: resolved.abs,
+      text: outcome.text,
+      offset: window.offset,
+      limit: window.limit,
+      extractTruncated: outcome.truncated === true,
     });
   }
   const asText = await tryReadAuthorizedText(resolved.abs);
   if (asText.ok) {
-    return JSON.stringify({
-      actualSuccess: true,
-      ok: true,
-      capabilityId: 'read_file',
-      path: resolved.abs,
-      length: asText.text.length,
-      truncated: asText.truncated === true,
-      content: asText.text,
+    return readSlicePayload({
+      abs: resolved.abs,
+      text: asText.text,
+      offset: window.offset,
+      limit: window.limit,
+      extractTruncated: asText.truncated === true,
     });
   }
   return JSON.stringify({
     actualSuccess: false,
     ok: false,
     capabilityId: 'read_file',
+    coverage: 'failed',
     path: resolved.abs,
     failureReason: asText.reason || outcome.warning || '没能抽出可读正文。',
   });
@@ -505,6 +559,7 @@ export async function writeExportedOffice(input: {
   relativePath: string;
   format: string;
   content: string;
+  signal?: AbortSignal;
 }): Promise<{ ok: true; abs: string } | { ok: false; reason: string }> {
   if (input.format !== 'docx' && input.format !== 'pptx') {
     return { ok: false, reason: 'format 只支持 docx 或 pptx。' };
@@ -517,12 +572,13 @@ export async function writeExportedOffice(input: {
   try {
     const exported =
       input.format === 'docx'
-        ? await exportDocx(input.content, resolved.abs)
-        : await exportPptx(input.content, resolved.abs);
+        ? await exportDocx(input.content, resolved.abs, input.signal)
+        : await exportPptx(input.content, resolved.abs, input.signal);
     const st = await fs.stat(exported.path);
     if (!st.isFile() || st.size <= 0) return { ok: false, reason: '导出后文件不存在或为空。' };
     return { ok: true, abs: exported.path };
   } catch (err) {
+    input.signal?.throwIfAborted();
     return { ok: false, reason: String(err instanceof Error ? err.message : err) };
   }
 }

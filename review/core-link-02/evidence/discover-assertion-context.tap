@@ -1,0 +1,50 @@
+DIAG_OPEN {"cards":12,"notice":"","reasonCode":"REPLENISHED","networking":"AVAILABLE","searchCalls":0}
+✖ Discover cold start uses search queries, not Digital Self, and indexes web hits (8191.9099ms)
+DIAG_OFF {"cards":12,"notice":"","reasonCode":"REPLENISHED","networking":"NOT_CONFIGURED"}
+✖ networking disabled does not call external search on Discover (8135.4785ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19507.1366
+
+✖ failing tests:
+
+test at dist\runtime\tests\open-web-discovery-01.test.js:67:25
+✖ Discover cold start uses search queries, not Digital Self, and indexes web hits (8191.9099ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - true
+
+      at TestContext.<anonymous> (D:\Projects\Digital Me\.task-worktrees\core-link-01\dist\runtime\tests\open-web-discovery-01.test.js:106:22)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at dist\runtime\tests\open-web-discovery-01.test.js:119:25
+✖ networking disabled does not call external search on Discover (8135.4785ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /开启联网发现/. Input:
+
+  ''
+
+      at TestContext.<anonymous> (D:\Projects\Digital Me\.task-worktrees\core-link-01\dist\runtime\tests\open-web-discovery-01.test.js:138:26)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /开启联网发现/,
+    operator: 'match',
+    diff: 'simple'
+  }

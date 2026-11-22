@@ -66,6 +66,9 @@ test('Electron：设置测试连接失败展示真实原因，高级项默认折
     await skipWelcomeAndEnterShell(harness.page);
     await harness.page.locator('#nav-settings').click();
     await harness.page.locator('#view-settings').waitFor({ state: 'visible', timeout: 15_000 });
+    await harness.page.locator('#advanced-ai-capability > summary').click();
+    await harness.page.locator('#ai-capability-path-byok').check();
+    await harness.page.locator('#btn-test-model').waitFor({ state: 'visible', timeout: 10_000 });
     assert.equal(await harness.page.locator('#settings-capability-overview').count(), 0);
     assert.equal(
       await harness.page.evaluate(
@@ -99,7 +102,7 @@ test('Electron：设置测试连接失败展示真实原因，高级项默认折
     );
     assert.equal(await harness.page.locator('#settings-optional-remote').isVisible().catch(() => false), false);
     await harness.page.locator('.settings-model').waitFor({ state: 'visible', timeout: 10_000 });
-    await harness.page.locator('#btn-test-model').click({ force: true });
+    await harness.page.locator('#btn-test-model').click();
     await harness.page.locator('#settings-status').waitFor({ state: 'visible', timeout: 10_000 });
     const settingsStatus = await harness.page.locator('#settings-status').innerText();
     assert.match(settingsStatus, /无法连接|请先填写|密钥|连接/);

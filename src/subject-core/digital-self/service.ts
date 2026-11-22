@@ -32,10 +32,15 @@ export class DigitalSelfService {
     private readonly resolvePackage: () => DigitalSelfPackageRef | null,
     private readonly chat: DigitalSelfChatFn | null,
     private readonly now: () => string = nowIso,
+    private readonly onMaterialImported?: (sourceCopy: string) => Promise<void>,
   ) {}
 
-  async invoke(input: DigitalSelfCommandInput): Promise<DigitalSelfCommandOutput> {
-    const run = this.writeChain.then(() => this.invokeNow(input));
+  async invoke(
+    input: DigitalSelfCommandInput,
+    taskContext?: string,
+    signal?: AbortSignal,
+  ): Promise<DigitalSelfCommandOutput> {
+    const run = this.writeChain.then(() => this.invokeNow(input, taskContext, signal));
     this.writeChain = run.then(
       () => undefined,
       () => undefined,
@@ -45,6 +50,8 @@ export class DigitalSelfService {
 
   private async invokeNow(
     input: DigitalSelfCommandInput,
+    taskContext?: string,
+    signal?: AbortSignal,
   ): Promise<DigitalSelfCommandOutput> {
     const pkg = this.resolvePackage();
     if (!pkg) {
@@ -109,11 +116,15 @@ export class DigitalSelfService {
         mode: 'tell',
         self,
         text,
+        ...(taskContext ? {taskContext} : {}),
+        ...(signal ? { signal } : {}),
       });
+      if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('已取消。');
       const result = applyTellProposals(self, interpreted.understandings, this.now());
       await writeDigitalSelf(pkg.rootDir, result.self);
       const notice = interpreted.notice || result.notice;
       return {
+        ...(taskContext && interpreted.goalUpdate ? { goalUpdate: interpreted.goalUpdate } : {}),
         view: projectDigitalSelfView(result.self, {
           ...(notice ? { notice } : {}),
           ...(result.asked ? { asked: true } : {}),
@@ -147,6 +158,7 @@ export class DigitalSelfService {
           self,
           text: extracted.text,
           materialName,
+          ...(signal ? { signal } : {}),
         });
       } catch (err) {
         const reason = String(err instanceof Error ? err.message : err).trim() || '理解这份资料时失败。';
@@ -161,7 +173,8 @@ export class DigitalSelfService {
         materialName,
       );
       await writeDigitalSelf(pkg.rootDir, result.self);
-      await writeSourceCopy(pkg.rootDir, digest, extracted.text);
+      const sourceCopy = await writeSourceCopy(pkg.rootDir, digest, extracted.text);
+      await this.onMaterialImported?.(path.join(pkg.rootDir, sourceCopy));
       const notice =
         interpreted.notice ||
         result.notice ||

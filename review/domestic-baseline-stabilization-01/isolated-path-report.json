@@ -1,0 +1,325 @@
+{
+  "round": "DIGITALME-DOMESTIC-BASELINE-STABILIZATION-01",
+  "baseline": "55b1d2889cc72e9eb7d18fe379fc88e2fde499ec",
+  "networkLabel": "本机外网，不是国内普通网络证明",
+  "startedAt": "2026-10-03T01:54:43.309Z",
+  "catalog": [
+    {
+      "id": "ithome-news",
+      "url": "https://www.ithome.com/rss/",
+      "kinds": [
+        "article"
+      ]
+    },
+    {
+      "id": "people-politics",
+      "url": "http://www.people.com.cn/rss/politics.xml",
+      "kinds": [
+        "article"
+      ]
+    },
+    {
+      "id": "solidot-news",
+      "url": "https://www.solidot.org/index.rss",
+      "kinds": [
+        "article"
+      ]
+    },
+    {
+      "id": "wikimedia-commons",
+      "url": "https://commons.wikimedia.org/w/api.php",
+      "kinds": [
+        "image",
+        "video",
+        "audio"
+      ]
+    },
+    {
+      "id": "internet-archive",
+      "url": "https://archive.org/advancedsearch.php",
+      "kinds": [
+        "audio",
+        "video"
+      ]
+    },
+    {
+      "id": "itunes-podcast-search",
+      "url": "https://itunes.apple.com/search",
+      "kinds": [
+        "audio"
+      ]
+    },
+    {
+      "id": "itunes-top-podcasts",
+      "url": "https://itunes.apple.com/cn/rss/toppodcasts/limit=10/json",
+      "kinds": [
+        "audio"
+      ]
+    }
+  ],
+  "network": {
+    "ithome-news": {
+      "url": "https://www.ithome.com/rss/",
+      "status": 200,
+      "ok": true,
+      "ms": 214,
+      "bytes": 139305,
+      "finalUrl": "https://www.ithome.com/rss/"
+    },
+    "people-politics": {
+      "url": "http://www.people.com.cn/rss/politics.xml",
+      "status": 200,
+      "ok": true,
+      "ms": 102,
+      "bytes": 188447,
+      "finalUrl": "http://www.people.com.cn/rss/politics.xml"
+    },
+    "solidot-news": {
+      "url": "https://www.solidot.org/index.rss",
+      "status": 200,
+      "ok": true,
+      "ms": 84,
+      "bytes": 10385,
+      "finalUrl": "https://www.solidot.org/index.rss"
+    },
+    "wikimedia-commons": {
+      "url": "https://commons.wikimedia.org/w/api.php",
+      "status": 200,
+      "ok": true,
+      "ms": 1631,
+      "bytes": 76946,
+      "finalUrl": "https://commons.wikimedia.org/w/api.php"
+    },
+    "googleNews": {
+      "url": "https://news.google.com/rss/search?q=%E4%BB%8A%E6%97%A5%E6%96%B0%E9%97%BB&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+      "status": 200,
+      "ok": true,
+      "ms": 1244,
+      "bytes": 117834,
+      "finalUrl": "https://news.google.com/rss/search?q=%E4%BB%8A%E6%97%A5%E6%96%B0%E9%97%BB&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    },
+    "bbc": {
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "status": 200,
+      "ok": true,
+      "ms": 1141,
+      "bytes": 28358,
+      "finalUrl": "https://feeds.bbci.co.uk/news/world/rss.xml"
+    },
+    "people": {
+      "url": "http://www.people.com.cn/rss/politics.xml",
+      "status": 200,
+      "ok": true,
+      "ms": 31,
+      "bytes": 188447,
+      "finalUrl": "http://www.people.com.cn/rss/politics.xml"
+    }
+  },
+  "news.today": {
+    "count": 8,
+    "excludedLeak": 0,
+    "sample": [
+      {
+        "title": "今日新闻丨新款问界M8开启预售，预售价38.98万元起！新款特斯拉Model 3上市！ - 电子工程专辑",
+        "publisher": "电子工程专辑",
+        "publishedAt": "2026-10-02T15:59:00.000Z",
+        "url": "https://news.google.com/rss/articles/CBMiU0FVX3lxTFBibmIwMTRodEVxdm1MeHI0Nm9qRjl0VU52MFFab3JHWmh5Q0E4Z0JxeGlyUTZHQUtiUk0xSFJVRmxSTmNRRnJQT2F5dWM0NkpHWVA0?oc=5"
+      },
+      {
+        "title": "今日新闻汇｜金华婺城区入选2021—2025年度平安中国建设示范县 - thepaper.cn",
+        "publisher": "thepaper.cn",
+        "publishedAt": "2026-09-29T01:02:00.000Z",
+        "url": "https://news.google.com/rss/articles/CBMiXkFVX3lxTE81RkxRWm92eHItNmdFYm4xZ1FoODRLTGRfa2hMTERmcjBXTzdMUmhRamVFb0NXRlVpR3dXV2pqbjlNOVdNQndyczJVSmQ2Z1hsVmV4QzVzQUdEWkluRUE?oc=5"
+      },
+      {
+        "title": "今日新闻丨现代艾尼氪V、新款纵横G700、新款欧拉好猫上市！广汽丰田与一汽丰田正式合并协同！ - 电子工程专辑",
+        "publisher": "电子工程专辑",
+        "publishedAt": "2026-09-30T15:59:00.000Z",
+        "url": "https://news.google.com/rss/articles/CBMiU0FVX3lxTE5vWnhBbGhCekwySXZ2dlJDYmxKR3Q3NlcxUEppTWJXM21pbUdxZDVidkFVUGY1YjAzcGNoMmxMTlJ3RldzRExJTmhjajgzdXpTdGEw?oc=5"
+      },
+      {
+        "title": "今日新闻8分钟｜维港惊现 “海上跑车”｜女子突横过马路遭撞倒地 - 香港01",
+        "publisher": "香港01",
+        "publishedAt": "2026-10-02T13:00:00.000Z",
+        "url": "https://news.google.com/rss/articles/CBMiqwNBVV95cUxPV2xoVUlhTDZGM0tMRW9Gc3JVTU14WVpMMVNhMWE3bEtyUEw4ZHk3NlU1eGtHVHV0b240NGJVa3VLUHhSemtEbGlNa3k3NkRCd3QyVEJLTDNjWkE5emtqWGtDbUJtT2RCMm1XekdmdEJsR201em5OVzh2ajhub010UUI2WExOUjg2UTh2dmJXQkIyNTF1UmZxYWdWaFM0VThmeFhJY3pSbVluLUxhTkxzTFZLZTNKQ1V5NlZMM056aW1LYVRWT09halg4OGI3WFZvdTFHRUcwMlJNVG5KSEFyN2xoQXUtcjZHcFVycnB2eS1OQkU1b3BLTktObS1FSDJzbVRvVUFxUnFlTHFQQjJkRXNQVFRMNkItRTVUbUxGbzBGX3EwQTdaZHUwVWJBeWttanR3OTFvU29CSFg0b1BrMElMaTZxUjlqNGJ1Ym5RbWNYWnpPS3J3QktDUXlPb0pFeGE3VVJpU01SMnAwODVuQjJCalRrUEJWd0ZPMlpfX0ZWdHZoRHNnaFRYSmcwS1Jra2F5T0tPcC1SalhLMjBEM08yMWVqc3FjRUNR?oc=5"
+      },
+      {
+        "title": "Revenue价格REVENUE/USD实时价格图表、市值与今日新闻 - CoinGecko",
+        "publisher": "CoinGecko",
+        "publishedAt": "2026-10-02T05:57:16.000Z",
+        "url": "https://news.google.com/rss/articles/CBMifkFVX3lxTE5qY3JQbE9SaS0tY0trcWRQYkVZZmxCMVJsenBSRjVGTWZmdm45bGFOOEpwbVFpM1lNeVdRbUI0Rnc3emkzOFlWZ2o4Q0ZmLUxJZDV5Ull3WDJ5dWhhTjJpZGp2NjNpWHlkVEREYzJMa2lkUzUta1VrNGVGZlY5UQ?oc=5"
+      },
+      {
+        "title": "今日新闻汇｜浙江：从“工作有岗位”迈向“发展有前景” - thepaper.cn",
+        "publisher": "thepaper.cn",
+        "publishedAt": "2026-09-06T07:00:00.000Z",
+        "url": "https://news.google.com/rss/articles/CBMiXkFVX3lxTE50eEJfbFF1MzltbXNPMHB0TGtleXhiRGUyZFZVcHVWdllEVXFjRVl1NnpIcFFIS0VCVGdVU1l6bmJJaERTeFBORElnU1BZSGtiS29ZNThRajdtTjBXVXc?oc=5"
+      }
+    ]
+  },
+  "catalog.ingest": [
+    {
+      "id": "ithome-news",
+      "count": 3,
+      "sample": [
+        {
+          "title": "曝索尼重启《捉猴啦》，沉寂 16 年经典游戏 IP 有望回归",
+          "url": "https://www.ithome.com/1/009/397.htm",
+          "publishedAt": "2026-10-03T01:35:19.000Z"
+        },
+        {
+          "title": "因内存等成本暴涨，英伟达标准版 Shield TV 停产、Pro 版涨价 50%",
+          "url": "https://www.ithome.com/1/009/396.htm",
+          "publishedAt": "2026-10-03T01:24:47.000Z"
+        }
+      ]
+    },
+    {
+      "id": "people-politics",
+      "count": 3,
+      "sample": [
+        {
+          "title": "学习卡丨“人不负青山，青山定不负人”",
+          "url": "http://politics.people.com.cn/n1/2025/0605/c1001-40494898.html",
+          "publishedAt": "2025-06-05T00:00:00.000Z"
+        },
+        {
+          "title": "镜观·足迹｜呵护千山万水 擘画永续发展",
+          "url": "http://politics.people.com.cn/n1/2025/0605/c1001-40494899.html",
+          "publishedAt": "2025-06-05T00:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "solidot-news",
+      "count": 3,
+      "sample": [
+        {
+          "title": "PS5 模拟器的开发取得突破",
+          "url": "https://www.solidot.org/story?sid=85524",
+          "publishedAt": "2026-10-01T16:11:32.000Z"
+        },
+        {
+          "title": "二手 CPU 导致玩家被 Riot 封禁",
+          "url": "https://www.solidot.org/story?sid=85523",
+          "publishedAt": "2026-10-01T15:27:31.000Z"
+        }
+      ]
+    }
+  ],
+  "contract.thinking": {
+    "status": 400,
+    "rejected": true,
+    "body": "{\"ok\":false,\"status\":\"PAYLOAD_REJECTED\",\"error\":\"payload_rejected\"}"
+  },
+  "contract.toolsPlainReply": {
+    "ok": true,
+    "textChars": 1,
+    "toolCalls": 0,
+    "error": null
+  },
+  "contract.cancel": {
+    "late": false,
+    "error": "暂时无法联系模型服务，请稍后再试。"
+  },
+  "material.bind": {
+    "materialRef": "materials/46526c9a44a136fc_stabilization-01-material.txt",
+    "destExists": true,
+    "bound": true,
+    "materialPaths": [
+      "D:\\Projects\\dm-discover-personal-feed-01\\review\\domestic-baseline-stabilization-01\\isolated\\userData\\subjects\\default\\materials\\46526c9a44a136fc_stabilization-01-material.txt"
+    ]
+  },
+  "path.talkVerify": {
+    "notice": "",
+    "chars": 538,
+    "excerpt": "查了 6 组关键词，能落到**最近两天（10月1日—3日）**、且来源是正规媒体的科技条目如下。\n\n先说明两点限制，免得你误判：\n- 这些是新闻源返回的**标题、来源、发布时间**，`bodyRead=false`——我**没有读过正文**，所以只能确认\"有这么条报道\"，不能替它背书内容细节。\n- 链接是 Google News 的聚合跳转地址（原始 URL 只在聚合器里），我**没有逐条点开验证可打开**，这点如实告知。\n\n**发布时间为原始 UTC，括号内换算成北京时间。**\n\n| 标题 | 来源 | 发布时间 |\n|---|---|---|\n| 华为Mate 90系列旗舰手机正式发布 | 中国科技网（stdaily.com） | 10-01 11:01 UTC（1日 19:01） |\n| HUAWEI Mate 90系列发布 众多黑科技加持全面焕新 | 紫牛新闻（yzwb.net） "
+  },
+  "path.material": {
+    "notice": "",
+    "assistant": "写好了，已回读核对。\n\n**文件**：`stabilization-01-delivery.txt`\n**位置**：`D:\\Projects\\dm-discover-personal-feed-01\\review\\domestic-baseline-stabilization-01\\isolated\\authorized-out\\`（你授权的文件夹）\n\n**内容**（回读全文 72 字，与导入材料逐字一致）：\n```\nSTABILIZATION-01-UNIQUE-7f3a\n这是本轮指定导入材料，不是桌面文稿。请只根据这份材料整理。\n主题：隔离验收材料绑定。\n```\n\n几点如实说明：\n- 来源",
+    "result": {
+      "title": "stabilization-01-delivery.txt",
+      "path": "D:\\Projects\\dm-discover-personal-feed-01\\review\\domestic-baseline-stabilization-01\\isolated\\authorized-out\\stabilization-01-delivery.txt"
+    },
+    "delivered": true,
+    "containsMarker": true,
+    "stillBound": true,
+    "desktopLookalike": "not-in-isolated-home"
+  },
+  "path.browse.open": {
+    "cards": 0,
+    "more": 12,
+    "excluded": 0,
+    "sample": [],
+    "notice": ""
+  },
+  "path.news.today": {
+    "cards": 2,
+    "excluded": 0,
+    "sample": [
+      {
+        "title": "2026年10月3日，早安！假期过半，不必追赶行程，感受眼前的风景，好好积攒元气，享受属于你的悠闲时光！ - 河北广播电视台",
+        "url": "https://news.google.com/rss/articles/CBMia0FVX3lxTE9JaE5hZWVPbktvWE44NTNWZzRuOGN6cmppN2FIUl9MNGZTYXVIVlY0WFRFRnZCN3JBaFptSHNhT1VfTU1VLTV6aTBxTFhGQnR0NUxqQS1DMFZ1eUl1VmwtUGN6bnZKSmMtRF9v?oc=5",
+        "publisher": "河北广播电视台",
+        "publishedAt": "2026-10-02T23:00:01.000Z",
+        "reason": "新闻来源给出的标题和发布时间。打开的是聚合入口，没有解析出媒体原文。还没有读取正文。",
+        "sourceBoundary": "",
+        "excluded": false
+      },
+      {
+        "title": "中国人民大学90周年校庆公告（第一号） - 人大新闻网",
+        "url": "https://news.google.com/rss/articles/CBMiXEFVX3lxTE9oWWRFZ3dKRmppd04xQ29hSGhqYTdRY1BPUzRGUEVMU1d1SEdsM3FpZUJqQ0hrMUg4RTJPSlNoWkhwUTZGbjdia1BlRURFSUVnZWgtbWxqZktPTi1x?oc=5",
+        "publisher": "人大新闻网",
+        "publishedAt": "2026-10-03T01:13:26.000Z",
+        "reason": "新闻来源给出的标题和发布时间。打开的是聚合入口，没有解析出媒体原文。还没有读取正文。",
+        "sourceBoundary": "",
+        "excluded": false
+      }
+    ],
+    "notice": "这一组只包括来源发布时间是 2026-10-03、并且判断为具体报道的条目。综述在补充背景里。还没读到的正文仍标为来源摘要。"
+  },
+  "path.news.energy": {
+    "cards": 2,
+    "excluded": 0,
+    "sample": [
+      {
+        "title": "新闻调查 | 新能源汽车，你在自贡还好吗？ - 自贡网",
+        "url": "https://news.google.com/rss/articles/CBMiUkFVX3lxTE5sSHhEa3JJazRDSUVFc0YzaDNIUU1RLThNbkY4Z3BQZUR3Vi1BS3BJQ3p5YWpXRmpOS1Z6OVdkc1RnUnJEcDhnLTVQSXVNWDlTT1E?oc=5",
+        "publisher": "自贡网",
+        "publishedAt": "2026-09-28T07:08:00.000Z",
+        "reason": "新闻来源给出的标题和发布时间。打开的是聚合入口，没有解析出媒体原文。还没有读取正文。",
+        "sourceBoundary": "",
+        "excluded": false
+      },
+      {
+        "title": "即墨女岛绿色能源产业加速成“链” - 青岛新闻网",
+        "url": "https://news.google.com/rss/articles/CBMidkFVX3lxTE90bWQ5UEZoTHFvMXJyZUtXdkF3YTJfVDNQREQ0LXVEZ3dTcllBamZ3alBGcjktallnSmhMQm00UHdpMUVNV18wcWc1dXpTOVgwaUVEdjdaOHFINkpmRjQ5UVJPSU9tYmVlbWNHeGhLTGpUMEo2aGc?oc=5",
+        "publisher": "青岛新闻网",
+        "publishedAt": "2026-09-28T02:20:54.000Z",
+        "reason": "新闻来源给出的标题和发布时间。打开的是聚合入口，没有解析出媒体原文。还没有读取正文。",
+        "sourceBoundary": "",
+        "excluded": false
+      }
+    ],
+    "notice": "这一组只包括来源发布时间是 2026-09-28、并且判断为具体报道的条目。综述在补充背景里。还没读到的正文仍标为来源摘要。"
+  },
+  "path.news.cancel": {
+    "cancelNotice": "",
+    "leftoverCards": 0,
+    "leftoverError": null
+  },
+  "path.browse.restart": {
+    "later": 0,
+    "laterTitles": [],
+    "laterMarks": []
+  },
+  "finishedAt": "2026-10-03T01:57:11.532Z",
+  "exitReady": {
+    "talkVerify": true,
+    "materialBoundAndDelivered": true,
+    "browseHasCards": false,
+    "newsNoExcluded": true,
+    "domesticNetworkUnproven": true
+  }
+}

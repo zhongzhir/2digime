@@ -1,0 +1,700 @@
+{
+  "task": "DIGITALME-UNIFIED-CAPABILITY-01 final real blockchain UI validation",
+  "startedAt": "2026-10-11T01:55:51.631Z",
+  "head": "2d3732fa7129c2340f8afdaeabf25993c6b6f267",
+  "endpoint": "https://ws-ok2fv132ihswnia7.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+  "model": "qwen3.8-flash",
+  "credential": {
+    "source": "local CSV, read in runner process",
+    "valueRecorded": false
+  },
+  "budget": {
+    "targetCny": 2,
+    "priorKnownCny": 0.0578902,
+    "priorUnknownReserveCny": 1.55,
+    "priorAdmissionCny": 1.6078902,
+    "requestReserveCny": 0.3,
+    "preAdmissionCny": 1.9078902,
+    "admitted": true,
+    "requestKnownCny": 0.0759397,
+    "requestUnknownReserveCny": 0,
+    "finalAdmissionCny": 1.6838298999999999
+  },
+  "cards": [
+    {
+      "itemId": "responses_42cdd45f108c83d3d790",
+      "title": "The State of Blockchain in 2026",
+      "url": "https://jamesm.blog/blockchain/state-of-blockchain-2026/",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "jamesm.blog",
+        "已读取正文。"
+      ],
+      "excerpt": "2026年区块链行业全景深度分析。梳理了哪些链存活、哪些消亡，指出现代模块化区块链和稳定币经济是两大结构性转变。比特币为储备资产、以太坊L2承载日常活动、Solana主导高吞吐应用。RWA代币化已从PPT变成300亿+美元实际市场。展望未来：AI Agent链上交易、隐私成为竞争护城河、BTC DeFi启动。 • 比特币被视为机构数字储备资产，现货ETF已持有可观供应量 • 稳定币年结算量已超Visa • RWA代币化从概念走向$300亿+实盘市场 • 模块化区块链(Celestia/EigenLayer)和再质押进入生产级部署"
+    },
+    {
+      "itemId": "responses_c2c2a00c512c5f9827f4",
+      "title": "12家大机构眼中的2026：加密行业将走向何方？",
+      "url": "https://www.panewslab.com/zh/articles/633535f9-e53b-4fa0-b523-a9d8903a5a2c",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "PANews",
+        "已读取正文。"
+      ],
+      "excerpt": "横向对比Bitwise、Coinbase Institutional、Galaxy、Grayscale、CoinShares、a16z等顶级机构对2026年的预测。三大共识领域：稳定币成支付轨道、资产代币化规模化、混合金融。争议领域：数字资产信托（DATs）前景和市场周期判断。Coinbase预测代币化资产规模可能从200亿暴涨到4000亿美元。 • 稳定币2026年将成最大共识赛道 • Coinbase预测代币化资产规模可达4000亿美元 • DATs与市场周期存在巨大分歧"
+    },
+    {
+      "itemId": "responses_cfb8cf8acc682e39c8a5",
+      "title": "a16z年度展望：2026年Web3行业趋势前瞻",
+      "url": "https://zhuanlan.zhihu.com/p/1983898642558514865",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "知乎/万向区块链小课堂（译自a16z）",
+        "已读取正文。"
+      ],
+      "excerpt": "a16z旗下多位合伙人及行业专家的前瞻合集。涵盖：隐私将成为链的核心壁垒与网络效应来源；AI智能体需要KYA（了解你的智能体）协议；去中心化通讯应对量子计算威胁；安全范式从漏洞追踪转向系统级设计属性；zkVM证明开销将降至万倍、手机上可运行；质押媒体（Staking Media）建立可验证信任。 • 隐私是Web3不可或缺刚需，将形成赢家通吃的网络效应 • 非人类身份数量已达人类员工96倍 • 2026年zkVM证明开销将降至约1万倍，可在手机上运行 • 智能体经济核心瓶颈已从'智能'转向'身份'"
+    },
+    {
+      "itemId": "responses_3974e55615dd7250f951",
+      "title": "2026年稳定币监管如何推动区块链创新",
+      "url": "https://pro.edgex.exchange/zh-CN/news/article/stablecoin-regulation-blockchain-adoption-2026",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "edgeX",
+        "已读取正文。"
+      ],
+      "excerpt": "以美国GENIUS法案为起点，论证清晰监管规则反而加速了创新。截至2026年6月稳定币总市值约3,160亿美元，2025年年度交易量达33万亿美元（同比增长72%）。梳理了全球监管进程：欧盟MiCA全面实施、加拿大C-15法案获御准、港新推出发牌制度。数据显示生息型稳定币2026年Q1单季增长超22%。 • GENIUS法案建立美国首套支付型稳定币联邦框架 • 2025年稳定币年度交易量达33万亿美元，同比增72% • 2026年3月SEC和CFTC将16种加密资产归类为数字大宗商品 • Tether占稳定币供应量59%、链上交易量74%"
+    },
+    {
+      "itemId": "responses_5d94c835c2b6ce329273",
+      "title": "SEC正式提出Regulation Crypto Assets新规",
+      "url": "https://www.sec.gov/newsroom/press-releases/2026-76-sec-proposes-new-regulation-crypto-assets",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "SEC (美国证券交易委员会)",
+        "已读取正文。"
+      ],
+      "excerpt": "2026年8月18日，美国SEC主席Atkins宣布提出'Regulation Crypto Assets'规则提案，为涉及加密资产的投资合约建立量身定制的证券发行框架。包含两项注册豁免（单次500万美元/年度7500万美元）、有条件安全港条款、以及联邦法优先于州证券法的预emption机制。公众意见截止日期为2026年10月20日。 • SEC提出首套针对加密资产投资合约的专门证券发行制度 • 包含条件性安全港：发行方完成承诺的管理努力后加密资产可不再被归类为证券 • 公众意见期截止2026年10月20日 • 提案旨在减少发行方离岸运营的激励"
+    },
+    {
+      "itemId": "responses_00a2d26b13481cc17e50",
+      "title": "FinCEN撤销两项数字资产相关拟议规则",
+      "url": "https://www.fincen.gov/news/news-releases/fincen-announces-withdrawals-proposed-digital-asset-related-rules",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "FinCEN (美国财政部)",
+        "已读取正文。"
+      ],
+      "excerpt": "2026年10月5日，美国金融犯罪执法网络(FinCEN)正式撤销两项拟议规则：一是对涉及可兑换虚拟货币和非托管钱包交易施加记录保存和报告要求；二是针对加密货币混币器实施特别措施。此举作为特朗普政府去监管议程的一部分，旨在确保数字资产法规'适合其目的'。 • 撤销了针对非托管钱包和混币器的两项拟议规则 • 作为Trump政府去监管议程的一部分"
+    },
+    {
+      "itemId": "responses_878239ccdc508296faec",
+      "title": "金融時報：英國擬在2026年全面納管加密貨幣，放寬部分原則",
+      "url": "https://www.blocktempo.com/uk-fca-tailored-crypto-rules/",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "BlockTempo 链闻",
+        "已读取正文。"
+      ],
+      "excerpt": "据英国金融时报报道，FCA计划从2026年起将加密货币纳入全面监管框架，但将豁免部分传统金融核心原则（如'诚实经营'、'公平对待客户'通用要求），同时加强网络安全和运营韧性方面的监管。FCA引用今年Bybit交易所15亿美元被盗案，强调数字资产公司需要更强的运营韧性。 • FCA认为直接套用传统金融规则不适用于加密行业 • 加密货币交易平台可豁免部分FCA手册核心原则 • Bybit 15亿美元被盗案推动FCA加强运营风险监管 • 美国更友善的监管态度给英国带来竞争压力"
+    },
+    {
+      "itemId": "responses_7ec2ae6f6e85929ef73a",
+      "title": "穩定幣、RWA全面起飛！勤業眾信揭2026四大關鍵趨勢",
+      "url": "https://udn.com/news/story/7239/9567152",
+      "publishedDay": "2026-06-01",
+      "textOrigin": "body",
+      "sourceLines": [
+        "聯合新聞網 · 2026-06-01",
+        "已读取正文。"
+      ],
+      "excerpt": "勤業眾信（Deloitte）提出2026年數位資產四大趨勢：鏈上金融崛起、RWA代幣化、支付創新與穩定幣應用、可信任的風險管理架構。市場預估2030年全球RWA規模可突破10兆美元。台灣《虛擬資產服務法》草案已通過財委會初審，標誌數位資產進入法制化階段。 • 贝莱德、摩根大通等国际金融机构积极投入RWA • 2030年全球RWA规模预估突破10万亿美元 • 欧盟DORA法案对金融机构资安管理提出更高要求 • 行业从'技术驱动'迈向'制度驱动'"
+    },
+    {
+      "itemId": "responses_c2472890e01d79cbfaa2",
+      "title": "Blockchain Trends 2026: What's Actually Reshaping the Industry",
+      "url": "https://spacedev.io/blog/blockchain-trends-2026",
+      "publishedDay": "",
+      "textOrigin": "body",
+      "sourceLines": [
+        "SpaceDev",
+        "已读取正文。"
+      ],
+      "excerpt": "SpaceDev 发布的2026年八大区块链趋势深度分析：机构采用进入实际部署阶段（BlackRock/JPMorgan/Fidelity设专门部门）、RWA从试点到生产级、AI与区块链融合创造可验证链上系统、美欧监管明确成最大加速器、DeFi通过合规产品走向成熟、智能合约审计成战略刚需、L2（ZK-rollups/模块化链）从实验转向标准架构。 • 机构区块链应用已不再是预测，而是实际部署周期 • RWA代币化正在进入受监管的生产级基础设施 • AI与区块链融合创建自主可验证的链上系统 • 智能合约安全审计成为战略要求而非可选步骤"
+    },
+    {
+      "itemId": "responses_860879bc984a99285522",
+      "title": "區塊鏈重點動態2026年10月7日早參考",
+      "url": "https://news.cnyes.com/news/id/6623593",
+      "publishedDay": "2026-10-07",
+      "textOrigin": "body",
+      "sourceLines": [
+        "旺时报/金色财经 · 2026-10-07",
+        "已读取正文。"
+      ],
+      "excerpt": "金色财经2026年10月7日区块链行业动态汇总。报告指出2026年区块链监管政策将逐步完善，行业正从'技术探索'向'合规化、规模化、深度融合'转型。涵盖合规经营策略、技术创新与应用场景拓展、风险管理、国际合作竞争及人才培养五个维度。 • 2026年区块链行业处于从技术探索向合规化、规模化转型的关键阶段 • 金融科技领域应用落地和监管框架建立取得显著进展"
+    }
+  ],
+  "events": [
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "request_started",
+      "elapsedMs": 0
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reasoning",
+      "elapsedMs": 560,
+      "providerEventType": "response.reasoning_text.delta"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "searching",
+      "elapsedMs": 9014,
+      "providerEventType": "response.output_item.added",
+      "toolType": "web_search"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "searching",
+      "elapsedMs": 9015,
+      "providerEventType": "response.web_search_call.in_progress",
+      "toolType": "web_search"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "searching",
+      "elapsedMs": 9015,
+      "providerEventType": "response.web_search_call.searching",
+      "toolType": "web_search"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 40526,
+      "providerEventType": "response.output_item.added",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 40544,
+      "providerEventType": "response.output_item.done",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "searching",
+      "elapsedMs": 43042,
+      "providerEventType": "response.output_item.added",
+      "toolType": "web_search"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "searching",
+      "elapsedMs": 43042,
+      "providerEventType": "response.web_search_call.in_progress",
+      "toolType": "web_search"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "searching",
+      "elapsedMs": 43042,
+      "providerEventType": "response.web_search_call.searching",
+      "toolType": "web_search"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 50139,
+      "providerEventType": "response.output_item.added",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 53192,
+      "providerEventType": "response.output_item.done",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 68098,
+      "providerEventType": "response.output_item.added",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 68100,
+      "providerEventType": "response.output_item.done",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 80813,
+      "providerEventType": "response.output_item.added",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reading_source",
+      "elapsedMs": 80814,
+      "providerEventType": "response.output_item.done",
+      "toolType": "web_extractor"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "reasoning",
+      "elapsedMs": 86529,
+      "providerEventType": "response.output_item.added",
+      "toolType": "function"
+    },
+    {
+      "surface": "discover",
+      "requestId": "sg_mv368wam_rg8v2a7y",
+      "stage": "completed",
+      "elapsedMs": 121109
+    }
+  ],
+  "checks": {
+    "exactlyOneProviderRequestStarted": true,
+    "providerRequestReachedTerminal": true,
+    "traceCompleted": true,
+    "toolsActuallyUsed": true,
+    "hasUsableResults": true,
+    "noHomepageOrSearchPageMasquerades": true,
+    "allSourcesBoundToExactTraceUrl": true,
+    "allReadStatesMatchTrace": true,
+    "everyDisplayedDateHasReadSourceEvidence": true,
+    "withinBudget": true
+  },
+  "failures": [],
+  "isolatedUserData": "C:\\Users\\46554\\AppData\\Local\\Temp\\digitalme-final-blockchain-P87Tq9",
+  "configuration": {
+    "saveModelReady": true,
+    "activeModelReady": true,
+    "model": "qwen3.8-flash",
+    "host": "ws-ok2fv132ihswnia7.cn-beijing.maas.aliyuncs.com"
+  },
+  "subjectDir": "C:\\Users\\46554\\AppData\\Local\\Temp\\digitalme-final-blockchain-P87Tq9\\subjects\\default",
+  "query": "找一些关于区块链的最新报道和深度分析文章。",
+  "elapsedMs": 122450,
+  "notice": "整理了2026年10月前后关于区块链的最新报道与深度分析，涵盖：行业全景分析（jamesm.blog、SpaceDev）、多机构预测对比（PANews、a16z）、监管政策（SEC新规、FinCEN撤规、英国FCA框架、稳定币监管）、RWA代币化趋势（勤業眾信）以及10月市场波动。内容兼顾中英文优质来源。",
+  "diagnostic": {
+    "at": "2026-10-11T01:57:54.969Z",
+    "generationId": "sg_mv368wam_rg8v2a7y",
+    "event": "unified_responses",
+    "query": "找一些关于区块链的最新报道和深度分析文章。",
+    "trace": {
+      "provider": "responses",
+      "responseId": "resp_de26f1f0-4c12-9488-b9d3-32e897bbd350",
+      "status": "completed",
+      "elapsedMs": 121107,
+      "firstToolCallMs": 9014,
+      "webSearchCalls": 2,
+      "webExtractorCalls": 4,
+      "functionCalls": 1,
+      "usage": {
+        "inputTokens": 69457,
+        "outputTokens": 4583,
+        "reasoningTokens": 1274,
+        "totalTokens": 74040,
+        "estimatedCostCny": 0.0759397
+      },
+      "sources": [
+        {
+          "url": "https://www.wublock123.com/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.binance.com/zh-CN/square/news/all",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.cls.cn/detail/852597",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://blockcast.it/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://x.com/wublockchain12",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.gate.com/zh/news/detail/16232818",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.blocktempo.com/binance-blockchain-week-2026-bangkok-asia-return-financial-evolution-conference/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://news.cnyes.com/news/id/6440269",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=ZC-VeE1msME",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.panewslab.com/zh/articles/633535f9-e53b-4fa0-b523-a9d8903a5a2c",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://finance.yahoo.com/markets/crypto/articles/too-crypto-october-2026-3-230323461.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=TBekNtaQVqU",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://bitcoinfoundation.org/news/altcoins/best-crypto-to-buy-before-the-next-crash-october/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.openpr.com/news/4656859/best-crypto-to-buy-in-october-2026-why-smart-money-picks-pepeto",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=fKCDAm2B9k0",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.metalpay.com/news-insights/crypto-news---2-october-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://coinscapture.com/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=D42gzLpOfPM",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://beincrypto.com/crypto-market-crash-october-analysis/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.whitehouse.gov/videos/president-trump-participates-in-a-new-golden-age-summit/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://artistic709.medium.com/%E5%9C%A8-2026-%E5%B9%B4-%E6%90%9E%E5%8D%80%E5%A1%8A%E9%8F%88%E9%82%84%E6%98%AF%E6%9C%89%E6%84%8F%E7%BE%A9%E7%9A%84%E5%97%8E-da69592be39f",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://news.cnyes.com/news/id/6623593",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://zhuanlan.zhihu.com/p/1983898642558514865",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=B3wJuvYjLu0",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.binance.com/fr-AF/square/post/35108805011849",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.sgpjbg.com/bggroup/554.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://x.com/Foresight_News/article/2072142296532066643",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.yanfajia.com/conf/index/BTFM2026.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=XQiUNVQV5yg",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://jamesm.blog/blockchain/state-of-blockchain-2026/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.fortunebusinessinsights.com/industry-reports/blockchain-market-100072",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.grandviewresearch.com/industry-analysis/blockchain-technology-market",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.precedenceresearch.com/blockchain-technology-market",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=waWcCcBJsWc",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.deloitte.com/us/en/services/consulting/articles/future-of-blockchain.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://spacedev.io/blog/blockchain-trends-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.coherentmarketinsights.com/market-insight/blockchain-technology-market-2846",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.gminsights.com/industry-analysis/blockchain-technology-market",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://research.grayscale.com/reports/2026-digital-asset-outlook-dawn-of-the-institutional-era",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://scalablesolutions.io/blog/posts/blockchain-updates-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.voachinese.com/a/China-imposes-blockchain-rules-to-enable-orderly-development-20190110/4737255.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.prnewswire.com/apac/zh/news-releases/cypher-asia-202622-302874563.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://caifuhao.eastmoney.com/news/20260209222831415134410",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://news.bitcoin.com/zh/regulation-and-legal/a-te-jin-si-cheng-nuo-jin-yi-bu-tiao-zheng-jia-mi-huo-bi-jian-guan-gui-ze-yi-jiang-shi-chang-liu-zai-jing-nei/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://pro.edgex.exchange/zh-CN/news/article/stablecoin-regulation-blockchain-adoption-2026",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.blocktempo.com/uk-fca-tailored-crypto-rules/",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://zhuanlan.zhihu.com/p/2029536286931710037",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://m.cnyes.com/news/print/6623593",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://china.mgronline.com/economy/hong-kong-sets-end-of-2026-deadline-to-push-crypto-regulations-covering-4-sector/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.lw.com/en/us-crypto-policy-tracker/regulatory-developments",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.sec.gov/newsroom/press-releases/2026-76-sec-proposes-new-regulation-crypto-assets",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.facebook.com/contentworksagency/posts/october-brings-significant-regulatory-developments-across-forex-crypto-fintech-a/1641710974660602/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.fincen.gov/news/news-releases/fincen-announces-withdrawals-proposed-digital-asset-related-rules",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://www.davispolk.com/insights/resource-centers/crypto-regulation-hub",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://bitcoinfoundation.org/news/regulation/sec-gives-u-s-crypto-companies-the-green-light-to-operate-nationwide/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.atlanticcouncil.org/programs/geoeconomics-center/cryptoregulationtracker/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.globallegalinsights.com/practice-areas/blockchain-cryptocurrency-laws-and-regulations/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=jpUusjSGpXE",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.sfox.com/regulatory-insights/sec-regulation-crypto-assets-proposal-institutional-guide/",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.cdic.gov.tw/upload/cont_att/37-1-4.pdf",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.cbc.gov.tw/dl-203610-2c522e1611584e89bf09cf5eba565833.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=GPPPV-1nb5A&xstg=CAMSBhUDze3xHw%3D%3D",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.stcn.com/article/detail/2522245.html",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.datawallet.com/zh/%E9%9A%90%E8%94%BD%E6%80%A7/%E7%A8%B3%E5%AE%9A%E5%B8%81%E7%BB%9F%E8%AE%A1",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://udn.com/news/story/7239/9567152",
+          "discoveredBy": "web_search",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        },
+        {
+          "url": "https://news.qq.com/rain/a/20260130A04PSA00",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://xtsupport.zendesk.com/hc/zh-cn/articles/54044294134937-2026-%E5%B9%B4%E7%A8%B3%E5%AE%9A%E5%B8%81%E6%94%AF%E4%BB%98%E4%BD%93%E7%B3%BB%E7%9A%84%E6%9C%AA%E6%9D%A5-%E5%93%AA%E4%BA%9B%E5%8F%98%E9%87%8F%E6%9C%80%E5%85%B3%E9%94%AE",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://finance.sina.com.cn/wm/2026-07-23/doc-iniiuwta9448115.shtml",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://www.binance.com/zh-TC/square/post/35948638191041",
+          "discoveredBy": "web_search",
+          "readStatus": "snippet_only"
+        },
+        {
+          "url": "https://artistic709.medium.com/%E5%9C%A8-2026-%E5%B9%B4-%E6%90%9E%E5%8C%BA%E5%A0%8A%E9%8F%88%E9%82%84%E6%98%AF%E6%9C%89%E6%84%8F%E7%BE%B8%E7%9A%84%E5%97%8E-da69592be39f",
+          "discoveredBy": "model_output",
+          "readStatus": "read",
+          "readMethod": "web_extractor_call"
+        }
+      ]
+    },
+    "responseStatus": "complete"
+  },
+  "passed": true,
+  "completedAt": "2026-10-11T01:57:56.689Z"
+}

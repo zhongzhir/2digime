@@ -61,6 +61,24 @@ export async function launchDigitalMeElectron(opts?: {
     throw new Error('require(electron) 未返回可执行路径');
   }
   const realProduct = opts?.realProduct === true;
+  const electronPackageDir = path.dirname(require.resolve('electron/package.json'));
+  const dependencyRoot = path.dirname(electronPackageDir);
+  // Playwright 1.49 launches Electron through a shell on Windows. A repository
+  // path containing spaces is otherwise split before Electron can execute main.cjs.
+  const bootstrap = path.join(
+    os.tmpdir(),
+    `digitalme-electron-main-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.cjs`,
+  );
+  await fs.writeFile(
+    bootstrap,
+    [
+      "process.env.NODE_PATH = " + JSON.stringify(dependencyRoot) + " + require('node:path').delimiter + (process.env.NODE_PATH || '');",
+      "require('node:module').Module._initPaths();",
+      "require(" + JSON.stringify(path.join(REPO_ROOT, 'electron', 'main.cjs')) + ");",
+      '',
+    ].join('\n'),
+    'utf8',
+  );
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries({
     ...process.env,
@@ -89,13 +107,19 @@ export async function launchDigitalMeElectron(opts?: {
     if (value === '') delete env[key];
   }
   const playwright = await import('playwright');
-  const app = await playwright._electron.launch({
-    executablePath: electronPath,
-    args: [path.join(REPO_ROOT, 'electron', 'main.cjs')],
-    cwd: REPO_ROOT,
-    timeout: 60_000,
-    env,
-  });
+  let app: ElectronApplication;
+  try {
+    app = await playwright._electron.launch({
+      executablePath: electronPath,
+      args: [bootstrap],
+      cwd: REPO_ROOT,
+      timeout: 60_000,
+      env,
+    });
+  } catch (err) {
+    await fs.rm(bootstrap, { force: true }).catch(() => {});
+    throw err;
+  }
   try {
     const page = await app.firstWindow({ timeout: 90_000 });
     await page.waitForLoadState('domcontentloaded');
@@ -109,6 +133,7 @@ export async function launchDigitalMeElectron(opts?: {
         } catch {
           /* ignore */
         }
+        await fs.rm(bootstrap, { force: true }).catch(() => {});
       },
     };
   } catch (err) {
@@ -117,6 +142,7 @@ export async function launchDigitalMeElectron(opts?: {
     } catch {
       /* ignore */
     }
+    await fs.rm(bootstrap, { force: true }).catch(() => {});
     throw err;
   }
 }
@@ -127,14 +153,19 @@ export async function skipWelcomeAndEnterShell(page: Page): Promise<void> {
     const input = page.locator('#chat-input');
     return (await shell.isVisible().catch(() => false)) && (await input.isVisible().catch(() => false));
   };
-  if (await shellReady()) return;
-  const skipModel = page.locator('#btn-welcome-skip-model');
-  if (await skipModel.isVisible().catch(() => false)) {
-    await skipModel.click({ force: true });
+  // 测试态会在 boot 后自动离开欢迎页，并收起「先看看」。
+  // 这时再对正在隐藏的按钮做点击会失败，所以先等壳出现，到点了再走当前入口。
+  const deadline = Date.now() + 12_000;
+  while (Date.now() < deadline && !(await shellReady())) {
+    await page.waitForTimeout(200);
   }
-  const skipIntro = page.locator('#btn-create-skip');
-  if (await skipIntro.isVisible().catch(() => false)) {
-    await skipIntro.click({ force: true });
+  if (!(await shellReady())) {
+    await page.evaluate(`(() => {
+      const skip = document.getElementById('btn-welcome-skip-model');
+      const intro = document.getElementById('btn-create-skip');
+      if (skip) skip.click();
+      else if (intro) intro.click();
+    })()`);
   }
   await page.locator('#view-shell').waitFor({ state: 'visible', timeout: 20_000 });
   const chatNav = page.locator('#nav-chat');
@@ -151,8 +182,17 @@ export async function sendChat(page: Page, text: string): Promise<void> {
   const before = await page.locator('.chat-turn-assistant').count();
   await input.fill(text);
   await page.locator('#btn-chat-send').click();
+  await page.waitForFunction(
+    "Boolean(document.getElementById('btn-chat-send') && document.getElementById('btn-chat-send').disabled)",
+    undefined,
+    { timeout: 10_000 },
+  );
   await page.locator('.chat-turn-assistant').nth(before).waitFor({ state: 'visible', timeout: 30_000 });
-  await page.locator('#btn-chat-send:not([disabled])').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForFunction(
+    "Boolean(document.getElementById('btn-chat-send') && !document.getElementById('btn-chat-send').disabled)",
+    undefined,
+    { timeout: 30_000 },
+  );
 }
 
 export async function waitForOverviewName(page: Page, name: string, timeoutMs = 45_000): Promise<void> {

@@ -118,23 +118,31 @@ export function openedItemIds(events: RecentRecommendationEvent[]): string[] {
   return ids;
 }
 
-export function formatRecentRecommendationContext(events: RecentRecommendationEvent[]): string {
+export function formatRecentRecommendationContext(
+  events: RecentRecommendationEvent[],
+  options?: { includeOneOffSeeks?: boolean },
+): string {
   const rows = events.slice(-FORMAT_LIMIT);
   if (!rows.length) return '';
   const opened = rows.filter((row) => row.type === 'opened' && (row.title || row.itemId));
   const asked = rows.filter((row) => row.type === 'asked_2digime' && (row.title || row.itemId));
-  const seeks = rows.filter((row) => row.type === 'seek_topic' && row.topic);
+  const seeks =
+    options?.includeOneOffSeeks === false
+      ? []
+      : rows.filter((row) => row.type === 'seek_topic' && row.topic);
   const lines = [
     '近期内容上下文（只存在本机、会过期、可重置，不是长期偏好，不要写成「用户喜欢」）：',
   ];
   if (opened.length) {
-    lines.push(`最近打开：${opened.map((row) => row.title || row.itemId).join('；')}`);
+    lines.push(`最近打开（打开不等于喜欢）：${opened.map((row) => row.title || row.itemId).join('；')}`);
   }
   if (asked.length) {
     lines.push(`最近问兔机米：${asked.map((row) => row.title || row.itemId).join('；')}`);
   }
   if (seeks.length) {
-    lines.push(`最近想看：${seeks.map((row) => row.topic).join('；')}`);
+    lines.push(
+      `一次性检索（不是长期兴趣，不要写成默认栏目）：${seeks.map((row) => row.topic).join('；')}`,
+    );
   }
   return lines.join('\n');
 }

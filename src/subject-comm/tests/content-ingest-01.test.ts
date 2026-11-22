@@ -88,6 +88,22 @@ test('ingest feed: normalize, dedup, searchable directory, no user fields', asyn
   assert.throws(() => searchContentDirectory(listed.items, { q: 'x', preference: 'secret' } as never));
 });
 
+test('HTTP 304 is a successful unchanged source check, not an unavailable feed', async () => {
+  const result = await ingestSource({
+    sourceUrl: 'https://example.org/feed.xml',
+    store: new MemoryNetworkItemStore(),
+    fetchImpl: async () => ({
+      status: 304,
+      body: '',
+      finalUrl: 'https://example.org/feed.xml',
+      headers: { etag: '"feed-v1"' },
+    }),
+  });
+  assert.equal(result.notModified, true);
+  assert.deepEqual(result.records, []);
+  assert.deepEqual(result.items, []);
+});
+
 test('AI descriptor may rewrite text but still must not store user identity', async () => {
   const store = new MemoryNetworkItemStore();
   const result = await ingestSource({

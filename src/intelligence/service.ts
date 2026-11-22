@@ -1,4 +1,6 @@
+import { statSync } from 'node:fs';
 import * as path from 'node:path';
+import { extractFile } from '../infrastructure/extract';
 import { nowIso } from '../shared/ids';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import {
@@ -7,15 +9,17 @@ import {
 } from '../subject-core/conversation-sessions';
 import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
+import { persistDiscoveryGoalUpdate } from './store';
 import { randomUUID } from 'node:crypto';
 import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
-import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkTurnOutcome, TalkView } from './types';
+import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkTurnOutcome, TalkView, TalkThread } from './types';
+import { listContentPreferences, formatPreferenceDirectives } from '../subject-comm/content-preferences';
 import {
   listActiveFilesystemGrantFolders,
   saveFilesystemGrant,
 } from '../authorization/filesystem-grant';
-import { expectedFromExecutions, hasObservedMutation, isMutationEffectName } from './talk-effects';
+import { hasObservedMutation } from './talk-effects';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
@@ -39,21 +43,38 @@ export function talkTurnDeadlineMs(): number {
   return Number.isFinite(n) && n > 0 ? n : TALK_TURN_DEADLINE_MS;
 }
 
+export function isTalkCancelled(err: unknown): boolean {
+  return err instanceof Error && err.name === 'TalkCancelled';
+}
+
 function isTalkTimeout(err: unknown): boolean {
+  if (isTalkCancelled(err)) return false;
   if (err instanceof TalkTimeoutError) return true;
   if (!(err instanceof Error)) return false;
-  if (err.name === 'TalkTimeoutError' || err.name === 'AbortError') return true;
-  // 工具已成功后，合成/续聊的运输层超时不得绕过 writeThread，否则 Owner 空等约整轮 deadline。
+  if (err.name === 'TalkTimeoutError') return true;
   const kind = (err as { kind?: string }).kind;
-  if (err.name === 'ModelHttpError' && (kind === 'timeout' || kind === 'aborted')) return true;
+  if (err.name === 'ModelHttpError' && kind === 'timeout') return true;
   return /timeout after\s+\d+ms|请求超时|TalkTimeout/i.test(err.message);
+}
+
+function errorFromAbort(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error) return reason;
+  return new TalkTimeoutError();
+}
+
+const turnSignals: AbortSignal[] = [];
+
+/** 当前正在执行的对话回合信号。授权等待用它结束，避免原生对话框把下一次发送卡住。 */
+export function currentTalkTurnSignal(): AbortSignal | null {
+  return turnSignals[turnSignals.length - 1] || null;
 }
 
 function wrapChatWithDeadline(chat: TalkChatFn, signal: AbortSignal): TalkChatFn {
   return async (input) => {
-    if (signal.aborted) throw new TalkTimeoutError();
+    if (signal.aborted) throw errorFromAbort(signal);
     return await new Promise((resolve, reject) => {
-      const onAbort = () => reject(new TalkTimeoutError());
+      const onAbort = () => reject(errorFromAbort(signal));
       signal.addEventListener('abort', onAbort, { once: true });
       Promise.resolve(chat({ ...input, signal })).then(
         (value) => {
@@ -62,7 +83,7 @@ function wrapChatWithDeadline(chat: TalkChatFn, signal: AbortSignal): TalkChatFn
         },
         (err) => {
           signal.removeEventListener('abort', onAbort);
-          if (signal.aborted) reject(new TalkTimeoutError());
+          if (signal.aborted) reject(errorFromAbort(signal));
           else reject(err);
         },
       );
@@ -78,6 +99,7 @@ export interface TalkPackageRef {
 export type TalkLearnResult = {
   asked: boolean;
   askHint?: string;
+  goalUpdate?: { request?: string; revoke?: boolean } | undefined;
 };
 
 export class TalkService {
@@ -93,19 +115,59 @@ export class TalkService {
     ) => ProfessionalAgent[],
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
-    private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
+    private readonly learnFromUtterance?: (
+      text: string,
+      taskContext?: string,
+      signal?: AbortSignal,
+    ) => Promise<TalkLearnResult>,
     private readonly resolveContentSeek?: (pkg: TalkPackageRef, query: string) => Promise<string>,
     private readonly requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>,
+    private readonly resolveWebSearch?: () =>
+      | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+      | undefined,
+    private readonly resolveNewsSearch?: () =>
+      | ((query: string) => Promise<
+          Array<{
+            title: string;
+            url: string;
+            snippet?: string;
+            publisherName?: string;
+            publisherUrl?: string;
+            publishedAt?: string;
+            fetchedAt?: string;
+            bodyRead?: boolean;
+          }>
+        >)
+      | undefined,
   ) {}
 
-  async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
+  /** 与回合写入使用同一串行链，撤销不能被在途回合的迟到保存覆盖。 */
+  async revokeDiscoveryGoal(threadId: string): Promise<void> {
+    const prev = this.writeChains.get(threadId) || Promise.resolve();
+    const run = prev.then(async () => {
+      const pkg = this.resolvePackage();
+      if (!pkg) return;
+      const thread = await readThread(pkg.rootDir, this.now(), threadId);
+      delete thread.discoveryGoal;
+      thread.turns.push({ id: `turn_${randomUUID()}`, at: this.now(), role: 'user',
+        text: '我撤销了从发现带入的当前目标。后续不要自动沿用它的条件；已有材料和成果仍保留。' });
+      await writeThread(pkg.rootDir, thread);
+    });
+    this.writeChains.set(threadId, run.catch(() => undefined));
+    await run;
+  }
+
+  async invoke(
+    input: { text?: string; contextPaths?: string[]; discoveryGoal?: TalkThread['discoveryGoal'] },
+    externalSignal?: AbortSignal | null,
+  ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
       return { view: projectView(emptyThread(this.now()), '还没有可用的数字之我。') };
     }
     const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
     const prev = this.writeChains.get(threadId) || Promise.resolve();
-    const run = prev.then(() => this.invokeNow(input, threadId));
+    const run = prev.then(() => this.invokeNow(input, threadId, externalSignal));
     this.writeChains.set(
       threadId,
       run.then(
@@ -117,8 +179,9 @@ export class TalkService {
   }
 
   private async invokeNow(
-    input: { text?: string; contextPaths?: string[] },
+    input: { text?: string; contextPaths?: string[]; discoveryGoal?: TalkThread['discoveryGoal'] },
     threadId: string,
+    externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
@@ -126,6 +189,7 @@ export class TalkService {
     }
     const now = this.now();
     const thread = await readThread(pkg.rootDir, now, threadId);
+    if (input.discoveryGoal) thread.discoveryGoal = input.discoveryGoal;
     const spoken = String(input.text || '').trim();
     const text = composeTalkUserText(spoken, input.contextPaths);
     if (!text) {
@@ -142,14 +206,44 @@ export class TalkService {
       return { view: projectView(thread, NO_MODEL_NOTICE) };
     }
     let confirmHint: string | undefined;
+    let goalReceipt: string | undefined;
+    let learnedGoalUpdate: TalkLearnResult['goalUpdate'];
     // DIGITAL_SELF_LEARNING_BLOCKS_TALK = YES
     // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
     if (spoken && this.learnFromUtterance) {
       try {
-        const learned = await this.learnFromUtterance(spoken);
+        const learned = await this.learnFromUtterance(
+          spoken,
+          thread.discoveryGoal
+            ? JSON.stringify({ originalRequest: thread.discoveryGoal.originalRequest, currentRequest: thread.discoveryGoal.request, scope: thread.discoveryGoal.scope })
+            : undefined,
+          externalSignal || undefined,
+        );
+        learnedGoalUpdate = learned.goalUpdate;
         if (learned.asked && learned.askHint) confirmHint = learned.askHint;
       } catch {
-        /* 学习失败不得阻断交流 */
+        if (externalSignal?.aborted) {
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '已取消。' });
+          await writeThread(pkg.rootDir, thread);
+          return { view: projectView(thread, '已取消。', 'CANCELLED') };
+        }
+        if (thread.discoveryGoal) {
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
+          thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '本轮理解或保存失败，当前目标的新条件未能确认保存。' });
+          return { view: projectView(thread, '本轮理解或保存失败。', 'FAILED') };
+        }
+      }
+    }
+    if (learnedGoalUpdate && thread.discoveryGoal) {
+      if (externalSignal?.aborted) return { view: projectView(thread, '已取消，目标未更新。', 'CANCELLED') };
+      try {
+        await persistDiscoveryGoalUpdate(pkg.rootDir, thread, learnedGoalUpdate, now);
+        goalReceipt = '本轮模型理解提议的目标更新已经原子写入当前Thread并回读核实：' + JSON.stringify(thread.discoveryGoal || null);
+      } catch {
+        thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'user', text });
+        thread.turns.push({ id: 'turn_' + randomUUID(), at: now, role: 'assistant', text: '当前目标条件保存失败，未能确认落盘。不能按已保存的新条件继续；已有文件和目标仍可查看。' });
+        return { view: projectView(thread, '当前目标条件保存失败，未能确认落盘。', 'FAILED') };
       }
     }
     let selfContext = '当前还没有已写入的数字之我认识。读取失败不得假装了解用户。';
@@ -159,11 +253,18 @@ export class TalkService {
     } catch {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
     }
+    const attachedNow = (input.contextPaths || []).map((item) => String(item || '').trim()).filter(isExistingFile);
+    thread.materialPaths = [...new Set([...(thread.materialPaths || []), ...attachedNow])];
+    const materialBlock = await attachedMaterialBlock(thread.materialPaths);
+    if (materialBlock) selfContext = `${selfContext}\n\n${materialBlock}`;
+    const directives = await listContentPreferences(pkg.rootDir);
+    const explicit = directives.filter((row) => row.kind !== 'steer');
+    if (explicit.length) selfContext += `\n\n用户显式内容边界（跨入口有效；单条 reduce 只指该对象，不能扩大为主题禁令）：\n${formatPreferenceDirectives(explicit)}\n目标引用：${JSON.stringify(explicit.map(({kind,targetType,target}) => ({kind,targetType,target})))}`;
     if (spoken && this.resolveContentSeek) {
       try {
         const block = await this.resolveContentSeek(pkg, spoken);
         if (block.trim()) {
-          selfContext = `${selfContext}\n\n内容目录候选（保留原文链接，不是中心推荐）：\n${block}`;
+          selfContext = `${selfContext}\n\n内容目录候选（保留原文链接）：\n${block}`;
         }
       } catch {
         /* 目录检索失败不得阻断交流 */
@@ -173,14 +274,27 @@ export class TalkService {
     const grantedFolders = await listActiveFilesystemGrantFolders(pkg.rootDir);
     const contextPaths = [
       ...new Set(
-        [...(input.contextPaths || []), ...grantedFolders]
+        [...(input.contextPaths || []), ...(thread.materialPaths || [])]
           .map((item) => String(item || '').trim())
           .filter(Boolean),
       ),
     ];
+    const writeFolders = [...new Set(grantedFolders.map((item) => String(item || '').trim()).filter(Boolean))];
     const turnCtx = contextPaths.length ? { contextPaths } : {};
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), talkTurnDeadlineMs());
+    const timer = setTimeout(() => {
+      if (!ac.signal.aborted) ac.abort(new TalkTimeoutError());
+    }, talkTurnDeadlineMs());
+    const onExternal = () => {
+      if (ac.signal.aborted) return;
+      const reason = externalSignal?.reason;
+      ac.abort(reason instanceof Error ? reason : Object.assign(new Error('已取消。'), { name: 'TalkCancelled' }));
+    };
+    if (externalSignal) {
+      if (externalSignal.aborted) onExternal();
+      else externalSignal.addEventListener('abort', onExternal, { once: true });
+    }
+    turnSignals.push(ac.signal);
     const boundedChat = wrapChatWithDeadline(this.chat, ac.signal);
     const turnExecutions: TalkExecution[] = [];
     let next = thread;
@@ -191,6 +305,13 @@ export class TalkService {
         thread,
         userText: text,
         selfContext,
+        goalReceipt,
+        persistGoalUpdate: async (target, update) => {
+          if (ac.signal.aborted) throw new Error('当前回合已取消');
+          await persistDiscoveryGoalUpdate(pkg.rootDir, target, update, now);
+          if (target.discoveryGoal) thread.discoveryGoal = target.discoveryGoal;
+          else delete thread.discoveryGoal;
+        },
         agents: this.resolveAgents(pkg, turnCtx),
         chat: boundedChat,
         workRoot: pkg.rootDir,
@@ -201,6 +322,7 @@ export class TalkService {
           turnExecutions.push(rec);
         },
         ...(contextPaths.length ? { contextPaths } : {}),
+        ...(writeFolders.length ? { writeFolders } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
         ...(this.requestFolderAccess ? { requestFolderAccess: this.requestFolderAccess } : {}),
@@ -212,6 +334,24 @@ export class TalkService {
             now,
           }).then(() => undefined),
         refreshAgents: (paths) => this.resolveAgents(pkg, { contextPaths: paths }),
+        ...(this.resolveWebSearch
+          ? {
+              searchWeb: async (query: string) => {
+                const search = this.resolveWebSearch?.();
+                if (!search) throw new Error('搜索还没有接上');
+                return search(query);
+              },
+            }
+          : {}),
+        ...(this.resolveNewsSearch
+          ? {
+              newsSearch: async (query: string) => {
+                const search = this.resolveNewsSearch?.();
+                if (!search) throw new Error('新闻来源还没有接上');
+                return search(query);
+              },
+            }
+          : {}),
       });
       next = ran.thread;
       outcome = ran.outcome;
@@ -236,23 +376,40 @@ export class TalkService {
         });
       }
       const userTurn = thread.turns[thread.turns.length - 1];
-      if (turnExecutions.length && (isManagedAiUserNotice(err) || isTalkTimeout(err))) {
-        const fromExec = assistantFromTurnExecutions(turnExecutions, 'deadline');
-        timeoutNotice = fromExec.notice;
-        outcome = fromExec.outcome;
+      const pushStopped = (text: string, stoppedOutcome: TalkTurnOutcome, notice: string, result?: { title: string; path?: string }) => {
         thread.turns.push({
           id: `turn_${randomUUID()}`,
           at: now,
           role: 'assistant',
-          text: fromExec.text,
-          ...(fromExec.executionIds.length ? { executionIds: fromExec.executionIds } : {}),
-          ...(fromExec.result ? { result: fromExec.result } : {}),
+          text,
+          ...(turnExecutions.length ? { executionIds: turnExecutions.map((item) => item.id) } : {}),
+          ...(result?.path ? { result: { title: result.title, path: result.path } } : {}),
         });
-        if (userTurn && userTurn.role === 'user' && fromExec.executionIds.length) {
-          userTurn.executionIds = fromExec.executionIds;
+        if (userTurn && userTurn.role === 'user' && turnExecutions.length) {
+          userTurn.executionIds = turnExecutions.map((item) => item.id);
         }
         thread.executions = [...(thread.executions || []), ...turnExecutions];
+        timeoutNotice = notice;
+        outcome = stoppedOutcome;
         next = thread;
+      };
+      if ((err as Error).name === 'DiscoveryGoalSaveFailed') {
+        pushStopped('当前目标条件保存失败，未能确认落盘。不能宣称更新成功。', 'FAILED', '当前目标条件保存失败。');
+        return { view: projectView(thread, timeoutNotice, 'FAILED') };
+      } else if (isTalkCancelled(err)) {
+        const writes = turnExecutions.filter(
+          (item) => item.ok && (MUTATING_CAPS.has(item.capabilityId) || item.observedEffect?.mutated === true),
+        );
+        const written = [...writes].reverse().find((item) => item.outputPath);
+        const text = written?.outputPath
+          ? `已取消。已经写入的文件还在：${path.basename(written.outputPath)}`
+          : turnExecutions.some(e => e.ok && e.capabilityId === 'update_discovery_goal') ? '已取消。当前目标条件已经保存。' : '已取消。';
+        pushStopped(text, 'CANCELLED', '已取消。', written?.outputPath ? { title: path.basename(written.outputPath), path: written.outputPath } : undefined);
+      } else if (turnExecutions.length && isManagedAiUserNotice(err)) {
+        const fromExec = assistantFromTurnExecutions(turnExecutions, 'undeliverable_final');
+        const reason = String((err as Error).message || '').trim();
+        const text = reason && !fromExec.text.includes(reason.slice(0, 24)) ? `${fromExec.text}\n\n${reason}` : fromExec.text;
+        pushStopped(text, fromExec.outcome, reason || fromExec.notice, fromExec.result);
       } else if (isManagedAiUserNotice(err)) {
         thread.turns.push({
           id: `turn_${randomUUID()}`,
@@ -284,11 +441,68 @@ export class TalkService {
       }
     } finally {
       clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', onExternal);
+      const idx = turnSignals.lastIndexOf(ac.signal);
+      if (idx >= 0) turnSignals.splice(idx, 1);
     }
     if (next.threadId !== threadId) next.threadId = threadId;
     await writeThread(pkg.rootDir, next);
     return { view: projectView(next, timeoutNotice, outcome) };
   }
+}
+
+const MATERIAL_FILE_CHARS = 4000;
+const MATERIAL_TOTAL_CHARS = 12000;
+const MATERIAL_FILES = 6;
+
+function isExistingFile(file: string): boolean {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** 把已附文件的摘录交给模型，并写明未纳入的部分。授权文件夹不整树读取。 */
+export async function attachedMaterialBlock(contextPaths?: string[]): Promise<string> {
+  const files = [...new Set((contextPaths || []).map((item) => String(item || '').trim()).filter(Boolean))].filter(
+    isExistingFile,
+  );
+  if (!files.length) return '';
+  const blocks: string[] = [];
+  let used = 0;
+  const listed = files.slice(0, MATERIAL_FILES);
+  const skipped = files.slice(MATERIAL_FILES);
+  for (const file of listed) {
+    const room = MATERIAL_TOTAL_CHARS - used;
+    if (room <= 0) {
+      blocks.push(`- ${file}：本轮摘录容量已用完，正文未放入上下文。需要时用 read_file 读取。不得说成已经读完。`);
+      continue;
+    }
+    try {
+      const extracted = await extractFile(file);
+      const text = String(extracted.text || '').trim();
+      if (!text) {
+        blocks.push(`- ${file}：文件在，但没有抽出可用正文。不得说成已经读过内容。`);
+        continue;
+      }
+      const take = Math.min(MATERIAL_FILE_CHARS, room, text.length);
+      const body = text.slice(0, take);
+      used += body.length;
+      const omitted = text.length - body.length;
+      const tail =
+        omitted > 0
+          ? `\n（读取状态：excerpt；未读完；offset=0；length=${body.length}；total=${text.length}；complete=false。这一段不是全文。）`
+          : `\n（读取状态：full；offset=0；length=${text.length}；total=${text.length}；complete=true。）`;
+      blocks.push(`- ${file}\n${body}${tail}`);
+    } catch (err) {
+      blocks.push(`- ${file}：读取失败（${err instanceof Error ? err.message : String(err)}）。不得说成已经读过。`);
+    }
+  }
+  for (const file of skipped) {
+    blocks.push(`- ${file}：本轮未放入摘录。需要时用 read_file 读取。不得说成已经读完。`);
+  }
+  return `已附材料（路径会留在这个对话里，后续回合仍可 read_file；下面的摘录不是全文记忆）：\n${blocks.join('\n\n')}`;
 }
 
 export function composeTalkUserText(text: string, contextPaths?: string[]): string {
@@ -329,20 +543,18 @@ export function assistantFromTurnExecutions(
     (item) => item.ok && (MUTATING_CAPS.has(item.capabilityId) || item.observedEffect?.mutated === true),
   );
   const anyOk = execs.some((item) => item.ok);
-  const expected = expectedFromExecutions(execs);
-  const needsMutation = expected.some((row) => isMutationEffectName(row.effect));
   const mutated = hasObservedMutation(execs) || okWrites.length > 0;
   const failed = [...execs].reverse().find((item) => !item.ok);
-  if ((failed && !okWrites.length && !mutated) || (needsMutation && !mutated)) {
-    const fact = String(failed?.summary || failed?.failureReason || '目标还没有完成：没有观察到所需修改。').trim();
+  if (failed && !okWrites.length && !mutated) {
+    const fact = String(failed.summary || failed.failureReason || '这次没有完成。').trim();
     return {
       text: fact.slice(0, 4000),
       notice: fact.slice(0, 400),
       executionIds,
-      outcome: needsMutation && !mutated ? 'FAILED' : anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
+      outcome: anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
     };
   }
-  const lastWrite = [...okWrites].reverse()[0] || [...execs].reverse().find((item) => item.ok);
+  const lastWrite = [...okWrites].reverse()[0];
   const outputPath = lastWrite?.outputPath;
   const changedNames = uniqueBasenames(
     okWrites.flatMap((item) => [...(item.producedOutputs || []), ...(item.outputPath ? [item.outputPath] : [])]),
@@ -431,6 +643,7 @@ function projectView(
       role: turn.role,
       text: turn.text,
       ...(turn.result ? { result: turn.result } : {}),
+      ...(turn.capabilityTrace ? { capabilityTrace: turn.capabilityTrace } : {}),
     })),
   };
 }

@@ -53,3 +53,6 @@ scripts/_conversation-quality-recovery-evidence/
 scripts/_conversation-gemini-benchmark-evidence/
 scripts/_collab-03-two-owner-trial-evidence/
 build/evidence/
+
+# Local Owner experience subjects and profiles must never enter a release commit.
+/build/owner-experience-*/

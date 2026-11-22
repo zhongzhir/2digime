@@ -1,0 +1,20 @@
+{
+  "success": false,
+  "maxApplicationRequests": 5,
+  "maxUpstreamAttempts": 15,
+  "previousWindowRequests": 5,
+  "sharedApplicationLimit": 10,
+  "stages": [],
+  "buildId": "v2-tujimi-20261007T085929Z-10724f0a",
+  "sourceSha": "10724f0aea093f7eab19491b9b06c75f041fbd22",
+  "failedStage": "correction",
+  "error": "The input did not match the regular expression /30分钟/. Input:\n\n'保留学习 AI 产品落地的方向、已保存的两门历史课程（FDE必修-AI产品落地指南课 https://coding.imooc.com/class/1036.html ；AI大模型微调，从原理剖析到企业级落地实战 https://coding.imooc.com/class/chapter/1003.html）及其来源；工作日每天 30 分钟、周末每天 60 分钟；章节超出当天预算时分次学习，观看、笔记、练习合计不超过当天时间；到时记录实际章节与停点，下次接续；无可靠时间戳时不编造观看片段或起止秒数；不重做比较、不生成或写入计划、不联网、不付费。以上时间与执行约束仅适用于当前目标，不是长期本人事实。'\n",
+  "elapsedMs": 8226,
+  "applicationRequests": 2,
+  "usage": {
+    "inputTokens": 8036,
+    "outputTokens": 524,
+    "totalTokens": 8560
+  },
+  "blockedSearch": 0
+}

@@ -51,6 +51,35 @@ export interface FeedHint {
   type: 'rss' | 'atom' | 'json' | 'unknown';
 }
 
+function isPlaceholderTitle(title: string): boolean {
+  return /^(title|untitled|undefined|null)$/i.test(title.trim());
+}
+
+function plainText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function articleExcerpt(root: ReturnType<typeof parse>, description: string, title: string): string {
+  const scope = root.querySelector('article') || root.querySelector('main') || root.querySelector('body');
+  let paragraph = '';
+  if (scope) {
+    for (const node of scope.querySelectorAll('p')) {
+      const text = plainText(node.text || '');
+      if (text.length < 40 || text === title.trim()) continue;
+      paragraph = text.slice(0, 280);
+      break;
+    }
+  }
+  const meta = plainText(description);
+  if (!paragraph) return meta;
+  const chrome = ['header', 'footer', 'nav']
+    .map((sel) => plainText(root.querySelector(sel)?.text || ''))
+    .join(' ');
+  const sloganInChrome = meta.length > 0 && chrome.includes(meta.slice(0, Math.min(24, meta.length)));
+  if (!meta || meta === title.trim() || sloganInChrome) return paragraph;
+  return meta;
+}
+
 function attr(el: { getAttribute(name: string): string | undefined } | null, name: string): string {
   return String(el?.getAttribute(name) || '').trim();
 }
@@ -70,6 +99,12 @@ function absUrl(href: string, base: string): string | null {
   } catch {
     return null;
   }
+}
+
+function publicMedia(href: string, base: string): string | undefined {
+  const raw = String(href || '').trim();
+  if (!raw) return undefined;
+  return isSafePublicMediaUrl(absUrl(raw, base) || '');
 }
 
 function feedKind(type: string): FeedHint['type'] {
@@ -243,17 +278,19 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
       canonicalUrl = fallbackUrl;
     }
   }
-  const title =
+  const rawTitle =
     metaContent(root, 'og:title') ||
     textOf(ld?.headline) ||
     textOf(ld?.name) ||
     (root.querySelector('title')?.text || '').trim() ||
-    canonicalUrl;
-  const description =
+    '';
+  const title = isPlaceholderTitle(rawTitle) ? '' : rawTitle || canonicalUrl;
+  const metaDescription =
     metaContent(root, 'og:description') ||
     metaContent(root, 'description') ||
     textOf(ld?.description) ||
-    title;
+    '';
+  const description = articleExcerpt(root, metaDescription, title);
   const publishedAt =
     textOf(ld?.datePublished) ||
     textOf(ld?.uploadDate) ||
@@ -271,15 +308,11 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
   const schemaMedia = urlFromLd(ld?.contentUrl, base);
   const schemaEmbed = urlFromLd(ld?.embedUrl, base);
   const schemaThumb = urlFromLd(ld?.thumbnailUrl || ld?.image, base);
-  const ogImage = isSafePublicMediaUrl(absUrl(metaContent(root, 'og:image'), base) || '');
+  const ogImage = publicMedia(metaContent(root, 'og:image'), base);
   const thumbnailUrl = schemaThumb || ogImage;
-  const ogVideo = isSafePublicMediaUrl(absUrl(metaContent(root, 'og:video') || metaContent(root, 'og:video:url'), base) || '');
-  const ogAudio = isSafePublicMediaUrl(absUrl(metaContent(root, 'og:audio'), base) || '');
-  const mediaUrl =
-    schemaMedia ||
-    isSafePublicMediaUrl(absUrl(html5Video || html5Audio, base) || '') ||
-    ogVideo ||
-    ogAudio;
+  const ogVideo = publicMedia(metaContent(root, 'og:video') || metaContent(root, 'og:video:url'), base);
+  const ogAudio = publicMedia(metaContent(root, 'og:audio'), base);
+  const mediaUrl = schemaMedia || publicMedia(html5Video || html5Audio, base) || ogVideo || ogAudio;
   const embedUrl = schemaEmbed;
   const durationSeconds = parseDurationSeconds(ld?.duration);
   const width = parsePositiveInt(ld?.width, 8192);

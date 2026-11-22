@@ -9,6 +9,7 @@ import {
   audioPlaybackKind,
   createSearchGenerationId,
   durationLabel,
+  settleBackgroundSeek,
   hasDirectMediaRepresentation,
   isBrokenImageRepresentation,
   mergeIntentViews,
@@ -245,11 +246,24 @@ test('CASE 1/2: late web ABOUT keeps images; late images upgrade PRIMARY', async
         objectWanted: 'work_itself',
         searchQueries: ['航天摄影'],
       },
-      roles: [{ id: IMAGE.itemId, role: 'COMMENTARY' }],
+      roles: [{ id: IMAGE.itemId, role: 'PRIMARY_CONTENT' }],
     }),
     model: { baseUrl: 'https://example.invalid', model: 'x' },
   });
   assert.equal(imageSeek.cards.some((row) => row.itemId === IMAGE.itemId && row.contentType === 'image'), true);
+
+  // 能直接显示不等于相关：模型判为评论的图片不会因为可显示而升为主结果。
+  const judgedAway = await seekContent({
+    query: '找一些航天摄影作品',
+    items: [IMAGE],
+    skipWeb: true,
+    chatComplete: chatFromScript({
+      intent: { intent: 'consume', requestedMedia: ['image'], objectWanted: 'work_itself', searchQueries: ['航天摄影'] },
+      roles: [{ id: IMAGE.itemId, role: 'COMMENTARY' }],
+    }),
+    model: { baseUrl: 'https://example.invalid', model: 'x' },
+  });
+  assert.equal(judgedAway.cards.some((row) => row.itemId === IMAGE.itemId), false);
 
   const webSeek = await seekContent({
     query: '找一些航天摄影作品',
@@ -360,6 +374,31 @@ test('late search cannot override Personal Feed; Search A cannot override Search
   assert.equal(personal.feedMode, 'personal');
 });
 
+test('an in-flight empty notice is replaced once later cards arrive', () => {
+  const gen = 'sg_notice';
+  const current = intentView({
+    searchGenerationId: gen,
+    cards: [],
+    notice: '这次没有找到可以直接看的内容。',
+  });
+  const incoming = intentView({
+    searchGenerationId: gen,
+    cards: [
+      card({
+        itemId: IMAGE.itemId,
+        title: IMAGE.content.title,
+        contentType: 'image',
+        mediaUrl: IMAGE.content.mediaUrl,
+        objectFidelity: 'PRIMARY_CONTENT',
+      }),
+    ],
+    notice: '',
+  });
+  const merged = mergeIntentViews(current, incoming);
+  assert.equal(merged.cards.length, 1);
+  assert.equal(merged.notice, '');
+});
+
 test('renderer keeps generation gate, skipRefresh, audio duration guard', async () => {
   const js = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
   assert.match(js, /searchGenerationId/);
@@ -368,9 +407,56 @@ test('renderer keeps generation gate, skipRefresh, audio duration guard', async 
   assert.match(js, /skipRefresh: true/);
   assert.match(js, /btn-discover-personal/);
   assert.match(js, /Number\.isFinite\(n\) && n > 0/);
-  assert.match(js, /audio\.duration <= 0/);
+  assert.match(js, /media\.duration <= 0/);
   assert.equal(js.includes('0:00/0:00'), false);
-  assert.match(js, /在来源收听/);
+  assert.match(js, /去原站收听/);
   const html = await fs.readFile(path.join(process.cwd(), 'electron/renderer/index.html'), 'utf8');
   assert.match(html, /id="content-discover-feed-title"/);
+  assert.match(html, /id="btn-discover-cancel"/);
+  assert.match(js, /action: 'cancel'/);
+});
+
+test('background seek settles on timeout instead of staying pending', async () => {
+  let finished = false;
+  const late = new Promise<null>((resolve) => {
+    setTimeout(() => {
+      finished = true;
+      resolve(null);
+    }, 80);
+  });
+  const started = Date.now();
+  const settled = await settleBackgroundSeek(late, 20);
+  assert.equal(settled, null);
+  assert.equal(finished, false);
+  assert.ok(Date.now() - started < 70);
+});
+
+test('background seek timeout aborts work and drops the late value', async () => {
+  const abort = new AbortController();
+  let wrote = false;
+  const late = new Promise<string | null>((resolve) => {
+    const timer = setTimeout(() => {
+      if (abort.signal.aborted) {
+        resolve(null);
+        return;
+      }
+      wrote = true;
+      resolve('late');
+    }, 80);
+    abort.signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+      { once: true },
+    );
+  });
+  const started = Date.now();
+  const settled = await settleBackgroundSeek(late, 20, abort);
+  assert.equal(settled, null);
+  assert.equal(abort.signal.aborted, true);
+  assert.ok(Date.now() - started < 70);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(wrote, false);
 });

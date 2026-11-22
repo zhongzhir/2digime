@@ -1,9 +1,28 @@
 # DISCOVER-PERSONAL-FEED-01
 
-**状态：** `READY_FOR_OWNER_ACCEPTANCE`  
-**日期：** 2026-09-18  
-**基线：** `60b3278736c421a30a4862e199797327b75a3dbf`  
+**状态：** `LIMITED_TRIAL_ACCEPTED`（`DISCOVER_PERSONAL_FEED_LIMITED_TRIAL_ACCEPTED`，2026-10-04）  
+**日期：** 2026-10-04  
+**试用版本：** `230cfc6` / `v2-tujimi-20261003T111446Z-230cfc69`  
+**工程基线（历史）：** `60b3278736c421a30a4862e199797327b75a3dbf`  
 **工作区：** `D:\Projects\dm-discover-personal-feed-01` / `build/discover-personal-feed-01`
+
+Owner 已对上述试用版做**限定试用接受**。不是全部产品验收，不是 95 分位达标，不得升格为 `DISCOVER_PERSONAL_FEED_ACCEPTED`。未 push、未发布。
+
+后续只按此顺序改进，每批与当时基线比较，不每修一处就打包：
+
+1. 卡片排版 — 已做
+2. 信息来源 + 行为闭环 — 见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`
+3. 大众供给 + 调整推荐 — 见 `docs/audits/DISCOVER-ADJUST-03.md`；交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`
+4. 信息质量 — 核实诚实见 `DISCOVER-QUALITY-05.md`；对象匹配见 `DISCOVER-QUALITY-06.md`；课程/额度/默认流见 `DISCOVER-QUALITY-07.md`；课程/撤销/默认流合并包见 `DISCOVER-QUALITY-08.md`（`fbe30f41`）；来源渠道、条件标注、屏蔽、连续加载见 `DISCOVER-QUALITY-09.md`（当前试用包 `8d888b09`）
+5. 运行可靠性（配额、取消、迟写、CASE R3）— 继续跟踪，不单独开一轮施工
+
+**2026-10-04 当前指针：** 暂停扩来源和连续打包。工程线停在产品提交 `8d888b0` / 试用包 `8d888b09`。转入使用反馈驱动的改善，见 `docs/reviews/使用反馈-5.md`。`230cfc6` 限定试用接受不变。未 push、未发布。
+
+后续重点观察，不预写成已通过：
+
+- 推荐调整是否持续带来符合用户关注点的新内容。
+- 课程、节目等具体对象与入口是否准确。
+- 浏览是否丰富、顺畅，避免重复和单一来源占满。
 
 个人分布式内容选择是为了让内容服务于人，不以延长使用时间或增加使用频率为优化目标。
 

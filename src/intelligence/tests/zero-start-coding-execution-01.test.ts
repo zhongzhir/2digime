@@ -170,7 +170,7 @@ test('read-only task → no mutation required', async () => {
   await runtime.stop();
 });
 
-test('read/list only cannot satisfy modify goal', async () => {
+test('只读之后模型收工时，不强迫继续改文件', async () => {
   const root = await tempDir('neg');
   const pkgDir = path.join(root, 'pkg');
   const project = path.join(root, 'proj');
@@ -201,7 +201,11 @@ test('read/list only cannot satisfy modify goal', async () => {
           { id: 'r1', name: 'read_file', arguments: JSON.stringify({ path: 'index.html' }) },
         ],
       }),
-      async () => ({ text: '操作已完成。' }),
+      async (input) => {
+        const blob = JSON.stringify(input.messages || []);
+        if (blob.includes('工具执行记录')) return { text: '没有写文件，标题没有改。' };
+        return { text: '操作已完成。' };
+      },
     ]),
     talkProfessionals: [],
   });
@@ -211,9 +215,9 @@ test('read/list only cannot satisfy modify goal', async () => {
     text: '把 index.html 标题改成 Tujimi Coding Test，并检查修改成功。',
     contextPaths: [project],
   });
-  assert.notEqual(talked.view.outcome, 'SUCCESS');
-  assert.match(String(talked.view.turns.at(-1)?.text || ''), /还没有完成|尚未观察/);
-  assert.equal(/操作已完成/.test(String(talked.view.turns.at(-1)?.text || '')), false);
+  assert.equal(talked.view.outcome, 'SUCCESS');
+  assert.equal(String(talked.view.turns.at(-1)?.text || ''), '没有写文件，标题没有改。');
+  assert.equal(talked.view.turns.at(-1)?.result, undefined);
   assert.equal(await fs.readFile(path.join(project, 'index.html'), 'utf8'), OLD_HTML);
   const thread = await readThread(pkgDir);
   assert.equal(
@@ -287,7 +291,7 @@ test('modify task → mutation + verify on disk', async () => {
   await runtime.stop();
 });
 
-test('mutation + verification mismatch → one repair', async () => {
+test('验收句子和文件不一致时，不强迫再写一次', async () => {
   const root = await tempDir('repair');
   const pkgDir = path.join(root, 'pkg');
   const project = path.join(root, 'proj');
@@ -330,16 +334,22 @@ test('mutation + verification mismatch → one repair', async () => {
         };
       },
       async () => ({ text: '改好了' }),
-      async () => ({
-        text: '',
-        toolCalls: [
-          {
-            id: 'w2',
-            name: 'write_file',
-            arguments: JSON.stringify({ relativePath: 'index.html', content: NEW_HTML }),
-          },
-        ],
-      }),
+      async (input) => {
+        const blob = JSON.stringify(input.messages || []);
+        if (blob.includes('工具执行记录')) {
+          return { text: '写过一次，但标题仍是旧的，没有改成 Tujimi Coding Test。' };
+        }
+        return {
+          text: '',
+          toolCalls: [
+            {
+              id: 'w2',
+              name: 'write_file',
+              arguments: JSON.stringify({ relativePath: 'index.html', content: NEW_HTML }),
+            },
+          ],
+        };
+      },
       async () => ({
         text: '',
         toolCalls: [{ id: 'r2', name: 'read_file', arguments: JSON.stringify({ path: 'index.html' }) }],
@@ -352,9 +362,10 @@ test('mutation + verification mismatch → one repair', async () => {
   await bus.invoke('subject.createPackage', { displayName: '修正', targetDir: pkgDir });
   const talked = await bus.invoke('talk', { text: '改标题并检查', contextPaths: [project] });
   assert.equal(talked.view.outcome, 'SUCCESS');
-  assert.match(await fs.readFile(path.join(project, 'index.html'), 'utf8'), /Tujimi Coding Test/);
+  assert.equal(await fs.readFile(path.join(project, 'index.html'), 'utf8'), OLD_HTML);
+  assert.equal(String(talked.view.turns.at(-1)?.text || ''), '改好了');
   const thread = await readThread(pkgDir);
-  assert.equal((thread.executions || []).filter((row) => row.capabilityId === 'write_file' && row.ok).length, 2);
+  assert.equal((thread.executions || []).filter((row) => row.capabilityId === 'write_file' && row.ok).length, 1);
   await runtime.stop();
 });
 
@@ -627,5 +638,180 @@ test('complex html/js edit uses filesystem capability, not forced coding agent',
   assert.equal(delegated, false);
   assert.match(await fs.readFile(path.join(project, 'index.html'), 'utf8'), /id="reset"/);
   assert.match(await fs.readFile(path.join(project, 'app.js'), 'utf8'), /getElementById\('reset'\)/);
+  await runtime.stop();
+});
+
+test('工具协议文本不会当成给主人的答复', async () => {
+  const root = await tempDir('proto');
+  const pkgDir = path.join(root, 'pkg');
+  const project = path.join(root, 'proj');
+  await fs.mkdir(project, { recursive: true });
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([
+      async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'w1',
+            name: 'write_file',
+            arguments: JSON.stringify({ relativePath: 'note.txt', content: '窗口验收成功' }),
+          },
+        ],
+      }),
+      async (input) => {
+        const blob = JSON.stringify(input.messages || []);
+        if (blob.includes('不是给主人的话')) return { text: '已经写好，内容是窗口验收成功。' };
+        return { text: '<｜｜DSML｜｜invoke name="read_file"></｜｜DSML｜｜>' };
+      },
+    ]),
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: '协议', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '写 note.txt', contextPaths: [project] });
+  assert.equal(await fs.readFile(path.join(project, 'note.txt'), 'utf8'), '窗口验收成功');
+  assert.equal(String(talked.view.turns.at(-1)?.text || ''), '已经写好，内容是窗口验收成功。');
+  assert.equal(String(talked.view.turns.at(-1)?.text || '').includes('DSML'), false);
+  await runtime.stop();
+});
+
+test('只在对话里回答时，不因为没有写文件而失败', async () => {
+  const root = await tempDir('chat');
+  const pkgDir = path.join(root, 'pkg');
+  const project = path.join(root, 'proj');
+  await fs.mkdir(project, { recursive: true });
+  let calls = 0;
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([
+      async () => {
+        calls += 1;
+        return { text: '可以，按你的语气写就行。这次先不落文件。' };
+      },
+    ]),
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: '对话', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '先告诉我你会不会按我的语气写，先别建文件。', contextPaths: [project] });
+  assert.equal(calls, 1);
+  assert.equal(talked.view.outcome, 'SUCCESS');
+  assert.equal(talked.view.turns.at(-1)?.result, undefined);
+  await assert.rejects(fs.stat(path.join(project, 'note.txt')));
+  await runtime.stop();
+});
+
+test('没有写文件时，声称改完也不会带上结果卡', async () => {
+  const root = await tempDir('claim');
+  const pkgDir = path.join(root, 'pkg');
+  const project = path.join(root, 'proj');
+  await fs.mkdir(project, { recursive: true });
+  await fs.writeFile(path.join(project, 'index.html'), OLD_HTML, 'utf8');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([async () => ({ text: '修改已经完成。' })]),
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: '声称', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '改一下标题', contextPaths: [project] });
+  assert.equal(await fs.readFile(path.join(project, 'index.html'), 'utf8'), OLD_HTML);
+  assert.equal(talked.view.turns.at(-1)?.result, undefined);
+  assert.equal((await readThread(pkgDir)).executions?.length || 0, 0);
+  await runtime.stop();
+});
+
+test('写入失败后仍可在授权内完成', async () => {
+  const root = await tempDir('retry');
+  const pkgDir = path.join(root, 'pkg');
+  const project = path.join(root, 'proj');
+  await fs.mkdir(project, { recursive: true });
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([
+      async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'w1',
+            name: 'write_file',
+            arguments: JSON.stringify({ relativePath: '../outside.txt', content: 'nope' }),
+          },
+        ],
+      }),
+      async () => ({ text: '没有继续。' }),
+      async (input) => {
+        const blob = JSON.stringify(input.messages || []);
+        if (blob.includes('还可以继续完成')) {
+          return {
+            text: '',
+            toolCalls: [
+              {
+                id: 'w2',
+                name: 'write_file',
+                arguments: JSON.stringify({ relativePath: 'note.txt', content: '补上了' }),
+              },
+            ],
+          };
+        }
+        return { text: '没有继续。' };
+      },
+      async () => ({ text: '已经写到授权目录里的 note.txt。' }),
+    ]),
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: '重试', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '写 note.txt', contextPaths: [project] });
+  assert.equal(await fs.readFile(path.join(project, 'note.txt'), 'utf8'), '补上了');
+  assert.equal(talked.view.outcome, 'SUCCESS');
+  await assert.rejects(fs.stat(path.join(root, 'outside.txt')));
+  await runtime.stop();
+});
+
+test('一部分写成功、另一部分失败时说明两边', async () => {
+  const root = await tempDir('mix');
+  const pkgDir = path.join(root, 'pkg');
+  const project = path.join(root, 'proj');
+  await fs.mkdir(project, { recursive: true });
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([
+      async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'ok',
+            name: 'write_file',
+            arguments: JSON.stringify({ relativePath: 'ok.txt', content: '成了' }),
+          },
+          {
+            id: 'bad',
+            name: 'write_file',
+            arguments: JSON.stringify({ relativePath: '../nope.txt', content: '不成' }),
+          },
+        ],
+      }),
+      async (input) => {
+        const blob = JSON.stringify(input.messages || []);
+        if (blob.includes('执行已经结束')) return { text: 'ok.txt 已写上。越出授权的 nope.txt 没有写。' };
+        return { text: '先这样。' };
+      },
+    ]),
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: '部分', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '写两个文件', contextPaths: [project] });
+  assert.equal(talked.view.outcome, 'PARTIAL_SUCCESS');
+  assert.equal(await fs.readFile(path.join(project, 'ok.txt'), 'utf8'), '成了');
+  assert.match(String(talked.view.turns.at(-1)?.text || ''), /ok\.txt/);
+  assert.match(String(talked.view.turns.at(-1)?.text || ''), /nope\.txt/);
   await runtime.stop();
 });

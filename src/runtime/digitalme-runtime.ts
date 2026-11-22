@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { JsonObjectStore } from '../infrastructure/json-store';
 import { ContentStore } from '../infrastructure/content-store';
@@ -12,6 +13,11 @@ import {
   createOpenAiCompatibleAdapterStub,
   type OpenAiCompatibleAdapterConfig,
 } from '../capability/adapters/openai-compatible';
+import {
+  runResponsesTurn,
+  supportsResponsesToolLoop,
+  type UnifiedCapabilityEvent,
+} from '../capability/adapters/responses-tool-loop';
 import { createDeterministicCodeAnalysisAdapter } from '../capability/adapters/deterministic-code-analysis';
 import {
   createCodeRepoAnalysisAdapter,
@@ -141,10 +147,17 @@ import {
   type GrowthCaptureStatusRecord,
 } from '../subject-core/conversation-transcript';
 import {
+  archiveConversationSessionSync,
+  createConversationProjectSync,
   createConversationSessionSync,
   currentConversationFilePathSync,
+  deleteConversationSessionSync,
   listConversationSessionsSync,
+  moveConversationSessionSync,
   openConversationSessionSync,
+  removeConversationProjectSync,
+  renameConversationProjectSync,
+  renameConversationSessionSync,
   touchConversationSessionSync,
 } from '../subject-core/conversation-sessions';
 import { extractExplicitSelfName, looksLikeIdentityClaim } from '../subject-core/candidate-distill';
@@ -167,7 +180,12 @@ import {
   resolveCurrentAcceptance,
 } from '../work-runtime/artifact-acceptance';
 import type { OwnerAcceptanceSummary } from '../execution/acceptance-summary';
-import { chatComplete, ModelHttpError, type ChatMessage } from '../infrastructure/model-http';
+import {
+  chatComplete,
+  ModelHttpError,
+  type ChatMessage,
+  type ChatToolDefinition,
+} from '../infrastructure/model-http';
 import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 import { DigitalSelfService } from '../subject-core/digital-self';
@@ -177,37 +195,84 @@ import {
   agentsFromRegistry,
   resolveAuthorizedWorkingDirectory,
 } from '../intelligence';
+import { readThread, writeThread } from '../intelligence/store';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
-import { type DiscoverView } from '../subject-comm/content-discover';
-import { formatSeekContext, seekContent, type ContentSeekResult } from '../subject-comm/content-seek';
+import { type DiscoverCard, type DiscoverView } from '../subject-comm/content-discover';
 import {
+  formatSeekContext,
+  seekContent,
+  snippetCardsFromHits,
+  type ContentSeekResult,
+} from '../subject-comm/content-seek';
+import { fetchNewsHeadlines } from '../subject-comm/news-headlines';
+import {
+  SEEK_DEADLINE_MS,
   createSearchGenerationId,
   mergeIntentViews,
   mergeSeekCardSets,
+  settleBackgroundSeek,
 } from '../subject-comm/discover-search-generation';
-import { defaultDiscoverIntent, interpretDiscoverIntent } from '../subject-comm/discover-intent';
+import {
+  defaultDiscoverIntent,
+  DiscoverIntentError,
+  interpretDiscoverIntent,
+  isGenericHubUrl,
+  localCalendarDate,
+} from '../subject-comm/discover-intent';
+import { ManagedAiError } from '../capability/managed-ai-client';
 import { ingestSource } from '../subject-comm/content-ingest';
+import {
+  contentSourceConditionalHeaders,
+  inactiveContentSourcePublisherIds,
+  type ContentSourceRecord,
+} from '../subject-comm/content-source-portfolio';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
-import { indexSearchHits } from '../subject-comm/open-web-discovery';
-import { ensurePersonalFeed, rememberIntentFeed } from '../subject-comm/personal-feed';
+import { indexSearchHits, ingestDiscoveredEntrance, preferProviderSnippet } from '../subject-comm/open-web-discovery';
+import {
+  commitPersonalFeedPrefetch,
+  ensurePersonalFeed,
+  personalFeedCachePath,
+  personalFeedRemainingCount,
+  rememberIntentFeed,
+  type PersonalFeedPrefetch,
+} from '../subject-comm/personal-feed';
 import {
   classifySearchFailure,
+  SEARCH_QUOTA_NOTICE,
   type NetworkDiscoveryCode,
 } from '../subject-comm/network-discovery-state';
 import {
   appendRecentRecommendationEvent,
+  formatRecentRecommendationContext,
   listRecentRecommendationEvents,
   resetRecentRecommendationState,
 } from '../subject-comm/recent-recommendation-state';
 import {
   formatPreferenceDirectives,
+  contentSourceAllowed,
   listContentPreferences,
   reverseContentPreference,
   upsertContentPreference,
   type ContentPreferenceKind,
 } from '../subject-comm/content-preferences';
+import {
+  STEER_PREFERENCE_TARGET,
+  adjustmentSteersFeed,
+  clearRecommendationAdjustment,
+  formatAdjustmentDirective,
+  interpretRecommendationAdjust,
+  loadRecommendationAdjustment,
+  saveRecommendationAdjustment,
+} from '../subject-comm/recommendation-adjustment';
+import { laterCards, listLaterItems, saveLaterItem } from '../subject-comm/later-items';
+import { allowsDefaultSupply } from '../subject-comm/domestic-source-boundary';
+import {
+  addManagedContentSource,
+  listManagedContentSources,
+  toggleManagedContentSource,
+} from '../subject-comm/content-source-management';
 import {
   appendNetworkContentFeedback,
   createUserContentFeedback,
@@ -258,6 +323,10 @@ export interface DigitalMeRuntimeOptions {
   documentCapability?: 'none' | 'fake' | 'openai-compatible' | 'both';
   openaiCompatible?: OpenAiCompatibleAdapterConfig;
   secrets?: SecretAccessor;
+  /** Real provider events only; UI must not infer stages from elapsed time. */
+  capabilityEventSink?: (
+    event: UnifiedCapabilityEvent & { surface: 'talk' | 'discover'; requestId: string },
+  ) => void;
   /**
    * P2.1/P2.2 代码分析能力:
    * - none:不注册
@@ -396,6 +465,29 @@ export interface DigitalMeRuntimeOptions {
   autonomousCollabReceive?: boolean;
 }
 
+async function readPersonalFeedIds(packageRoot: string): Promise<string[]> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(personalFeedCachePath(packageRoot), 'utf8')) as {
+      lastView?: { itemIds?: string[] };
+      personal?: { itemIds?: string[] };
+    };
+    return parsed.lastView?.itemIds || parsed.personal?.itemIds || [];
+  } catch {
+    return [];
+  }
+}
+
+/** 统一结果只能把可定位的具体页面作为具体内容；不做相关性或优先级判断。 */
+export function isSpecificUnifiedResultUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return !isGenericHubUrl(parsed.toString());
+  } catch {
+    return false;
+  }
+}
+
 /**
  * DigitalMeRuntime — Subject + Work + Artifact Workspace 装配。
  * 单实例挂载一个 SubjectPackage;Work 数据落在 package/runtime/ 下随包迁移。
@@ -417,6 +509,8 @@ export class DigitalMeRuntime {
   private ctoReviewAbort = new AbortController();
   private readonly ctoReviewInflight = new Set<Promise<void>>();
   private converseAbortSignal: AbortSignal | null = null;
+  private talkAbortSignal: AbortSignal | null = null;
+  private activeTalkRequestId = '';
   private digitalSelfService: DigitalSelfService | null = null;
   private talkService: TalkService | null = null;
   private detachSubjectNetwork: (() => void) | null = null;
@@ -424,12 +518,25 @@ export class DigitalMeRuntime {
   private lastNetworkCode: NetworkDiscoveryCode | null = null;
   /** CURRENT_SEARCH_MODE 最近一次搜索视图。打开外部来源时不得换成个人 Feed。 */
   private lastIntentView: DiscoverView | null = null;
+  private readonly discoverRuntimeId = `rt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  private pendingLaterCards: NonNullable<DiscoverView['laterCards']> = [];
   /** 当前可见搜索 / 个人 Feed 的请求身份。迟到结果必须与此一致。 */
   private currentSearchGenerationId = '';
+  /** 当前搜索请求实际发出的联网搜索次数。 */
+  private searchUsage: { generationId: string; usage: NonNullable<DiscoverView['searchUsage']> } | null = null;
   private pendingSeekMerge: {
     generationId: string;
     leftover: Promise<ContentSeekResult | null>;
+    abort: AbortController;
+    /** 首批结果自己的结论，补充没到终态前不显示，补充失败时才用。 */
+    firstNotice?: string;
   } | null = null;
+  private pendingPersonal: Promise<DiscoverView> | null = null;
+  /** 低水位时提前完成个人选择；结果可丢弃，耗尽后才提交到唯一 Feed 缓存。 */
+  private pendingPersonalSupply: Promise<PersonalFeedPrefetch | null> | null = null;
+  /** 后台已经排好、等待当前唯一 Feed 队列耗尽后提交的下一段。 */
+  private readyPersonalSupply: PersonalFeedPrefetch | null = null;
+  private searchAbort = new AbortController();
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -457,6 +564,11 @@ export class DigitalMeRuntime {
     this.converseAbortSignal = signal;
   }
 
+  /** 主进程取消当前对话时中止模型请求和授权等待。 */
+  setTalkAbortSignal(signal: AbortSignal | null): void {
+    this.talkAbortSignal = signal;
+  }
+
   /** 当前文档能力模式（供协作验收区分 Fake / 真实模型）。 */
   get documentCapabilityMode(): DigitalMeRuntimeOptions['documentCapability'] {
     return this.options.documentCapability ?? 'fake';
@@ -470,42 +582,267 @@ export class DigitalMeRuntime {
 
   async talk(
     input: CommandMap['talk']['input'],
+    externalSignal?: AbortSignal | null,
   ): Promise<CommandMap['talk']['output']> {
-    return this.getTalkService().invoke(input);
+    const requestId = String(input.requestId || '').trim();
+    const previousRequestId = this.activeTalkRequestId;
+    this.activeTalkRequestId = requestId;
+    try {
+    const pkg = this.subject.getActive();
+    if (!pkg) return this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
+    if (!input.contentIds?.length) {
+      const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
+      const before = (await readThread(pkg.rootDir, nowIso(), threadId)).discoveryGoal?.request;
+      const result = await this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
+      const after = (await readThread(pkg.rootDir, nowIso(), threadId)).discoveryGoal?.request;
+      if (before && before !== after) {
+        this.lastIntentView = null;
+        this.beginSearchGeneration();
+      }
+      return result;
+    }
+    const ids = new Set(input.contentIds);
+    const items = await this.loadDiscoverItems(pkg.rootDir);
+    const prefs = await listContentPreferences(pkg.rootDir);
+    const allowed = contentSourceAllowed(prefs, items);
+    const selected = items.filter((item) => ids.has(item.itemId) && allowed({url:item.content.url,publisherSubjectId:item.publisherSubjectId}));
+    if (selected.length !== ids.size) throw new Error('所选对象已不可用或来源已被屏蔽，请重新选择。');
+    const adjustment = await this.currentAdjustment(pkg.rootDir);
+    const request = this.lastIntentView?.searchQuery || adjustment?.text || '比较我从发现选中的内容';
+    const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
+    const thread = await readThread(pkg.rootDir, nowIso(), threadId);
+    const previous = thread.discoveryGoal;
+    const same = previous && (previous.originalRequest === request || previous.request === request);
+    const objects = selected.map((item) => ({ contentId: item.itemId, title: item.content.title,
+      url: item.content.url || '', source: item.publisherDisplayName || item.publisherSubjectId,
+      publisherSubjectId: item.publisherSubjectId, summary: item.content.text }));
+    const discoveryGoal = same ? { ...previous, objects } : {
+      originalRequest: request, request, scope: adjustment?.scope || 'session' as const, objects,
+    };
+    await saveRecommendationAdjustment(pkg.rootDir, {
+      text: request, summary: `本次目标：${request}`, scope: discoveryGoal.scope,
+      runtimeId: this.discoverRuntimeId, goalThreadId: threadId,
+    });
+    // 关联后不让旧 steer 成为另一份有效条件。
+    await this.reverseSteerPreference(pkg.rootDir);
+    return this.getTalkService().invoke({ ...input, discoveryGoal }, externalSignal || this.talkAbortSignal);
+    } finally {
+      if (this.activeTalkRequestId === requestId) this.activeTalkRequestId = previousRequestId;
+    }
   }
 
   async content(
     input: CommandMap['content']['input'],
   ): Promise<CommandMap['content']['output']> {
     const pkg = this.subject.getActive();
-    const empty = async (notice: string): Promise<DiscoverView> => ({
-      headline: '发现',
-      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
-      cards: [],
-      relatedCards: [],
-      preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
-      notice,
-    });
+    const empty = async (notice: string): Promise<DiscoverView> => {
+      const adjustment = pkg ? this.adjustmentView(await this.currentAdjustment(pkg.rootDir)) : undefined;
+      return {
+        headline: '发现',
+        lead: '看文章、图片、音频和视频。',
+        cards: [],
+        relatedCards: [],
+        preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
+        laterCards: this.pendingLaterCards,
+        notice,
+        ...(adjustment ? { adjustment } : {}),
+      };
+    };
     if (!pkg) return { view: await empty('还没有打开的数字之我。') };
     const action = input.action || 'discover';
     const itemId = String(input.itemId || '').trim();
     const feedbackFile = path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl');
+    // 切换代次必须在第一个 await 之前完成：否则两次几乎同时的请求，谁的文件读取后结束谁就成了"当前"，
+    // 先发的旧请求可以反过来盖掉后发的新请求。
+    const keepsGeneration = new Set([
+      'more',
+      'asked',
+      'replenish',
+      'refresh',
+      'open',
+      'later',
+      'boost',
+      'reduce',
+      'follow',
+      'block',
+      'sourceList',
+      'sourceAdd',
+      'sourceToggle',
+    ]);
+    const started = keepsGeneration.has(action) ? null : this.beginSearchGeneration(input.searchGenerationId, action === 'cancel' ? 'user' : 'superseded');
+    await this.refreshLaterCards(pkg.rootDir);
+
+    if (action === 'sourceList' || action === 'sourceAdd' || action === 'sourceToggle') {
+      const now = nowIso();
+      const managed = action === 'sourceAdd'
+        ? await addManagedContentSource({
+            packageRoot: pkg.rootDir,
+            url: String(input.url || '').trim(),
+            label: String(input.title || '').trim(),
+            store: new FileNetworkItemStore(path.join(pkg.rootDir, 'content')),
+            now,
+            signal: this.searchAbort.signal,
+          })
+        : action === 'sourceToggle'
+          ? await toggleManagedContentSource({
+              packageRoot: pkg.rootDir,
+              sourceId: String(input.sourceId || '').trim(),
+              enabled: input.enabled === true,
+              now,
+            })
+          : await listManagedContentSources(pkg.rootDir, now);
+      return {
+        view: await empty(''),
+        sources: managed.sources,
+        ...(managed.notice ? { sourceNotice: managed.notice } : {}),
+      };
+    }
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
-      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       if (!query) {
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
-      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
+      return {
+        view: await this.withAdjustment(
+          pkg.rootDir,
+          await this.runUnifiedContentSeek(pkg.rootDir, pkg.id, query, started!),
+        ),
+      };
+    }
+
+    if (action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') {
+      if (action === 'adjustRevoke') {
+        const linked = await this.currentAdjustment(pkg.rootDir);
+        if (linked?.goalThreadId) {
+          await this.getTalkService().revokeDiscoveryGoal(linked.goalThreadId);
+        }
+        await clearRecommendationAdjustment(pkg.rootDir);
+        await this.reverseSteerPreference(pkg.rootDir);
+        this.lastIntentView = null;
+        const cached = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse', undefined, true);
+        this.pendingPersonal = this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
+        return {
+          view: await this.withAdjustment(pkg.rootDir, {
+            ...cached,
+            replenishing: true,
+            notice: cached.notice || '已撤销这次调整，正在恢复默认推荐。',
+          }),
+        };
+      }
+      if (action === 'adjustKeep') {
+        const current = await this.currentAdjustment(pkg.rootDir);
+        if (!current) return { view: await this.withAdjustment(pkg.rootDir, await empty('还没有可保留的调整。')) };
+        const kept = await saveRecommendationAdjustment(pkg.rootDir, {
+          ...current,
+          scope: 'keep',
+          runtimeId: this.discoverRuntimeId,
+        });
+        await upsertContentPreference(pkg.rootDir, {
+          kind: 'steer',
+          targetType: 'directive',
+          target: STEER_PREFERENCE_TARGET,
+          text: `${kept.summary}（持续保留的本次调整，不是数字之我，也不表示长期不喜欢某类内容。）`,
+        });
+        if (kept.goalThreadId) {
+          const thread = await readThread(pkg.rootDir, nowIso(), kept.goalThreadId);
+          if (thread.discoveryGoal) thread.discoveryGoal.scope = 'keep';
+          await writeThread(pkg.rootDir, thread);
+          await this.reverseSteerPreference(pkg.rootDir);
+        }
+        this.lastIntentView = null;
+        return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset')) };
+      }
+      const text = String(input.text || '').trim();
+      if (!text) return { view: await this.withAdjustment(pkg.rootDir, await empty('请先说说想多看、少看或换成什么。')) };
+      const self = await readDigitalSelf(pkg.rootDir, pkg.id, new Date().toISOString());
+      const chatCompleteFn = this.resolveContentChat();
+      const model = this.resolveContentModel();
+      let interpreted: { summary: string; sufficient: boolean; question?: string } = {
+        summary: `本次按你刚才说的调整推荐：${text.slice(0, 40)}`,
+        sufficient: true,
+      };
+      if (chatCompleteFn && model) {
+        interpreted = await interpretRecommendationAdjust({
+          text,
+          selfContext: formatSelfContext(selectSelfContext(self, '')),
+          chatComplete: chatCompleteFn,
+          model,
+        });
+      }
+      const scope = input.scope === 'keep' ? 'keep' : 'session';
+      const saved = await saveRecommendationAdjustment(pkg.rootDir, {
+        text,
+        summary: interpreted.summary,
+        scope,
+        runtimeId: this.discoverRuntimeId,
+        ...(interpreted.question ? { question: interpreted.question } : {}),
+      });
+      if (scope === 'keep') {
+        await upsertContentPreference(pkg.rootDir, {
+          kind: 'steer',
+          targetType: 'directive',
+          target: STEER_PREFERENCE_TARGET,
+          text: `${saved.summary}（持续保留的本次调整，不是数字之我，也不表示长期不喜欢某类内容。）`,
+        });
+      } else {
+        await this.reverseSteerPreference(pkg.rootDir);
+      }
+      this.lastIntentView = null;
+      const first = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset', 'seated');
+      this.pendingPersonal = this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', 'rank');
+      return { view: await this.withAdjustment(pkg.rootDir, { ...first, replenishing: true }) };
     }
 
     if (action === 'resetRecent') {
-      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
+      const beforeIds = await readPersonalFeedIds(pkg.rootDir);
       await resetRecentRecommendationState(pkg.rootDir);
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
+      const afterIds = view.cards.map((card) => card.itemId);
+      const same = beforeIds.length > 0 && beforeIds.join('\n') === afterIds.join('\n');
+      view.notice = same
+        ? '最近推荐已经清空。这次没有换出不同的内容，可以换一批，或直接说想看什么。'
+        : '最近推荐已经清空，并按当前理解重新挑选。';
+      return { view };
+    }
+
+    if (action === 'more') {
+      let remaining = await personalFeedRemainingCount(pkg.rootDir);
+      if (remaining === 0 && this.readyPersonalSupply) {
+        const ready = this.readyPersonalSupply;
+        this.readyPersonalSupply = null;
+        await commitPersonalFeedPrefetch(pkg.rootDir, ready);
+        remaining = await personalFeedRemainingCount(pkg.rootDir);
+      }
+      if (remaining === 0) {
+        await this.schedulePersonalSupplyPrefetch(
+          pkg.rootDir,
+          pkg.id,
+          input.relayUrl,
+          {
+            ...(await empty('正在准备下一批内容。')),
+            feedMode: 'personal',
+            searchGenerationId: this.currentSearchGenerationId,
+          },
+        );
+        return {
+          view: {
+            ...(await empty('正在准备下一批内容。')),
+            feedMode: 'personal',
+            searchGenerationId: this.currentSearchGenerationId,
+            replenishing: true,
+            append: true,
+          },
+        };
+      }
+      const view = await this.withAdjustment(
+        pkg.rootDir,
+        await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'more'),
+      );
+      await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
+      return { view: { ...view, append: true } };
     }
 
     if (action === 'asked') {
@@ -521,21 +858,48 @@ export class DigitalMeRuntime {
       return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
+    if (action === 'cancel') {
+      const nextGen = started!.generationId;
+      if (this.lastIntentView?.feedMode === 'intent') {
+        this.lastIntentView = {
+          ...this.lastIntentView,
+          replenishing: false,
+          searchGenerationId: nextGen,
+          notice: terminalSupplementNotice(this.lastIntentView.notice, '补充已停止。'),
+        };
+        return { view: this.stampSearchGeneration(this.lastIntentView) };
+      }
+      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+    }
+
     if (action === 'replenish') {
-      return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId) };
+      const view = await this.withAdjustment(
+        pkg.rootDir,
+        await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId),
+      );
+      await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
+      return {
+        view,
+      };
     }
 
     if (action === 'refresh') {
-      return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId) };
+      const view = await this.withAdjustment(
+        pkg.rootDir,
+        await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId),
+      );
+      await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
+      return {
+        view,
+      };
     }
 
     if (action === 'reverse') {
-      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
       await reverseContentPreference(pkg.rootDir, directiveId);
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset') };
     }
 
     if (action === 'open' || action === 'later' || action === 'boost' || action === 'reduce' || action === 'follow' || action === 'block') {
@@ -545,6 +909,17 @@ export class DigitalMeRuntime {
       }
       const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
       const item = items.find((row) => row.itemId === itemId);
+      if (action === 'later') {
+        await saveLaterItem(pkg.rootDir, {
+          itemId,
+          url: String(input.url || item?.content.url || ''),
+          title: String(input.title || item?.content.title || ''),
+          text: String(input.text || item?.content.text || ''),
+          publisher: String(input.publisher || item?.publisherDisplayName || ''),
+          savedAt: new Date().toISOString(),
+        });
+        await this.refreshLaterCards(pkg.rootDir, new Set(items.map((row) => row.itemId)));
+      }
       if (!item) {
         if (this.lastIntentView) return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
         return { view: await empty('这条内容已经不在目录里。') };
@@ -569,9 +944,12 @@ export class DigitalMeRuntime {
           target: source ? item.publisherSubjectId : item.itemId,
           text: source
             ? `${action === 'follow' ? '关注来源' : '不再看来源'} ${item.publisherDisplayName || item.publisherSubjectId}`
-            : `${action === 'boost' ? '更想看到类似' : '少推类似'}「${item.content.title}」的内容`,
+            : action === 'boost'
+              ? `多推荐和「${item.content.title}」相近的内容，但不要只重复这一条。`
+              : `不喜欢「${item.content.title}」这一条。结合语境理解，不要因此封禁整个主题或来源。`,
         });
-        return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+        this.lastIntentView = null;
+        return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset') };
       }
       if (action === 'open') {
         await appendRecentRecommendationEvent(pkg.rootDir, {
@@ -583,25 +961,79 @@ export class DigitalMeRuntime {
       return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
-    this.beginSearchGeneration(input.searchGenerationId);
     this.lastIntentView = null;
-    return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
+    const view = await this.withAdjustment(
+      pkg.rootDir,
+      await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open'),
+    );
+    await this.schedulePersonalSupplyPrefetch(pkg.rootDir, pkg.id, input.relayUrl, view);
+    return { view };
   }
 
-  private beginSearchGeneration(requested?: string): string {
-    const gen = String(requested || '').trim() || createSearchGenerationId();
-    this.currentSearchGenerationId = gen;
+  private async schedulePersonalSupplyPrefetch(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl: string | undefined,
+    view: DiscoverView,
+  ): Promise<void> {
+    if (
+      view.feedMode === 'intent' ||
+      view.replenishing ||
+      this.pendingPersonalSupply ||
+      this.readyPersonalSupply ||
+      (await personalFeedRemainingCount(packageRoot)) >= 61
+    ) {
+      return;
+    }
+    const pending = this.runContentDiscoverResult(
+      packageRoot,
+      subjectId,
+      relayUrl,
+      'prefetch',
+    ).then((result) => result.prefetch || null, () => null);
+    this.pendingPersonalSupply = pending;
+    void pending.then((prefetched) => {
+      if (this.pendingPersonalSupply !== pending) return;
+      this.pendingPersonalSupply = null;
+      this.readyPersonalSupply = prefetched;
+    });
+  }
+
+  private beginSearchGeneration(requested?: string, reason: 'user' | 'superseded' = 'superseded'): { generationId: string; abort: AbortController } {
+    const abort = new AbortController();
+    const previous = this.searchAbort;
+    this.searchAbort = abort;
+    previous.abort(reason);
+    const generationId = String(requested || '').trim() || createSearchGenerationId();
+    this.currentSearchGenerationId = generationId;
     this.pendingSeekMerge = null;
-    return gen;
+    this.pendingPersonal = null;
+    this.pendingPersonalSupply = null;
+    this.readyPersonalSupply = null;
+    return { generationId, abort };
   }
 
-  private stampSearchGeneration(view: DiscoverView): DiscoverView {
-    const gen = this.currentSearchGenerationId || view.searchGenerationId;
+  private stampSearchGeneration(view: DiscoverView, generationId?: string): DiscoverView {
+    const gen = generationId || this.currentSearchGenerationId || view.searchGenerationId;
     return {
       ...view,
       ...(gen ? { searchGenerationId: gen } : {}),
       feedMode: view.feedMode === 'intent' ? 'intent' : view.feedMode || 'personal',
+      laterCards: this.pendingLaterCards,
     };
+  }
+
+  private async refreshLaterCards(packageRoot: string, liveIds?: Set<string>): Promise<void> {
+    const rows = await listLaterItems(packageRoot);
+    const ids =
+      liveIds ||
+      new Set((await this.loadDiscoverItems(packageRoot)).map((row) => row.itemId));
+    this.pendingLaterCards = laterCards(rows, ids);
+  }
+
+  private searchUsageOf(generationId: string): Pick<DiscoverView, 'searchUsage'> {
+    if (!this.searchUsage || this.searchUsage.generationId !== generationId) return {};
+    return { searchUsage: { ...this.searchUsage.usage } };
   }
 
   private intentViewFromSeek(
@@ -613,20 +1045,39 @@ export class DigitalMeRuntime {
     extra?: Partial<DiscoverView>,
   ): DiscoverView {
     const topic = sought.intent.topic || query;
+    const currentNews = sought.intent.newsFeed === true;
     return {
       headline: '发现',
       lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
-      feedTitle: `关于「${topic}」`,
+      feedTitle:
+        currentNews && sought.cards.length && sought.intent.reportDay
+          ? sought.intent.reportDay !== localCalendarDate()
+            ? `${sought.intent.reportDay} 的报道`
+            : '当天报道'
+          : `关于「${topic}」`,
       cards: sought.cards,
       relatedCards: sought.relatedCards,
-      ...(sought.relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
+      unjudgedCards: sought.unjudgedCards,
+      accessCards: sought.accessCards,
+      ...(sought.relatedCards.length
+        ? {
+            relatedTitle: currentNews
+              ? '补充背景'
+              : sought.relatedCards.some((card) => card.conditionStatus === 'unmet')
+                ? '相近选择（不完全符合这次的条件）'
+                : '相关介绍',
+          }
+        : {}),
+      ...(sought.unjudgedCards.length ? { unjudgedTitle: '这些还没完成判断，不是已确认的推荐' } : {}),
       preferences,
-      notice: sought.notice,
+      // 获取与判断尚未到终态时，不下"没有找到"之类的结论。
+      notice: extra?.replenishing ? '' : sought.notice,
       reasonCode: 'CURRENT_INTENT',
       feedMode: 'intent',
       searchQuery: query,
       networking,
       seekTrace: sought.trace,
+      ...this.searchUsageOf(generationId),
       // 视图身份属于产生它的那次搜索请求。被取代的迟到完成不得盖上当前 generation，
       // 否则渲染层的过期守卫会被绕过，旧搜索内容会作为新搜索结果合并进可见列表。
       searchGenerationId: generationId,
@@ -669,7 +1120,18 @@ export class DigitalMeRuntime {
         return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
       }
       if (!late) {
-        this.lastIntentView = { ...this.lastIntentView, replenishing: false };
+        const extra = pending.abort?.signal.reason === 'deadline' ? '补充已超时停止。' : pending.abort?.signal.aborted ? '补充已停止。' : '补充没有完成。';
+        this.lastIntentView = {
+          ...this.lastIntentView,
+          replenishing: false,
+          notice: terminalSupplementNotice(this.lastIntentView.notice || pending.firstNotice, extra),
+        };
+        if (!this.lastIntentView.cards.length && !this.lastIntentView.responseText) {
+          this.lastIntentView.responseText = await this.explainSeekWithoutLiveResults(
+            String(this.lastIntentView.searchQuery || ''),
+            pending.abort.signal,
+          );
+        }
         return this.lastIntentView;
       }
       const preferences = await this.contentPreferenceRows(packageRoot);
@@ -683,10 +1145,34 @@ export class DigitalMeRuntime {
       );
       const merged = mergeIntentViews(this.lastIntentView, incoming);
       this.lastIntentView = { ...merged, replenishing: false };
+      if (!this.lastIntentView.cards.length && !this.lastIntentView.responseText) {
+        this.lastIntentView.responseText = await this.explainSeekWithoutLiveResults(
+          String(this.lastIntentView.searchQuery || late.intent.topic || ''),
+          pending.abort.signal,
+        );
+      }
       if (merged.cards.length) {
         await rememberIntentFeed(packageRoot, merged.cards, String(merged.searchQuery || ''));
       }
       return this.lastIntentView;
+    }
+    if (personalMode === 'replenish' && this.lastIntentView?.feedMode !== 'intent') {
+      const gen = this.currentSearchGenerationId;
+      if (!this.pendingPersonal) {
+        const fast = await this.runContentDiscover(packageRoot, subjectId, relayUrl, 'replenish', 'catalog');
+        if (requested && gen && requested !== this.currentSearchGenerationId) {
+          return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
+        }
+        this.pendingPersonal = this.runContentDiscover(packageRoot, subjectId, relayUrl, 'replenish', 'full');
+        return this.stampSearchGeneration({ ...fast, replenishing: true });
+      }
+      const full = await this.pendingPersonal;
+      if (this.pendingPersonal) this.pendingPersonal = null;
+      if (requested && this.currentSearchGenerationId && requested !== this.currentSearchGenerationId) {
+        return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
+      }
+      const doneNotice = full.replenishing || /正在恢复/.test(full.notice || '') ? '' : full.notice || '';
+      return this.stampSearchGeneration({ ...full, replenishing: false, notice: doneNotice });
     }
     return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, personalMode);
   }
@@ -714,24 +1200,124 @@ export class DigitalMeRuntime {
     }));
   }
 
+  private async currentAdjustment(packageRoot: string) {
+    const row = await loadRecommendationAdjustment(packageRoot, this.discoverRuntimeId);
+    if (row && !row.goalThreadId) return row;
+    const threadId = listConversationSessionsSync(packageRoot).currentId;
+    const thread = await readThread(packageRoot, nowIso(), threadId);
+    if (!thread.discoveryGoal) return null;
+    // The singleton adjustment is a Discover projection; switching between two
+    // linked conversations must still read each conversation's own goal.
+    return { id: row?.id || `ra_${threadId}`, runtimeId: this.discoverRuntimeId,
+      origin: 'user_expression' as const, createdAt: row?.createdAt || '', updatedAt: row?.updatedAt || '',
+      goalThreadId: threadId, text: thread.discoveryGoal.request,
+      summary: `本次目标：${thread.discoveryGoal.request}`, scope: thread.discoveryGoal.scope };
+  }
+
+  private adjustmentView(
+    row: Awaited<ReturnType<typeof loadRecommendationAdjustment>>,
+    feedMode?: DiscoverView['feedMode'],
+  ): {
+    id: string;
+    summary: string;
+    text: string;
+    scope: 'session' | 'keep';
+    appliesTo?: 'default_feed' | 'all';
+    scopeNote?: string;
+    question?: string;
+  } | undefined {
+    if (!row) return undefined;
+    const sessionOnSeek = row.scope === 'session' && feedMode === 'intent';
+    return {
+      id: row.id,
+      summary: row.summary,
+      text: row.text,
+      scope: row.scope,
+      appliesTo: row.scope === 'keep' ? 'all' : 'default_feed',
+      scopeNote: sessionOnSeek
+        ? '本次调整仍作用于默认推荐，这次搜索按你刚说的主题来找。'
+        : row.scope === 'session'
+          ? '仅作用于这次默认推荐。换主题搜索不自动套用。'
+          : '已持续保留，可在内容偏好里撤销。',
+      ...(row.question ? { question: row.question } : {}),
+    };
+  }
+
+  private async withAdjustment(packageRoot: string, view: DiscoverView): Promise<DiscoverView> {
+    const adjustment = this.adjustmentView(await this.currentAdjustment(packageRoot), view.feedMode);
+    const next = adjustment ? { ...view, adjustment } : view;
+    if (this.lastIntentView && this.lastIntentView.searchGenerationId === next.searchGenerationId) {
+      const { adjustment: _ignored, ...rest } = this.lastIntentView;
+      this.lastIntentView = adjustment ? { ...rest, adjustment } : rest;
+    }
+    return next;
+  }
+
+  private async reverseSteerPreference(packageRoot: string): Promise<void> {
+    const rows = await listContentPreferences(packageRoot);
+    for (const row of rows) {
+      if (row.kind === 'steer' && row.target === STEER_PREFERENCE_TARGET) {
+        await reverseContentPreference(packageRoot, row.id);
+      }
+    }
+  }
+
   private async runContentDiscover(
     packageRoot: string,
     subjectId: string,
     relayUrl?: string,
-    mode: 'open' | 'refresh' | 'reuse' | 'replenish' = 'open',
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'prefetch' | 'more' | 'reset' = 'open',
+    supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank',
+    preferPersonalCache?: boolean,
   ): Promise<DiscoverView> {
+    return (await this.runContentDiscoverResult(
+      packageRoot,
+      subjectId,
+      relayUrl,
+      mode,
+      supplyPhase,
+      preferPersonalCache,
+    )).view;
+  }
+
+  private async runContentDiscoverResult(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl?: string,
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'prefetch' | 'more' | 'reset' = 'open',
+    supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank',
+    preferPersonalCache?: boolean,
+  ): Promise<{ view: DiscoverView; prefetch?: PersonalFeedPrefetch }> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
     const networking = this.snapshotNetworkDiscovery();
-    const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+    const generationAtStart = this.currentSearchGenerationId;
+    const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), this.searchAbort?.signal);
     const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-    const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
-    const items = await loadItems();
     const preferenceRows = await listContentPreferences(packageRoot);
-    const directives = formatPreferenceDirectives(preferenceRows);
+    let sourceAllows: ReturnType<typeof contentSourceAllowed> = () => true;
+    const loadItems = async () => {
+      const rows = await this.loadDiscoverItems(packageRoot, relayUrl);
+      const allowed = contentSourceAllowed(preferenceRows, rows);
+      const inactivePublishers = await inactiveContentSourcePublisherIds(packageRoot, nowIso());
+      sourceAllows = allowed;
+      return rows.filter(
+        (item) =>
+          !inactivePublishers.has(item.publisherSubjectId) &&
+          allowed({ url: item.content.url, publisherSubjectId: item.publisherSubjectId }),
+      );
+    };
+    const items = await loadItems();
+    const adjustment = await this.currentAdjustment(packageRoot);
+    const directives = [
+      formatPreferenceDirectives(preferenceRows),
+      adjustmentSteersFeed(adjustment, 'personal') ? formatAdjustmentDirective(adjustment) : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
     const recentEvents = await listRecentRecommendationEvents(packageRoot);
     const result = await ensurePersonalFeed({
       packageRoot,
@@ -743,7 +1329,13 @@ export class DigitalMeRuntime {
       feedbackFile: path.join(packageRoot, 'content', 'network-content-feedback.jsonl'),
       networking,
       mode,
+      selectionContextKey: adjustment?.goalThreadId ? createHash('sha256').update(JSON.stringify([adjustment.goalThreadId, adjustment.text])).digest('hex') : '',
+      ...(this.adjustmentView(adjustment) ? { adjustment: this.adjustmentView(adjustment) } : {}),
       ...(directives ? { preferenceDirectives: directives } : {}),
+      ...(supplyPhase ? { supplyPhase } : {}),
+      ...(preferPersonalCache ? { preferPersonalCache: true } : {}),
+      isCurrentGeneration: () =>
+        !generationAtStart || generationAtStart === this.currentSearchGenerationId,
       ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
       ...(model ? { model } : {}),
       ...(searchWeb ? { searchWeb } : {}),
@@ -752,84 +1344,1491 @@ export class DigitalMeRuntime {
         await store.put(item);
       },
       ingestHit: async (hit) => {
+        if (!allowsDefaultSupply({ url: hit.url }) || !sourceAllows(hit)) return [];
         try {
+          const entrance = await ingestDiscoveredEntrance({
+            url: hit.url,
+            store,
+            limit: 8,
+          });
+          if (entrance) {
+            const kept = entrance.map((item) => preferProviderSnippet(item, hit.snippet));
+            for (let i = 0; i < kept.length; i += 1) {
+              if (kept[i] !== entrance[i]) await store.put(kept[i]!);
+            }
+            return kept;
+          }
           const ingested = await ingestSource({
             sourceUrl: hit.url,
             store,
-            limit: 4,
-            via: 'search',
+            limit:
+              typeof (hit as { limit?: number }).limit === 'number'
+                ? Math.min(Math.max((hit as { limit?: number }).limit || 4, 1), 24)
+                : 4,
+            via: 'feed',
           });
-          if (ingested.items.length) return ingested.items;
+          if (ingested.items.length) {
+            const kept = ingested.items.map((item) => preferProviderSnippet(item, hit.snippet));
+            for (let i = 0; i < kept.length; i += 1) {
+              if (kept[i] !== ingested.items[i]) await store.put(kept[i]!);
+            }
+            return kept;
+          }
         } catch {
           /* 公开页摄入失败时退回搜索命中 */
         }
-        return indexSearchHits({ hits: [hit], store, limit: 1 });
+        if (hit.title === 'open catalog') return [];
+        return indexSearchHits({ hits: [hit], store, limit: 1, via: 'feed' });
       },
+      ...(openMedia
+        ? {
+            ingestCatalogSource: async (source: ContentSourceRecord) => {
+              let response: Awaited<ReturnType<typeof safePublicHttpGet>> | undefined;
+              const conditionalHeaders = contentSourceConditionalHeaders(source);
+              const ingested = await ingestSource({
+                sourceUrl: source.url,
+                store,
+                limit: 8,
+                via: 'feed',
+                signal: this.searchAbort.signal,
+                fetchImpl: async (url, headers, redirectLeft, deps) => {
+                  const sourceRequest = url === source.url;
+                  const fetched = await openMedia(
+                    url,
+                    { ...(headers || {}), ...(sourceRequest ? conditionalHeaders : {}) },
+                    redirectLeft,
+                    { ...(deps || {}), signal: this.searchAbort.signal, timeoutMs: 8_000 },
+                  );
+                  if (sourceRequest) response = fetched;
+                  return fetched;
+                },
+              });
+              const unavailable = ingested.records.some(
+                (record) => record.status === 'unavailable' || record.status === 'rejected',
+              );
+              const sampleUrls = [...new Set(
+                ingested.items.map((item) => String(item.content.url || '')).filter(Boolean),
+              )].slice(0, 2);
+              const linkResults = await Promise.all(
+                sampleUrls.map(async (url) => {
+                  try {
+                    const fetched = await openMedia(
+                      url,
+                      { range: 'bytes=0-65535' },
+                      undefined,
+                      { signal: this.searchAbort.signal, timeoutMs: 8_000, maxBodyBytes: 256 * 1024 },
+                    );
+                    return fetched.status >= 200 && fetched.status < 400;
+                  } catch (error) {
+                    const status = Number((error as { status?: number }).status || 0);
+                    return (
+                      (error as { code?: string }).code === 'too_large' &&
+                      status >= 200 &&
+                      status < 400
+                    );
+                  }
+                }),
+              );
+              const contentReachable = !sampleUrls.length || linkResults.some(Boolean);
+              const unchangedStillUnreachable =
+                ingested.notModified === true && source.lastErrorCode === 'content_unreachable';
+              const headers = response?.headers || {};
+              return {
+                ok:
+                  !unchangedStillUnreachable &&
+                  (ingested.notModified === true || (!unavailable && contentReachable)),
+                itemCount: ingested.items.length,
+                ...((unchangedStillUnreachable || (!ingested.notModified && !contentReachable))
+                  ? { errorCode: 'content_unreachable' }
+                  : {}),
+                ...(ingested.notModified ? { notModified: true } : {}),
+                etag: headers.etag || (ingested.notModified ? source.etag || null : null),
+                lastModified:
+                  headers['last-modified'] || (ingested.notModified ? source.lastModified || null : null),
+              };
+            },
+          }
+        : {}),
       reloadItems: loadItems,
-      getItem: (itemId) => store.get(itemId, nowIso()),
+      getItem: async (itemId) => {
+        const item = await store.get(itemId, nowIso());
+        return item && sourceAllows({url:item.content.url,publisherSubjectId:item.publisherSubjectId}) ? item : undefined;
+      },
     });
     if (result.view.networking === 'AUTH_FAILED' || result.view.networking === 'TEMPORARY_ERROR') {
       this.lastNetworkCode = result.view.networking;
     } else if (result.view.networking === 'AVAILABLE') {
       this.lastNetworkCode = 'AVAILABLE';
     }
-    return this.stampSearchGeneration({
-      ...result.view,
-      feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
-    });
+    const shownAdjustment = this.adjustmentView(adjustment, result.view.feedMode === 'intent' ? 'intent' : 'personal');
+    const view = this.stampSearchGeneration(
+      {
+        ...result.view,
+        feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
+        ...(shownAdjustment ? { adjustment: shownAdjustment } : {}),
+      },
+      generationAtStart,
+    );
+    return {
+      view,
+      ...(result.prefetch ? { prefetch: result.prefetch } : {}),
+    };
   }
 
-  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
-    const generationId = this.currentSearchGenerationId || this.beginSearchGeneration();
-    const preferences = await this.contentPreferenceRows(packageRoot);
-    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    const networking = this.snapshotNetworkDiscovery();
-    const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+  private async explainSeekWithoutLiveResults(
+    query: string,
+    signal: AbortSignal,
+  ): Promise<string> {
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
-    const openMedia = this.resolveOpenMediaFetch();
+    if (!chatCompleteFn || !model || signal.aborted) {
+      return '我理解你是在找与这个要求直接相关、现在可以消费的内容，但这次没有拿到可核实的联网结果。你可以稍后重试；如果这句话可能指不同对象，也可以补充作品名、作者或你想找的是正片、介绍还是相似内容。';
+    }
+    try {
+      const result = await chatCompleteFn({
+        baseUrl: model.baseUrl,
+        ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+        model: model.model,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '你是 2digime。当前联网发现没有拿到可核实结果，但仍要理解并回应用户，不能沉默。',
+              '用两三句普通中文：先准确复述你理解的需求；明确当前无法核实最新资源，不得编造链接、热度或剧情。',
+              '只有请求确实存在关键歧义时才问一个最有帮助的追问；请求已经具体时不要机械追问。',
+              '只输出给用户看的正文。',
+            ].join('\n'),
+          },
+          { role: 'user', content: query },
+        ],
+        temperature: 0.2,
+        maxTokens: 600,
+        timeoutMs: 12_000,
+        signal,
+      });
+      const text = String(result.text || '').trim();
+      if (text) return text;
+    } catch {
+      /* 搜索失败后的解释也失败时，仍必须给出确定终态。 */
+    }
+    return '我理解你是在找与这个要求直接相关、现在可以消费的内容，但这次没有拿到可核实的联网结果。你可以稍后重试；如果这句话可能指不同对象，也可以补充作品名、作者或你想找的是正片、介绍还是相似内容。';
+  }
+
+  private async runUnifiedContentSeek(
+    packageRoot: string,
+    subjectId: string,
+    query: string,
+    started: { generationId: string; abort: AbortController },
+  ): Promise<DiscoverView> {
+    const generationId = started.generationId;
+    const preferenceDirectives = await listContentPreferences(packageRoot);
+    const preferences = preferenceDirectives.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      text: row.text,
+    }));
+    const base = (notice: string, extra?: Partial<DiscoverView>): DiscoverView =>
+      this.stampSearchGeneration({
+        headline: '发现',
+        lead: '根据你刚说的话找「' + query + '」，由同一模型自主搜索、读源并判断。',
+        feedTitle: '关于「' + query.slice(0, 36) + '」',
+        cards: [],
+        relatedCards: [],
+        preferences,
+        laterCards: this.pendingLaterCards,
+        notice,
+        reasonCode: 'UNIFIED_RESPONSES',
+        feedMode: 'intent',
+        searchQuery: query,
+        searchGenerationId: generationId,
+        replenishing: false,
+        ...extra,
+      }, generationId);
+    const commitView = (view: DiscoverView): DiscoverView => {
+      if (this.currentSearchGenerationId === generationId) this.lastIntentView = view;
+      return view;
+    };
+
+    const config = this.options.openaiCompatible;
+    const responsesReady = !!config && !!this.options.secrets && supportsResponsesToolLoop(config);
+    const apiKey = responsesReady
+      ? await this.options.secrets!.get(providerCredentialKey(config!.providerId || 'openai-compatible'))
+      : null;
+    if (!responsesReady || !apiKey) {
+      // Search 是可替换 Tool，不要求当前主模型必须原生实现某一家 Responses API。
+      // 已连接的托管/BYOK Search 只提供候选；理解与最终选择仍由当前模型 + Digital Self 完成。
+      if (this.resolveContentSearch() && this.resolveContentChat() && this.resolveContentModel()) {
+        const view = await this.runChatContentSeek(
+          packageRoot,
+          subjectId,
+          query,
+          started,
+          preferenceDirectives,
+        );
+        if (!view.replenishing && !view.cards.length && !view.responseText) {
+          view.responseText = await this.explainSeekWithoutLiveResults(query, started.abort.signal);
+          return commitView(view);
+        }
+        return view;
+      }
+      const responseText = await this.explainSeekWithoutLiveResults(query, started.abort.signal);
+      const unavailable = base('这次没有拿到可核实的联网结果。', { responseText });
+      return commitView(unavailable);
+    }
+
+    const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
+    const selfContext = formatSelfContext(selectSelfContext(self, query));
+    const preferenceContext = formatPreferenceDirectives(preferenceDirectives) ||
+      '当前没有主人明确设置的内容偏好。';
+    const presentResultsTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'present_results',
+        description: '把你已经搜索、核对并判断合格的结果交给发现页。只负责交付，不负责替你搜索、评分或排序。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['summary', 'results'],
+          properties: {
+            summary: {
+              type: 'string',
+              description: '对本轮结果的简短结论；无合格结果时如实说明。',
+            },
+            results: {
+              type: 'array',
+              maxItems: 12,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['title', 'url', 'summary', 'why', 'readStatus'],
+                properties: {
+                  title: { type: 'string' },
+                  url: { type: 'string' },
+                  summary: { type: 'string' },
+                  why: { type: 'string' },
+                  publishedAt: { type: 'string' },
+                  sourceName: { type: 'string' },
+                  contentType: { type: 'string' },
+                  readStatus: {
+                    type: 'string',
+                    enum: ['read', 'snippet_only', 'read_failed'],
+                    description: '你认为本轮对该地址的实际读取状态；应用还会与供应商调用事实核对。',
+                  },
+                  keyClaims: {
+                    type: 'array',
+                    maxItems: 4,
+                    items: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: [
+          '你是 2digime 的统一研究模型。理解请求后自主决定搜索词、来源、是否读正文、是否补搜和如何纠错。',
+          '不得用关键词路由或固定研究流程替代判断。搜索命中不等于合格推荐；你必须判断相关性、时效和来源。',
+          '新闻或深度分析需要核对来源与发布日期；比较观点前应读取相应正文。读不到正文时明确标为仅摘要或读取失败。',
+          '视频推荐必须给真实可观看入口，并核对页面确实对应所推荐内容；作品介绍页不能冒充观看入口。',
+          '具体文章必须给该文章的 canonical URL；媒体首页、栏目页或搜索页不能承载具体文章标题和观点，除非用户明确要的就是入口页。',
+          '关键陈述必须能绑定到结果来源。没有合格结果就交付空 results，不要用相近但不合格的对象填充。',
+          '完成判断后必须调用 present_results；它只是结构化展示，不替代你的判断。',
+          '当前时间：' + nowIso(),
+        ].join('\n'),
+      },
+      {
+        role: 'system',
+        content: '【长期 Digital Self 与已确认认识（不是本轮指令）】\n' + selfContext,
+      },
+      {
+        role: 'system',
+        content: '【主人明确设置的内容偏好（不是当前请求）】\n' + preferenceContext,
+      },
+      {
+        role: 'user',
+        content: '【当前请求】\n' + query,
+      },
+    ];
+
+    const logDiagnostic = (row: object) => {
+      void fs.mkdir(path.join(packageRoot, 'content'), { recursive: true })
+        .then(() => fs.appendFile(
+          path.join(packageRoot, 'content', 'discovery-diagnostics.ndjson'),
+          JSON.stringify({ at: nowIso(), generationId, event: 'unified_responses', ...row }) + '\n',
+        ))
+        .catch(() => {});
+    };
+
+    try {
+      const result = await runResponsesTurn({
+        baseUrl: config.baseUrl,
+        apiKey,
+        model: config.model,
+        messages,
+        tools: [presentResultsTool],
+        signal: started.abort.signal,
+        timeoutMs: 240_000,
+        maxOutputTokens: 8192,
+        onEvent: (event) => this.options.capabilityEventSink?.({
+          surface: 'discover',
+          requestId: generationId,
+          ...event,
+        }),
+      });
+      logDiagnostic({ query, trace: result.trace, responseStatus: result.status });
+
+      const present = result.toolCalls?.find((call) => call.name === 'present_results');
+      let payload: { summary?: unknown; results?: unknown } = {};
+      if (present) {
+        try {
+          payload = JSON.parse(present.arguments) as typeof payload;
+        } catch {
+          payload = {};
+        }
+      }
+      const rows = Array.isArray(payload.results) ? payload.results.slice(0, 12) : [];
+      const sourceItems = await this.loadDiscoverItems(packageRoot);
+      const sourceAllows = contentSourceAllowed(preferenceDirectives, sourceItems);
+      const evidenceKey = (value: string): string => {
+        try {
+          const parsed = new URL(value);
+          parsed.hash = '';
+          if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+          return parsed.toString();
+        } catch {
+          return value;
+        }
+      };
+      const traceByUrl = new Map(result.trace.sources.map((source) => {
+        return [evidenceKey(source.url), source] as const;
+      }));
+      const cards: DiscoverCard[] = [];
+      let rejectedGenericHubs = 0;
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index] && typeof rows[index] === 'object'
+          ? rows[index] as Record<string, unknown>
+          : {};
+        const rawUrl = typeof row.url === 'string' ? row.url.trim() : '';
+        let url = '';
+        let host = '';
+        try {
+          const parsed = new URL(rawUrl);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
+          url = parsed.toString();
+          host = parsed.hostname.replace(/^www\./i, '');
+        } catch {
+          continue;
+        }
+        // 来源完整性门：站点首页/搜索页不能承载模型给出的具体文章标题。
+        // 这只拒绝错误身份绑定，不替模型做相关性评分、排序或补搜。
+        if (!isSpecificUnifiedResultUrl(url)) {
+          rejectedGenericHubs += 1;
+          continue;
+        }
+        if (!sourceAllows({ url })) continue;
+        const evidence = traceByUrl.get(evidenceKey(url));
+        const readStatus = evidence?.readStatus || 'snippet_only';
+        const title = typeof row.title === 'string' && row.title.trim()
+          ? row.title.trim()
+          : evidence?.title || host;
+        const summary = typeof row.summary === 'string' ? row.summary.trim() : '';
+        const claims = Array.isArray(row.keyClaims)
+          ? row.keyClaims.filter((claim): claim is string => typeof claim === 'string' && !!claim.trim())
+            .slice(0, 4)
+          : [];
+        const text = [summary, ...claims.map((claim) => '• ' + claim.trim())]
+          .filter(Boolean)
+          .join('\n');
+        const contentType = typeof row.contentType === 'string' && row.contentType.trim()
+          ? row.contentType.trim()
+          : 'article';
+        cards.push({
+          itemId: 'responses_' + createHash('sha256')
+            .update(generationId + '\n' + url + '\n' + index)
+            .digest('hex')
+            .slice(0, 20),
+          title,
+          text,
+          url,
+          publisherDisplayName: typeof row.sourceName === 'string' && row.sourceName.trim()
+            ? row.sourceName.trim()
+            : host,
+          // A displayed publication date must be bound to the same source URL
+          // whose body the provider actually returned. Search snippets may be
+          // useful, but this trace does not preserve a date field from them.
+          ...(readStatus === 'read' && typeof row.publishedAt === 'string' && row.publishedAt.trim()
+            ? { publishedAt: row.publishedAt.trim() }
+            : {}),
+          reason: typeof row.why === 'string' && row.why.trim()
+            ? row.why.trim()
+            : '由模型结合本次请求与来源材料判断。',
+          source: 'web',
+          contentType,
+          textOrigin: readStatus === 'read' ? 'body' : 'snippet',
+          access: readStatus === 'read'
+            ? '已读取正文'
+            : readStatus === 'read_failed'
+              ? '正文读取失败；当前仅展示可核对信息'
+              : '仅见搜索摘要，尚未读取正文',
+          ...(contentType.toLowerCase().includes('video')
+            ? { entrancePurpose: '观看入口' }
+            : {}),
+        });
+      }
+
+      const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+      const structureMissing = !present;
+      const incomplete = result.status === 'incomplete';
+      const mainNotice = structureMissing
+        ? '模型未完成结果交付；未用旧候选或模板结果补齐。'
+        : incomplete
+          ? '模型调用未完整结束；这里只显示已交付且可绑定来源的结果。'
+          : summary || (cards.length ? '' : '本轮没有获得合格结果。');
+      const integrityNotice = rejectedGenericHubs
+        ? rejectedGenericHubs + ' 项仅指向站点首页或搜索页，未作为具体文章展示。'
+        : '';
+      const notice = [mainNotice, integrityNotice].filter(Boolean).join(' ');
+      const view = base(notice, {
+        cards,
+        capabilityTrace: [result.trace],
+      });
+      commitView(view);
+      if (cards.length && this.currentSearchGenerationId === generationId) {
+        await rememberIntentFeed(packageRoot, cards, query);
+      }
+      return view;
+    } catch (error) {
+      const failure = error instanceof ModelHttpError
+        ? { kind: error.kind, status: error.status, message: error.message.slice(0, 300) }
+        : { kind: 'unknown', message: (error as Error).message.slice(0, 300) };
+      logDiagnostic({ query, failure });
+      const view = base(
+        started.abort.signal.aborted
+          ? '这次查找已停止。'
+          : '统一搜索与正文读取调用失败；未退回旧 RSS、日期追问或候选兜底链。',
+      );
+      return commitView(view);
+    }
+  }
+
+  /**
+   * 当前主模型的发现工具环。
+   *
+   * Search 只提供事实候选，Digital Self / 明确偏好 / 短期上下文只交给当前模型。
+   * runtime 只校验候选身份、来源边界、代次、超时与交付结构，不替模型判断相关性或排序。
+   */
+  private async runChatContentSeek(
+    packageRoot: string,
+    subjectId: string,
+    query: string,
+    started: { generationId: string; abort: AbortController },
+    preferenceDirectives: Awaited<ReturnType<typeof listContentPreferences>>,
+  ): Promise<DiscoverView> {
+    const generationId = started.generationId;
+    const signal = started.abort.signal;
+    const deadlineAt = Date.now() + SEEK_DEADLINE_MS;
+    const deadlineTimer = setTimeout(() => {
+      if (!signal.aborted) started.abort.abort('deadline');
+    }, SEEK_DEADLINE_MS);
+    const preferences = preferenceDirectives.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      text: row.text,
+    }));
+    const base = (notice: string, extra?: Partial<DiscoverView>): DiscoverView =>
+      this.stampSearchGeneration({
+        headline: '发现',
+        lead: '根据你刚说的话找「' + query + '」，由当前模型自主搜索并整体判断。',
+        feedTitle: '关于「' + query.slice(0, 36) + '」',
+        cards: [],
+        relatedCards: [],
+        preferences,
+        laterCards: this.pendingLaterCards,
+        notice,
+        reasonCode: 'UNIFIED_CHAT_TOOLS',
+        feedMode: 'intent',
+        searchQuery: query,
+        searchGenerationId: generationId,
+        replenishing: false,
+        ...extra,
+      }, generationId);
+    const commitView = (view: DiscoverView): DiscoverView => {
+      if (this.currentSearchGenerationId === generationId) this.lastIntentView = view;
+      return view;
+    };
+    const logDiagnostic = (row: object) => {
+      void fs.mkdir(path.join(packageRoot, 'content'), { recursive: true })
+        .then(() => fs.appendFile(
+          path.join(packageRoot, 'content', 'discovery-diagnostics.ndjson'),
+          JSON.stringify({ at: nowIso(), generationId, event: 'unified_chat_tools', ...row }) + '\n',
+        ))
+        .catch(() => {});
+    };
+
+    const rawSearch = this.resolveContentSearch();
+    const chatCompleteFn = this.resolveContentChat();
+    const model = this.resolveContentModel();
+    if (!rawSearch || !chatCompleteFn || !model) {
+      clearTimeout(deadlineTimer);
+      return commitView(base('当前没有可用的联网搜索或主模型，未退回旧候选链。'));
+    }
+
+    type Candidate = {
+      candidateId: string;
+      title: string;
+      url: string;
+      snippet: string;
+      sourceName: string;
+      source: 'directory' | 'web';
+      itemId?: string;
+      publisherSubjectId?: string;
+      publishedAt?: string;
+      contentType?: string;
+      readContent?: string;
+      resolvedUrl?: string;
+      readAttempted?: boolean;
+    };
+    type Selection = {
+      candidateId: string;
+      why: string;
+      placement: 'main' | 'related';
+      resultKind: 'candidate' | 'recommendation';
+      title?: string;
+      summary?: string;
+      contentType?: string;
+      entrancePurpose?: string;
+      channelUse?: 'watch' | 'discover' | 'supplement';
+      entryKind?: 'full' | 'preview' | 'platform' | 'basis';
+      access?: string;
+    };
+    type Delivery = { summary: string; selections: Selection[] };
+
+    const usage = { calls: 0, reused: 0, skippedAfterQuota: 0, rateLimited: false };
+    this.searchUsage = { generationId, usage };
+    const searchWeb = this.wrapContentSearch(rawSearch, signal, usage)!;
+    const sourceItems = await this.loadDiscoverItems(packageRoot);
+    const sourceAllows = contentSourceAllowed(preferenceDirectives, sourceItems);
+    const candidateById = new Map<string, Candidate>();
+    const candidateIdByUrl = new Map<string, string>();
+    const searchedQueries = new Set<string>();
+    // 最多两轮搜索：第一轮发现具体对象，第二轮可并行补搜少量对象的入口。
+    // 次数上限防止工具循环失控；真实配额仍由 Relay 统一执行。
+    const MAX_SEARCH_CALLS = 4;
+    const MAX_READ_CALLS = 8;
+    // search → read → optional补搜 → read → present 至少需要 5 轮；模型在一次失败工具调用后
+    // 还需要一轮纠正。8 轮只给结构化收口余量，不扩大搜索/读取配额。
+    const MAX_TOOL_ROUNDS = 8;
+    const MAX_CANDIDATES = 30;
+    let delivery: Delivery | null = null;
+    let emptyDeliveryChecked = false;
+
+    const canonicalUrl = (value: string): string => {
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+        parsed.hash = '';
+        if (parsed.pathname.length > 1) parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+        return parsed.toString();
+      } catch {
+        return '';
+      }
+    };
+    const sourceNameOf = (value: string): string => {
+      try {
+        return new URL(value).hostname.replace(/^www\./i, '');
+      } catch {
+        return '';
+      }
+    };
+    // 当前已建立的 Source 也是候选供给，不因显式搜索而丢失。这里仅取一个有界窗口并交给
+    // 同一模型整体判断；runtime 不按关键词、主题或分数筛选它们。
+    const sourceCandidateWindow: Candidate[] = [];
+    for (const item of sourceItems.slice(0, 6)) {
+      const url = canonicalUrl(String(item.content.url || ''));
+      const title = String(item.content.title || '').trim();
+      if (!url || !title || !sourceAllows({ url, publisherSubjectId: item.publisherSubjectId })) continue;
+      const candidateId = 'candidate_' + createHash('sha256')
+        .update(url)
+        .digest('hex')
+        .slice(0, 16);
+      if (candidateById.has(candidateId)) continue;
+      const candidate: Candidate = {
+        candidateId,
+        title: title.slice(0, 240),
+        url,
+        snippet: String(item.content.text || '').trim().slice(0, 700),
+        sourceName: String(item.publisherDisplayName || sourceNameOf(url)).trim(),
+        source: 'directory',
+        itemId: item.itemId,
+        ...(item.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
+        ...(item.content.publishedAt ? { publishedAt: item.content.publishedAt } : {}),
+        ...(item.content.contentType ? { contentType: item.content.contentType } : {}),
+      };
+      candidateIdByUrl.set(url, candidateId);
+      candidateById.set(candidateId, candidate);
+      sourceCandidateWindow.push(candidate);
+    }
+    const remainingMs = () => Math.max(1, deadlineAt - Date.now());
+    const ensureActive = () => {
+      if (signal.aborted || Date.now() >= deadlineAt) {
+        throw Object.assign(new Error('discover request stopped'), { name: 'AbortError' });
+      }
+    };
+
+    const webSearchTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: '搜索开放互联网并返回真实候选。可根据第一次结果继续换词或查具体对象；不要把搜索命中自动当成推荐。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['query'],
+          properties: {
+            query: { type: 'string', description: '本轮搜索词。只发送搜索所需文字，不包含 Digital Self。' },
+          },
+        },
+      },
+    };
+    const readCandidateTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'read_candidate',
+        description: '读取 web_search 已返回候选的真实公开页面，用于核实它是完整观看、试看/预告、平台作品页、文章还是访问限制页。只能传 candidateId，不接受任意 URL。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['candidateId'],
+          properties: {
+            candidateId: { type: 'string' },
+          },
+        },
+      },
+    };
+    const presentResultsTool: ChatToolDefinition = {
+      type: 'function',
+      function: {
+        name: 'present_results',
+        description: '按当前请求整体选择已经由 web_search 返回的候选。只能引用 candidateId；无合格对象时提交空 selections。',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['summary', 'selections'],
+          properties: {
+            summary: {
+              type: 'string',
+              maxLength: 360,
+              description: '对本轮结果的简短结论；无合格结果时如实说明或提出一个必要追问。',
+            },
+            emptyConfirmed: {
+              type: 'boolean',
+              description: '已有候选但仍确认没有合格结果时设为 true。第一次空交付可能收到一次检查提示。',
+            },
+            selections: {
+              type: 'array',
+              maxItems: 8,
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['candidateId', 'why', 'placement', 'resultKind'],
+                properties: {
+                  candidateId: { type: 'string' },
+                  why: {
+                    type: 'string',
+                    maxLength: 120,
+                    description: '结合当前请求、Digital Self 和来源摘要给出的简短具体理由。',
+                  },
+                  placement: { type: 'string', enum: ['main', 'related'] },
+                  resultKind: {
+                    type: 'string',
+                    enum: ['candidate', 'recommendation'],
+                    description: 'candidate 表示候选页面本身就是要展示的对象；recommendation 表示该候选只是可信推荐依据。',
+                  },
+                  title: {
+                    type: 'string',
+                    description: 'resultKind=recommendation 时必填：依据来源明确提到的具体对象名。不得编造。',
+                  },
+                  summary: {
+                    type: 'string',
+                    maxLength: 240,
+                    description: '简短概括候选已核实的信息；resultKind=recommendation 时只概括依据支持的信息，不得扩写未核实事实。',
+                  },
+                  contentType: { type: 'string' },
+                  entrancePurpose: { type: 'string' },
+                  channelUse: {
+                    type: 'string',
+                    enum: ['watch', 'discover', 'supplement'],
+                    description: 'watch=观看/收听入口；discover=发现依据；supplement=补充入口。只依据读取到的页面判断。',
+                  },
+                  entryKind: {
+                    type: 'string',
+                    enum: ['full', 'preview', 'platform', 'basis'],
+                    description: 'full=完整内容入口；preview=试看/预告/片段；platform=作品或单集平台页但访问条件未知或受限；basis=报道、榜单、百科等依据。',
+                  },
+                  access: {
+                    type: 'string',
+                    maxLength: 120,
+                    description: '如实说明登录、会员、付费、地区、App、验证码或当前无法确认等访问条件。',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const readCandidate = async (candidateId: string): Promise<Record<string, unknown>> => {
+      const candidate = candidateById.get(candidateId);
+      const attempted = [...candidateById.values()].filter((row) => row.readAttempted).length;
+      if (!candidate) return { ok: false, failureReason: 'candidateId 不在本轮候选中。' };
+      if (!candidate.readAttempted && attempted >= MAX_READ_CALLS) {
+        return { ok: false, failureReason: '本轮页面读取次数已到上限，请基于已读取页面交付。' };
+      }
+      if (candidate.readAttempted) {
+        return candidate.readContent
+          ? {
+              ok: true,
+              candidateId,
+              title: candidate.title,
+              url: candidate.resolvedUrl || candidate.url,
+              content: candidate.readContent,
+              note: '这是页面读取材料，不自动证明它是完整内容、官方入口或无需登录。',
+            }
+          : { ok: false, candidateId, failureReason: '该候选页面当前无法公开读取。' };
+      }
+      candidate.readAttempted = true;
+      const began = Date.now();
+      try {
+        const connector = this.options.publicPageRead ? null : createBingHtmlSearchConnector();
+        const read = this.options.publicPageRead
+          ? await this.options.publicPageRead(candidate.url)
+          : await connector?.read?.(candidate.url, { signal, maxChars: 6000 });
+        ensureActive();
+        const content = String(read?.content || '').trim().slice(0, 6000);
+        const resolvedUrl = canonicalUrl(String(read?.resolvedUrl || candidate.url));
+        if (!content || !resolvedUrl || !sourceAllows({ url: resolvedUrl })) {
+          return { ok: false, candidateId, failureReason: '候选页面当前无法公开读取或读取结果超出允许来源边界。' };
+        }
+        candidate.readContent = content;
+        candidate.resolvedUrl = resolvedUrl;
+        return {
+          ok: true,
+          candidateId,
+          title: candidate.title,
+          url: resolvedUrl,
+          content,
+          note: '这是页面读取材料，不自动证明它是完整内容、官方入口或无需登录。',
+        };
+      } catch (error) {
+        logDiagnostic({
+          phase: 'read_candidate_error',
+          candidateId,
+          ms: Date.now() - began,
+          error: String((error as Error)?.message || error).slice(0, 180),
+        });
+        return {
+          ok: false,
+          candidateId,
+          failureReason: signal.aborted ? '页面读取已停止。' : '候选页面当前无法公开读取。',
+        };
+      } finally {
+        logDiagnostic({
+          phase: 'read_candidate',
+          candidateId,
+          ms: Date.now() - began,
+          ok: !!candidate.readContent,
+        });
+      }
+    };
+
+    try {
+      const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
+      const selfContext = formatSelfContext(selectSelfContext(self, query));
+      const preferenceContext = formatPreferenceDirectives(preferenceDirectives) ||
+        '当前没有主人明确设置的内容偏好。';
+      const recentContext = formatRecentRecommendationContext(
+        await listRecentRecommendationEvents(packageRoot),
+      ) || '当前没有可用的短期内容上下文。';
+      await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: [
+            '你是 2digime 的推荐主模型。你直接负责理解、搜索、纠错和最终选择；没有另一个分类器、评分器或审核模型替你判断。',
+            '当前请求优先于历史上下文。Digital Self、明确偏好和短期上下文只帮助理解与个性化，不能把一次搜索写成长期兴趣。',
+            '先根据需要调用 web_search。搜索结果只是候选；对可能成为主卡的对象调用 read_candidate 核实真实页面，必要时换词、补搜具体对象，再调用 present_results。',
+            '最多进行两轮 web_search；读过候选后必须为 present_results 预留最后一轮。第二轮搜索后不要再尝试搜索，基于已读页面诚实交付，无法核实的就明确说明。',
+            '开放推荐不能停在榜单：第一轮从榜单或报道选出具体作品后，第二轮只挑最有希望的 2～3 个作品，分别搜索其官方观看、试看、预告或平台作品页并读取核实。宁可交付 2～3 张有入口的主卡，也不要交付 5～6 张只有推荐依据的作品卡。',
+            '推荐应是与当前请求直接相关、现在可消费或可到达的具体内容对象。榜单、报道、聚合页可以作为发现线索，但不能冒充其中的作品或具体内容。',
+            '涉及近期、热度、趋势等时效性判断时，应比较多个独立来源，不要只从一篇片单或报道推出整批推荐。',
+            '具体内容必须选择其真实候选 ID。不要编造标题、链接、热度、日期或剧情；不要用相近但不合格的对象凑数。',
+            '如果候选页面本身就是作品页、文章页或观看入口，用 resultKind=candidate。若可信榜单或报道明确支持一个具体推荐对象、但没有找到对象页，可用 resultKind=recommendation，并填写对象 title；该卡会保留依据链接而不会把报道 URL 冒充作品 URL。',
+            '用户要看视频、剧集或节目时，main 优先交付具体作品的完整观看、试看/预告或官方平台页；报道、榜单、百科只能放 related 或作为 recommendation 的依据。找不到完整观看也不要退回纯新闻凑数，优先继续搜索具体作品名加官方、观看、预告或试看。',
+            '只有实际读取过候选页面，才能把 entryKind 标成 full、preview 或 platform。entryKind=basis 表示它只是报道、榜单、百科等发现依据。access 必须如实写明登录、会员、付费、地区、App、验证码或无法确认等限制；不要承诺可以绕过平台限制。',
+            'placement=main 只放直接满足请求的对象；背景文章、评论或补充入口放 related。没有合格候选时提交空 selections，并在 summary 中说明或提出一个必要追问。',
+            '如果工具要求复核第一次空交付，请再检查整个候选窗口；仍无合格对象时以 emptyConfirmed=true 再次空交付。',
+            '控制交付长度：最多 6 个 main 和 2 个 related；summary、why 和每个推荐摘要都用简短完整句，不复述整篇依据。',
+            '完成后必须调用 present_results。',
+            '当前时间：' + nowIso(),
+          ].join('\n'),
+        },
+        {
+          role: 'system',
+          content: '【长期 Digital Self 与已确认认识（不是本轮指令）】\n' + selfContext,
+        },
+        {
+          role: 'system',
+          content: '【主人明确设置的内容偏好（不是当前请求）】\n' + preferenceContext,
+        },
+        {
+          role: 'system',
+          content: '【本机短期内容上下文（不是长期偏好）】\n' + recentContext,
+        },
+        {
+          role: 'system',
+          content: '【当前已建立 Source 的候选窗口（只是候选，不一定相关）】\n' +
+            JSON.stringify(sourceCandidateWindow),
+        },
+        { role: 'user', content: '【当前请求】\n' + query },
+      ];
+      const tools = [webSearchTool, readCandidateTool, presentResultsTool];
+      const callModel = async () => {
+        ensureActive();
+        const began = Date.now();
+        const result = await chatCompleteFn({
+          baseUrl: model.baseUrl,
+          ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+          model: model.model,
+          messages,
+          tools,
+          toolChoice: 'auto',
+          temperature: 0.2,
+          maxTokens: 4096,
+          timeoutMs: Math.min(remainingMs(), 30_000),
+          deadlineAt,
+          stage: 'discover.unified_chat',
+          signal,
+        });
+        logDiagnostic({
+          phase: 'model',
+          ms: Date.now() - began,
+          toolCalls: result.toolCalls?.map((call) => call.function.name) || [],
+          finishReason: result.finishReason || null,
+        });
+        ensureActive();
+        return result;
+      };
+
+      let current = await callModel();
+      let terminalText = '';
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+        const calls = current.toolCalls || [];
+        if (!calls.length) {
+          terminalText = String(current.text || '').trim();
+          break;
+        }
+        messages.push({
+          role: 'assistant',
+          content: current.text || '',
+          tool_calls: calls,
+        });
+        // 同一模型轮次给出的候选读取彼此独立；同时启动后仍按原调用顺序回填结果。
+        // 只消除网络串行等待，不改变候选、配额、判断或消息顺序。
+        const parallelReads = new Map<string, Promise<Record<string, unknown>>>();
+        for (const call of calls) {
+          if (call.function.name !== 'read_candidate') continue;
+          let args: { candidateId?: unknown } = {};
+          try {
+            args = JSON.parse(call.function.arguments) as typeof args;
+          } catch {
+            args = {};
+          }
+          const candidateId = typeof args.candidateId === 'string' ? args.candidateId.trim() : '';
+          parallelReads.set(call.id, readCandidate(candidateId));
+        }
+        for (const call of calls) {
+          ensureActive();
+          let output: Record<string, unknown>;
+          if (call.function.name === 'web_search') {
+            let args: { query?: unknown } = {};
+            try {
+              args = JSON.parse(call.function.arguments) as typeof args;
+            } catch {
+              args = {};
+            }
+            const searchQuery = typeof args.query === 'string'
+              ? args.query.replace(/\s+/g, ' ').trim().slice(0, 240)
+              : '';
+            if (!searchQuery) {
+              output = { ok: false, failureReason: '搜索词为空。' };
+            } else if (!searchedQueries.has(searchQuery) && searchedQueries.size >= MAX_SEARCH_CALLS) {
+              output = { ok: false, failureReason: '本轮搜索次数已到上限，请基于现有候选交付。' };
+            } else {
+              searchedQueries.add(searchQuery);
+              const began = Date.now();
+              try {
+                const hits = await searchWeb(searchQuery);
+                const candidates: Candidate[] = [];
+                for (const hit of hits.slice(0, 6)) {
+                  if (candidateById.size >= MAX_CANDIDATES) break;
+                  const url = canonicalUrl(String(hit.url || ''));
+                  if (!url || !sourceAllows({ url })) continue;
+                  let candidateId = candidateIdByUrl.get(url);
+                  if (!candidateId) {
+                    candidateId = 'candidate_' + createHash('sha256')
+                      .update(url)
+                      .digest('hex')
+                      .slice(0, 16);
+                    const candidate: Candidate = {
+                      candidateId,
+                      title: String(hit.title || url).trim().slice(0, 240),
+                      url,
+                      snippet: String(hit.snippet || '').trim().slice(0, 700),
+                      sourceName: sourceNameOf(url),
+                      source: 'web',
+                    };
+                    candidateIdByUrl.set(url, candidateId);
+                    candidateById.set(candidateId, candidate);
+                  }
+                  const candidate = candidateById.get(candidateId);
+                  if (candidate) candidates.push(candidate);
+                }
+                output = {
+                  ok: true,
+                  query: searchQuery,
+                  candidates,
+                  note: '候选不是已确认推荐；请整体判断，必要时继续搜索。',
+                };
+                logDiagnostic({
+                  phase: 'search',
+                  query: searchQuery,
+                  ms: Date.now() - began,
+                  candidates: candidates.length,
+                });
+              } catch (error) {
+                const networkCode = classifySearchFailure(error);
+                output = {
+                  ok: false,
+                  failureReason: networkCode === 'RATE_LIMITED'
+                    ? SEARCH_QUOTA_NOTICE
+                    : '联网搜索暂时失败。',
+                  networkCode,
+                };
+                logDiagnostic({ phase: 'search_error', query: searchQuery, networkCode });
+              }
+            }
+          } else if (call.function.name === 'read_candidate') {
+            output = await parallelReads.get(call.id)!;
+          } else if (call.function.name === 'present_results') {
+            let args: { summary?: unknown; selections?: unknown; emptyConfirmed?: unknown } = {};
+            try {
+              args = JSON.parse(call.function.arguments) as typeof args;
+            } catch {
+              args = {};
+            }
+            const rawSelections = Array.isArray(args.selections) ? args.selections.slice(0, 8) : [];
+            const selections: Selection[] = [];
+            const rejectedCandidateIds: string[] = [];
+            const unverifiedEntryCandidateIds: string[] = [];
+            const seen = new Set<string>();
+            for (const raw of rawSelections) {
+              const row = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+              const candidateId = typeof row.candidateId === 'string' ? row.candidateId.trim() : '';
+              const resultKind = row.resultKind === 'recommendation' ? 'recommendation' : 'candidate';
+              const candidate = candidateById.get(candidateId);
+              const entryKind = row.entryKind === 'full' || row.entryKind === 'preview' || row.entryKind === 'platform' || row.entryKind === 'basis'
+                ? row.entryKind
+                : undefined;
+              const title = typeof row.title === 'string' ? row.title.trim().slice(0, 240) : '';
+              const identityKey = resultKind === 'recommendation'
+                ? candidateId + '\n' + title.toLocaleLowerCase()
+                : candidateId;
+              if (
+                !candidateId ||
+                !candidateById.has(candidateId) ||
+                !identityKey ||
+                seen.has(identityKey) ||
+                (resultKind === 'recommendation' && !title)
+              ) {
+                if (candidateId && !candidateById.has(candidateId)) rejectedCandidateIds.push(candidateId);
+                continue;
+              }
+              if (
+                (entryKind === 'full' || entryKind === 'preview' || entryKind === 'platform') &&
+                (resultKind !== 'candidate' || !candidate?.readContent)
+              ) {
+                unverifiedEntryCandidateIds.push(candidateId);
+                continue;
+              }
+              seen.add(identityKey);
+              selections.push({
+                candidateId,
+                why: typeof row.why === 'string' ? row.why.trim().slice(0, 120) : '',
+                placement: row.placement === 'related' ? 'related' : 'main',
+                resultKind,
+                ...(title ? { title } : {}),
+                ...(typeof row.summary === 'string' && row.summary.trim()
+                  ? { summary: row.summary.trim().slice(0, 240) }
+                  : {}),
+                ...(typeof row.contentType === 'string' && row.contentType.trim()
+                  ? { contentType: row.contentType.trim().slice(0, 80) }
+                  : {}),
+                ...(typeof row.entrancePurpose === 'string' && row.entrancePurpose.trim()
+                  ? { entrancePurpose: row.entrancePurpose.trim().slice(0, 80) }
+                  : {}),
+                ...(row.channelUse === 'watch' || row.channelUse === 'discover' || row.channelUse === 'supplement'
+                  ? { channelUse: row.channelUse }
+                  : {}),
+                ...(entryKind ? { entryKind } : {}),
+                ...(typeof row.access === 'string' && row.access.trim()
+                  ? { access: row.access.trim().slice(0, 120) }
+                  : {}),
+              });
+            }
+            if (rejectedCandidateIds.length) {
+              output = {
+                ok: false,
+                failureReason: '存在没有由 web_search 返回的 candidateId，请只用现有候选重新交付。',
+                rejectedCandidateIds,
+              };
+            } else if (unverifiedEntryCandidateIds.length) {
+              output = {
+                ok: false,
+                failureReason: '完整观看、试看/预告或平台页必须先通过 read_candidate 读取该候选；请读取后重新交付，或改为 basis。',
+                unverifiedEntryCandidateIds,
+              };
+            } else if (
+              selections.length === 0 &&
+              candidateById.size > 0 &&
+              args.emptyConfirmed !== true &&
+              !emptyDeliveryChecked
+            ) {
+              emptyDeliveryChecked = true;
+              output = {
+                ok: false,
+                failureReason: '已有真实候选。请再整体检查一次：若多个独立来源明确支持具体对象，可用 resultKind=recommendation 交付且保留依据链接；若仍无合格对象，请再次空交付并设 emptyConfirmed=true。',
+                candidateCount: candidateById.size,
+              };
+            } else {
+              delivery = {
+                summary: typeof args.summary === 'string' ? args.summary.trim().slice(0, 360) : '',
+                selections,
+              };
+              output = { ok: true, acceptedCandidateIds: selections.map((row) => row.candidateId) };
+            }
+          } else {
+            output = { ok: false, failureReason: '未知工具。' };
+          }
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: JSON.stringify(output),
+          });
+        }
+        if (delivery) break;
+        current = await callModel();
+      }
+
+      const mainCards: DiscoverCard[] = [];
+      const relatedCards: DiscoverCard[] = [];
+      for (const [index, selection] of (delivery?.selections || []).entries()) {
+        const candidate = candidateById.get(selection.candidateId);
+        if (!candidate || !isSpecificUnifiedResultUrl(candidate.url)) continue;
+        const recommendation = selection.resultKind === 'recommendation' && !!selection.title;
+        const entryKindLabel = selection.entryKind === 'full'
+          ? '完整观看入口'
+          : selection.entryKind === 'preview'
+            ? '试看 / 预告 / 片段入口'
+            : selection.entryKind === 'platform'
+              ? '作品平台页'
+              : selection.entryKind === 'basis'
+                ? '发现依据，不是观看入口'
+                : '';
+        const entryPurpose = recommendation
+          ? '暂未核实到观看入口'
+          : entryKindLabel
+            ? entryKindLabel + (selection.entrancePurpose && selection.entrancePurpose !== entryKindLabel
+              ? ' · ' + selection.entrancePurpose
+              : '')
+            : selection.entrancePurpose || '';
+        const card: DiscoverCard = {
+          itemId: !recommendation && candidate.itemId ? candidate.itemId : ('chat_' + createHash('sha256')
+            .update(generationId + '\n' + candidate.url + '\n' + (selection.title || '') + '\n' + index)
+            .digest('hex')
+            .slice(0, 20)),
+          title: recommendation ? selection.title! : candidate.title,
+          text: recommendation
+            ? selection.summary || ''
+            : selection.summary || candidate.readContent?.slice(0, 700) || candidate.snippet,
+          ...(!recommendation ? { url: candidate.resolvedUrl || candidate.url } : {}),
+          publisherDisplayName: candidate.sourceName,
+          ...(candidate.publisherSubjectId ? { publisherSubjectId: candidate.publisherSubjectId } : {}),
+          ...(candidate.publishedAt ? { publishedAt: candidate.publishedAt } : {}),
+          reason: selection.why || '由当前模型结合本次请求与来源候选整体判断。',
+          source: candidate.source,
+          ...(!recommendation
+            ? { textOrigin: candidate.readContent ? 'body' as const : 'snippet' as const }
+            : {}),
+          access: recommendation
+            ? '当前没有核实到直接入口；可查看推荐依据'
+            : selection.access || (candidate.readContent
+              ? '已读取公开页面；实际观看仍受页面显示的登录、会员、地区或 App 条件约束'
+              : '仅见搜索摘要，尚未读取页面'),
+          ...(recommendation
+            ? { basisSource: { title: candidate.title, url: candidate.url } }
+            : {}),
+          ...(selection.contentType
+            ? { contentType: selection.contentType }
+            : candidate.contentType
+              ? { contentType: candidate.contentType }
+              : {}),
+          ...(entryPurpose ? { entrancePurpose: entryPurpose } : {}),
+          ...(!recommendation && selection.channelUse ? { channelUse: selection.channelUse } : {}),
+          ...(selection.entryKind === 'preview' ? { excerpt: true } : {}),
+        };
+        if (selection.placement === 'related') relatedCards.push(card);
+        else mainCards.push(card);
+      }
+      const summary = delivery?.summary || '';
+      const structureMissing = !delivery;
+      const notice = structureMissing
+        ? '当前模型未完成结构化交付；未退回旧 RSS、分批判断或固定候选链。'
+        : summary || (mainCards.length || relatedCards.length ? '' : '本轮没有获得合格结果。');
+      const responseText = !mainCards.length && !relatedCards.length
+        ? summary || (candidateById.size === 0 ? terminalText : '')
+        : '';
+      const view = base(notice, {
+        cards: mainCards,
+        relatedCards,
+        ...(relatedCards.length ? { relatedTitle: '相关材料与补充入口' } : {}),
+        ...(responseText ? { responseText } : {}),
+        searchUsage: usage,
+      });
+      logDiagnostic({
+        phase: 'complete',
+        searches: usage.calls,
+        candidates: candidateById.size,
+        selectedMain: mainCards.length,
+        selectedRelated: relatedCards.length,
+        structureMissing,
+      });
+      commitView(view);
+      if (mainCards.length && this.currentSearchGenerationId === generationId) {
+        await rememberIntentFeed(packageRoot, mainCards, query);
+      }
+      return view;
+    } catch (error) {
+      const stopped = signal.aborted || (error as Error)?.name === 'AbortError';
+      logDiagnostic({
+        phase: 'failed',
+        stopped,
+        networkCode: classifySearchFailure(error),
+      });
+      const responseText = stopped && signal.reason === 'superseded'
+        ? ''
+        : await this.explainSeekWithoutLiveResults(query, signal);
+      return commitView(base(
+        stopped ? '这次查找已停止。' : '推荐主链调用失败；未退回旧候选链。',
+        responseText ? { responseText, searchUsage: usage } : { searchUsage: usage },
+      ));
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
+  }
+
+  private async runContentSeek(
+    packageRoot: string,
+    query: string,
+    relayUrl?: string,
+    started?: { generationId: string; abort: AbortController },
+  ): Promise<DiscoverView> {
+    const generationId = started?.generationId || this.currentSearchGenerationId || this.beginSearchGeneration().generationId;
+    const abort = started?.abort || this.searchAbort;
+    const signal = abort.signal;
+    const seekDeadlineAt = Date.now() + SEEK_DEADLINE_MS;
+    const previousView = this.lastIntentView?.searchQuery === query ? this.lastIntentView : null;
+    const deadlineTimer = setTimeout(() => abort.abort('deadline'), SEEK_DEADLINE_MS);
+    deadlineTimer.unref();
+    const logDiagnostic = (row: object) => { void fs.appendFile(path.join(packageRoot, 'content', 'discovery-diagnostics.ndjson'), JSON.stringify({ at: nowIso(), generationId, ...row }) + '\n').catch(() => {}); };
+    const onAttempt = (row: import('../subject-comm/structured-call').StructuredAttempt) => logDiagnostic({ event: 'structured', ...row });
+    const seekRemainingMs = () => Math.max(1, seekDeadlineAt - Date.now());
+    const preferences = await this.contentPreferenceRows(packageRoot);
+    const sourceItems = await this.loadDiscoverItems(packageRoot, relayUrl);
+    const sourceAllows = contentSourceAllowed(await listContentPreferences(packageRoot), sourceItems);
+    const items = sourceItems.filter(item => sourceAllows({url:item.content.url,publisherSubjectId:item.publisherSubjectId}));
+    const networking = this.snapshotNetworkDiscovery();
+    const usage = { calls: 0, reused: 0, skippedAfterQuota: 0, rateLimited: false };
+    this.searchUsage = { generationId, usage };
+    const rawSearch = this.resolveContentSearch();
+    const searchWeb = this.wrapContentSearch(rawSearch ? async (query, passedSignal) => {
+      try { const hits = await rawSearch(query, passedSignal); logDiagnostic({ event: 'search', stage: 'discover.search', httpStatus: null, candidates: hits.length }); return hits; }
+      catch (err) { const detail = (err as { diagnostic?: import('../infrastructure/model-http').ModelCallDiagnostic }).diagnostic;
+        const errorCode = /^[a-zA-Z0-9_.:-]{1,80}$/.test(String((err as Error)?.message || ''))
+          ? String((err as Error).message)
+          : undefined;
+        logDiagnostic({ event: 'search_error', ...(errorCode ? { errorCode } : {}), ...(detail || { stage: 'discover.search', httpStatus: null, finishReason: null, outputLength: null, parseError: null, cancellation: signal.aborted ? (signal.reason === 'user' ? 'user' : signal.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: signal.aborted ? 'cancelled' : 'network' }) }); throw err; }
+    } : undefined, signal, usage);
+    const rawChat = this.resolveContentChat();
+    const chatCompleteFn: import('../subject-core/structured-distill').ChatCompleteFn | undefined = rawChat ? async (request) => {
+      if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request cancelled'), { name: 'AbortError' });
+      const began = Date.now();
+      try {
+        const result = await rawChat({ ...request, signal, deadlineAt: seekDeadlineAt,
+        timeoutMs: Math.min(request.timeoutMs ?? SEEK_DEADLINE_MS, seekRemainingMs()) });
+        logDiagnostic({ event: 'model', ms: Date.now()-began, ...(result.diagnostic || { stage: request.stage || 'discover.model', httpStatus: null, finishReason: /^[a-z_]{1,40}$/.test(result.finishReason || '') ? result.finishReason : null, outputLength: result.text.length, parseError: null, cancellation: signal.aborted ? 'caller' : null, failure: result.truncated ? 'truncated' : null }) });
+        if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request cancelled'), { name: 'AbortError' });
+        return result;
+      } catch (err) {
+        const detail = (err as { diagnostic?: import('../infrastructure/model-http').ModelCallDiagnostic }).diagnostic;
+        logDiagnostic({ event: 'model_error', ms: Date.now()-began, ...(detail || { stage: request.stage || 'discover.model', httpStatus: null, finishReason: null, outputLength: null, parseError: null, cancellation: signal.aborted ? (signal.reason === 'user' ? 'user' : signal.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: signal.aborted ? 'cancelled' : 'network' }) });
+        throw err;
+      }
+    } : undefined;
+    const model = this.resolveContentModel();
+    const rawOpenMedia = this.resolveOpenMediaFetch();
+    const openMedia: typeof safePublicHttpGet | undefined = rawOpenMedia ? async (url, headers, redirects, deps) => {
+      if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request stopped'), { name: 'AbortError' });
+      const result = await rawOpenMedia(url, headers, redirects, { ...deps, signal, deadlineAt: seekDeadlineAt, timeoutMs: Math.min(deps?.timeoutMs ?? SEEK_DEADLINE_MS, seekRemainingMs()) });
+      logDiagnostic({ event: 'page', stage: 'discover.read', httpStatus: result.status, outputLength: result.body.length });
+      if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request stopped'), { name: 'AbortError' });
+      return result;
+    } : undefined;
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
+      if (!sourceAllows(hit)) return [];
+      if (signal.aborted) return [];
+      if (!allowsDefaultSupply({ url: hit.url })) return [];
       try {
+        const entrance = await ingestDiscoveredEntrance({
+          url: hit.url,
+          store,
+          limit: 8,
+          signal,
+        });
+        if (entrance) {
+          const kept = entrance.map((item) => preferProviderSnippet(item, hit.snippet));
+          for (let i = 0; i < kept.length; i += 1) {
+            if (kept[i] !== entrance[i]) await store.put(kept[i]!);
+          }
+          return kept;
+        }
+        if (signal.aborted) return [];
         const ingested = await ingestSource({
           sourceUrl: hit.url,
           store,
           limit: 4,
           via: 'search',
+          signal,
         });
-        if (ingested.items.length) return ingested.items;
+        if (ingested.items.length) {
+          if (signal.aborted) return [];
+          const kept = ingested.items.map((item) => preferProviderSnippet(item, hit.snippet));
+          for (let i = 0; i < kept.length; i += 1) {
+            if (kept[i] !== ingested.items[i]) await store.put(kept[i]!);
+          }
+          return kept;
+        }
       } catch {
         /* 单条公开页摄入失败时退回搜索命中 */
       }
+      if (signal.aborted) return [];
       return indexSearchHits({ hits: [hit], store, limit: 1 });
     };
     const failedView = (err: unknown): DiscoverView => {
-      this.lastNetworkCode = classifySearchFailure(err);
+      if (err instanceof DiscoverIntentError || err instanceof ManagedAiError) {
+        return {
+          headline: '发现',
+          lead: '根据你刚说的话找的内容。这次模型没有完成判断，没有改动为你发现里的列表。',
+          feedTitle: `关于「${query}」`,
+          cards: previousView?.cards || [],
+          relatedCards: previousView?.relatedCards || [],
+          unjudgedCards: previousView?.unjudgedCards || [],
+          replenishing: false,
+          preferences,
+          notice: err.message,
+          networking,
+          reasonCode: 'CURRENT_INTENT',
+          feedMode: 'intent',
+          searchQuery: query,
+          searchGenerationId: generationId,
+        };
+      }
+      this.lastNetworkCode = usage.rateLimited ? 'RATE_LIMITED' : classifySearchFailure(err);
+      const quota = this.lastNetworkCode === 'RATE_LIMITED';
       return {
         headline: '发现',
-        lead: '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
+        lead: quota
+          ? '根据你刚说的话找的内容。联网搜索额度用完了，没有改动为你发现里的列表。'
+          : '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
         feedTitle: `关于「${query}」`,
-        cards: [],
-        relatedCards: [],
+        cards: previousView?.cards || [],
+        relatedCards: previousView?.relatedCards || [],
+          unjudgedCards: previousView?.unjudgedCards || [],
+          replenishing: false,
         preferences,
-        notice: '暂时无法获取新内容，可以稍后再试或检查联网设置。',
+        notice: quota ? SEARCH_QUOTA_NOTICE : '暂时无法获取新内容，可以稍后再试或检查联网设置。',
         networking: this.lastNetworkCode,
-        reasonCode: this.lastNetworkCode === 'AUTH_FAILED' ? 'NETWORK_AUTH_FAILED' : 'NETWORK_TEMPORARY_ERROR',
+        reasonCode: quota
+          ? 'NETWORK_RATE_LIMITED'
+          : this.lastNetworkCode === 'AUTH_FAILED'
+            ? 'NETWORK_AUTH_FAILED'
+            : 'NETWORK_TEMPORARY_ERROR',
         feedMode: 'intent',
         searchQuery: query,
         searchGenerationId: generationId,
+        ...this.searchUsageOf(generationId),
       };
     };
     try {
-      const intent =
+      const intentPromise =
         chatCompleteFn && model
-          ? await interpretDiscoverIntent({
+          ? interpretDiscoverIntent({
               query,
               chatComplete: chatCompleteFn,
               model,
+              signal,
+              deadlineAt: seekDeadlineAt,
+              onAttempt,
             })
-          : defaultDiscoverIntent(query);
+          : Promise.resolve(defaultDiscoverIntent(query));
+      const intentReady = await intentPromise;
+      if (generationId !== this.currentSearchGenerationId) {
+        const intent = await intentPromise;
+        const empty = await seekContent({ query, items, intent });
+        return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
+      }
+      let headlines: Awaited<ReturnType<typeof fetchNewsHeadlines>> = [];
+      let newsFailed = false;
+      if (intentReady.newsFeed) {
+        try {
+          headlines = await this.filterSourceSearchHits(await fetchNewsHeadlines(
+            intentReady.searchQueries[0] || query,
+            fetch,
+            new Date(),
+            signal,
+            searchWeb,
+          ));
+        } catch {
+          newsFailed = true;
+          headlines = [];
+        }
+      }
+      if (generationId !== this.currentSearchGenerationId) {
+        const empty = await seekContent({ query, items, intent: intentReady });
+        return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
+      }
+      const wantsPlayableMedia = intentReady.requestedMedia.some(
+        (row) => row === 'audio' || row === 'video' || row === 'image',
+      );
+      if (headlines.length && chatCompleteFn && model && !wantsPlayableMedia) {
+        const judged = await seekContent({
+          query,
+          items,
+          intent: intentReady,
+          newsHeadlines: headlines,
+          skipWeb: true,
+          signal,
+          chatComplete: chatCompleteFn,
+          model,
+        });
+        if (generationId !== this.currentSearchGenerationId) {
+          return this.intentViewFromSeek(query, judged, preferences, networking, generationId, { replenishing: false });
+        }
+        this.pendingSeekMerge = {
+          generationId,
+          abort,
+          firstNotice: judged.notice,
+          leftover: settleBackgroundSeek((async () => {
+            try {
+              if (generationId !== this.currentSearchGenerationId || signal.aborted) return null;
+              return await seekContent({
+                query,
+                items,
+                intent: intentReady,
+                newsHeadlines: headlines,
+                previous: { cards: judged.cards, relatedCards: judged.relatedCards },
+                ingestHit,
+                signal,
+                ...(searchWeb ? { searchWeb } : {}),
+                ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+                chatComplete: chatCompleteFn,
+                model,
+                deadlineAt: seekDeadlineAt,
+                onAttempt,
+              });
+            } catch {
+              return null;
+            }
+          })(), seekRemainingMs(), abort),
+        };
+        const view = this.intentViewFromSeek(query, judged, preferences, networking, generationId, {
+          replenishing: true,
+        });
+        this.lastIntentView = view;
+        return view;
+      }
+      // 快速摘要用后面正式搜索的第一个搜索词：结果在本次请求里复用，不多花一次搜索。
+      // 要看/听节目时摘要预览不会展示，不发这次搜索。
+      const quickHits =
+        wantsPlayableMedia || !searchWeb
+          ? []
+          : await searchWeb(intentReady.searchQueries[0] || query).catch(() => []);
+      if (quickHits.length) {
+        const archived = await indexSearchHits({ hits: quickHits, store, limit: quickHits.length });
+        const snippets = snippetCardsFromHits(quickHits).map(card => ({ ...card, itemId: archived.find(item => item.content.url === card.url)?.itemId || card.itemId }));
+        this.pendingSeekMerge = {
+          generationId,
+          abort,
+          leftover: settleBackgroundSeek((async () => {
+            try {
+              if (generationId !== this.currentSearchGenerationId || signal.aborted) return null;
+              return await seekContent({
+                query,
+                items,
+                intent: intentReady,
+                ingestHit,
+                signal,
+                ...(searchWeb ? { searchWeb } : {}),
+                ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+                ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+                deadlineAt: seekDeadlineAt,
+                onAttempt,
+              });
+            } catch {
+              return null;
+            }
+          })(), seekRemainingMs(), abort),
+        };
+        const preview: DiscoverView = {
+          headline: '发现',
+          lead: `根据你刚说的话找「${query}」，只显示这次搜索范围内的内容。`,
+          feedTitle: `关于「${query.slice(0, 24)}」`,
+          cards: previousView?.cards || [],
+          relatedCards: previousView?.relatedCards || [],
+          unjudgedCards: snippets,
+          unjudgedTitle: '来源摘要已经返回，还没核对是不是这次要的内容',
+          preferences,
+          notice: newsFailed
+            ? '新闻来源这次没有返回。这些是网页搜索摘要，不是已确认的报道，也还没有读取正文。'
+            : '这些是来源摘要，不是已确认的报道。正在读正文并核对。',
+          reasonCode: 'CURRENT_INTENT',
+          feedMode: 'intent',
+          searchQuery: query,
+          networking,
+          searchGenerationId: generationId,
+          replenishing: true,
+          ...this.searchUsageOf(generationId),
+        };
+        this.lastIntentView = preview;
+        return preview;
+      }
+      const intent = intentReady;
       if (generationId !== this.currentSearchGenerationId) {
         const empty = await seekContent({ query, items, intent });
         return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
@@ -839,7 +2838,11 @@ export class DigitalMeRuntime {
         items,
         intent,
         ingestHit,
+        signal,
+        ...(headlines.length ? { newsHeadlines: headlines } : {}),
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+        deadlineAt: seekDeadlineAt,
+                onAttempt,
       };
       const firstWave = () =>
         seekContent({
@@ -854,6 +2857,7 @@ export class DigitalMeRuntime {
               ...common,
               searchWeb,
               skipOpenMedia: true,
+              ...(openMedia ? { openPage: openMedia } : {}),
             })
         : null;
       if (!webWave) {
@@ -866,61 +2870,91 @@ export class DigitalMeRuntime {
         this.lastIntentView = view;
         return view;
       }
+      let settledWaves = 0;
       const mediaResult = firstWave().then(
         (r) => r,
         (err) => {
           this.lastNetworkCode = classifySearchFailure(err);
           return null;
         },
-      );
+      ).finally(() => { settledWaves += 1; });
       const webResult = webWave().then(
         (r) => r,
         (err) => {
           this.lastNetworkCode = classifySearchFailure(err);
           return null;
         },
-      );
-      const first = await Promise.race([
-        mediaResult.then((r) => ({ src: 'media' as const, r })),
-        webResult.then((r) => ({ src: 'web' as const, r })),
-      ]);
-      let firstResult = first.r;
+      ).finally(() => { settledWaves += 1; });
+      const mergeWaves = (parts: Array<ContentSeekResult | null>): ContentSeekResult | null => {
+        const ok = parts.filter((row): row is ContentSeekResult => !!row);
+        if (!ok.length) return null;
+        if (ok.length === 1) return ok[0]!;
+        const mergedCards = mergeSeekCardSets(
+          { cards: ok[0]!.cards, relatedCards: ok[0]!.relatedCards },
+          { cards: ok[1]!.cards, relatedCards: ok[1]!.relatedCards },
+        );
+        return {
+          ...ok[1]!,
+          cards: mergedCards.cards,
+          relatedCards: mergedCards.relatedCards,
+          unjudgedCards: [...(ok[0]!.unjudgedCards || []), ...(ok[1]!.unjudgedCards || [])].slice(0, 8),
+          accessCards: [...(ok[0]!.accessCards || []), ...(ok[1]!.accessCards || [])].slice(0, 8),
+          usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
+          usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
+          notice: mergedCards.cards.length
+            ? (ok[1]!.cards.length ? ok[1]!.notice : '') || (ok[0]!.cards.length ? ok[0]!.notice : '')
+            : ok[1]!.notice || ok[0]!.notice,
+        };
+      };
+      const firstResult = await settleBackgroundSeek((async () => {
+        const first = wantsPlayableMedia
+          ? await (async () => {
+              const media = await mediaResult;
+              if (media) return { src: 'media' as const, r: media };
+              return { src: 'web' as const, r: await webResult };
+            })()
+          : await Promise.race([
+              mediaResult.then((r) => ({ src: 'media' as const, r })),
+              webResult.then((r) => ({ src: 'web' as const, r })),
+            ]);
+        return first.r || (first.src === 'media' ? await webResult : await mediaResult);
+      })(), seekRemainingMs(), abort);
       if (!firstResult) {
-        const other = first.src === 'media' ? await webResult : await mediaResult;
-        if (!other) throw Object.assign(new Error('search failed'), { status: 503 });
-        firstResult = other;
+        throw Object.assign(new Error(signal.aborted ? 'search stopped' : 'search failed'), { status: 503 });
       }
       if (generationId !== this.currentSearchGenerationId) {
         return this.intentViewFromSeek(query, firstResult, preferences, networking, generationId, { replenishing: false });
+      }
+      if (settledWaves === 2) {
+        const final = mergeWaves(await Promise.all([mediaResult, webResult])) || firstResult;
+        if (final.cards.length) await rememberIntentFeed(packageRoot, final.cards, query);
+        const done = this.intentViewFromSeek(query, final, preferences, networking, generationId, { replenishing: false });
+        this.lastIntentView = done;
+        return done;
       }
       if (firstResult.cards.length) await rememberIntentFeed(packageRoot, firstResult.cards, query);
       const view = this.intentViewFromSeek(query, firstResult, preferences, networking, generationId, { replenishing: true });
       this.lastIntentView = view;
       this.pendingSeekMerge = {
         generationId,
-        leftover: Promise.all([mediaResult, webResult]).then((parts) => {
-          const ok = parts.filter((row): row is ContentSeekResult => !!row);
-          if (!ok.length) return null;
-          if (ok.length === 1) return ok[0]!;
-          const mergedCards = mergeSeekCardSets(
-            { cards: ok[0]!.cards, relatedCards: ok[0]!.relatedCards },
-            { cards: ok[1]!.cards, relatedCards: ok[1]!.relatedCards },
-          );
-          return {
-            ...ok[1]!,
-            cards: mergedCards.cards,
-            relatedCards: mergedCards.relatedCards,
-            usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
-            usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
-            notice: mergedCards.cards.length ? ok[1]!.notice || ok[0]!.notice : ok[0]!.notice || ok[1]!.notice,
-          };
-        }),
+        abort,
+        firstNotice: firstResult.notice,
+        leftover: settleBackgroundSeek(Promise.all([mediaResult, webResult]).then((parts) => {
+          if (signal.aborted || generationId !== this.currentSearchGenerationId) return null;
+          return mergeWaves(parts);
+        }), seekRemainingMs(), abort),
       };
       return view;
     } catch (err) {
       const view = failedView(err);
+      if (!signal.aborted && !view.cards.length) {
+        view.responseText = await this.explainSeekWithoutLiveResults(query, signal);
+      }
       if (generationId === this.currentSearchGenerationId) this.lastIntentView = view;
       return view;
+    } finally {
+      if (this.pendingSeekMerge?.generationId === generationId) void this.pendingSeekMerge.leftover.finally(() => clearTimeout(deadlineTimer));
+      else clearTimeout(deadlineTimer);
     }
   }
 
@@ -944,25 +2978,51 @@ export class DigitalMeRuntime {
   }
 
   private wrapContentSearch(
-    searchWeb: ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined,
+    searchWeb:
+      | ((query: string, signal?: AbortSignal) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+      | undefined,
+    signal?: AbortSignal,
+    usage?: NonNullable<DiscoverView['searchUsage']>,
   ): ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined {
     if (!searchWeb) return undefined;
-    return async (query: string) => {
-      try {
-        const hits = await searchWeb(query);
-        this.lastNetworkCode = 'AVAILABLE';
-        return hits;
-      } catch (err) {
-        this.lastNetworkCode = classifySearchFailure(err);
-        throw err;
+    type Hits = Array<{ title: string; url: string; snippet?: string }>;
+    // 托管搜索按次计额度（缓存命中也计）：同一请求里同一个搜索词只发一次；额度用完后不再发。
+    const memo = new Map<string, Promise<Hits>>();
+    return (query: string) => {
+      if (signal?.aborted) {
+        return Promise.reject(Object.assign(new Error('search aborted'), { name: 'AbortError' }));
       }
+      const key = String(query || '').replace(/\s+/g, ' ').trim();
+      const known = memo.get(key);
+      if (known) {
+        if (usage) usage.reused += 1;
+        return known;
+      }
+      if (usage?.rateLimited) {
+        usage.skippedAfterQuota += 1;
+        return Promise.reject(Object.assign(new Error('rate_limited'), { status: 'RATE_LIMITED', httpStatus: 429 }));
+      }
+      if (usage) usage.calls += 1;
+      const pending = (async () => {
+        try {
+          const hits = await searchWeb(query, signal);
+          this.lastNetworkCode = 'AVAILABLE';
+          return hits;
+        } catch (err) {
+          this.lastNetworkCode = classifySearchFailure(err);
+          if (usage && this.lastNetworkCode === 'RATE_LIMITED') usage.rateLimited = true;
+          throw err;
+        }
+      })();
+      memo.set(key, pending);
+      return pending;
     };
   }
 
   private resolveContentSearch():
-    | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+    | ((query: string, signal?: AbortSignal) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
     | undefined {
-    if (this.options.contentSearch) return this.options.contentSearch;
+    if (this.options.contentSearch) return async query => this.filterSourceSearchHits(await this.options.contentSearch!(query));
     const gem = resolveGeminiSearchCredential(
       process.env.NODE_TEST_CONTEXT ? {} : process.env,
       {
@@ -974,64 +3034,80 @@ export class DigitalMeRuntime {
       process.env.NODE_TEST_CONTEXT ? {} : process.env,
       { gatewayUrl: this.options.webDiscoveryGatewayUrl },
     );
-    const path = resolveWebDiscoveryPath({
+    const discoveryPath = resolveWebDiscoveryPath({
       path: this.options.webDiscoveryPath,
       gatewayUrl,
       byokKey: gem.apiKey,
     });
-    if (path === 'byok' && gem.apiKey) {
+    if (discoveryPath === 'byok' && gem.apiKey) {
       const connector = createGeminiSearchConnector({
         apiKey: gem.apiKey,
         ...(gem.model ? { model: gem.model } : {}),
       });
-      return async (query: string) => {
-        const sources = await connector.search(query);
-        return sources
+      return async (query: string, signal?: AbortSignal) => {
+        const sources = await connector.search(query, signal ? { signal } : undefined);
+        return this.filterSourceSearchHits(sources
           .filter((row) => String(row.url || '').trim())
           .map((row) => ({
             title: String(row.title || row.url),
             url: String(row.url),
             ...(row.snippet ? { snippet: row.snippet } : {}),
-          }));
+          })));
       };
     }
-    if (path === 'managed' && gatewayUrl) {
+    if (discoveryPath === 'managed' && gatewayUrl) {
       const connector = createManagedWebDiscoveryConnector({
         gatewayUrl,
         installToken: String(this.options.webDiscoveryInstallToken || '').trim() || 'missing-install-token',
         ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
+        onDiagnostic: (row) => {
+          const pkg = this.subject.getActive();
+          if (pkg) void fs.appendFile(path.join(pkg.rootDir, 'content', 'discovery-diagnostics.ndjson'), JSON.stringify({ at: nowIso(), generationId: this.currentSearchGenerationId, event: 'search_transport', ...row }) + '\n').catch(() => {});
+        },
       });
-      return async (query: string) => {
-        const sources = await connector.search(query);
-        return sources
+      return async (query: string, signal?: AbortSignal) => {
+        const sources = await connector.search(query, signal ? { signal } : undefined);
+        return this.filterSourceSearchHits(sources
           .filter((row) => String(row.url || '').trim())
           .map((row) => ({
             title: String(row.title || row.url),
             url: String(row.url),
             ...(row.snippet ? { snippet: row.snippet } : {}),
-          }));
+          })));
       };
     }
     return undefined;
   }
 
+  private async filterSourceSearchHits<T extends {url?: string; publisherSubjectId?: string}>(hits: T[]): Promise<T[]> {
+    const pkg = this.subject.getActive();
+    if (!pkg) return hits;
+    const allowed = contentSourceAllowed(await listContentPreferences(pkg.rootDir), await this.loadDiscoverItems(pkg.rootDir));
+    return hits.filter(allowed);
+  }
+
   private resolveContentChat(): ChatCompleteFn | null {
-    if (this.options.contentChat) return this.options.contentChat;
-    const understanding = resolveSubjectUnderstandingRuntime({
-      ...(this.options.subjectUnderstanding
-        ? { specialist: this.options.subjectUnderstanding }
-        : {}),
-      ...(this.options.documentCapability !== undefined
-        ? { documentCapability: this.options.documentCapability }
-        : {}),
-      ...(this.options.openaiCompatible
-        ? { openaiCompatible: this.options.openaiCompatible }
-        : {}),
-      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
-    });
-    const runtime = understanding.runtime;
-    if (!runtime?.enabled) return null;
-    return async (options) => runtime.chatComplete(options);
+    const inner = this.options.contentChat
+      ? this.options.contentChat
+      : (() => {
+          const understanding = resolveSubjectUnderstandingRuntime({
+            ...(this.options.subjectUnderstanding
+              ? { specialist: this.options.subjectUnderstanding }
+              : {}),
+            ...(this.options.documentCapability !== undefined
+              ? { documentCapability: this.options.documentCapability }
+              : {}),
+            ...(this.options.openaiCompatible
+              ? { openaiCompatible: this.options.openaiCompatible }
+              : {}),
+            ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+          });
+          const runtime = understanding.runtime;
+          if (!runtime?.enabled) return null;
+          return (options: Parameters<ChatCompleteFn>[0]) => runtime.chatComplete(options);
+        })();
+    if (!inner) return null;
+    return inner;
   }
 
   private resolveContentModel(): { baseUrl: string; model: string; apiKey?: string } | null {
@@ -1062,15 +3138,28 @@ export class DigitalMeRuntime {
     const relayUrl = String(relayUrlInput || (await this.readStoredRelayUrl(packageRoot)) || '').trim();
     if (relayUrl) {
       try {
-        const listed = await new RelayClient(relayUrl).listNetworkItems({ kind: 'content', visibility: 'public' });
-        if (listed.items.length) return listed.items;
+        const client = new RelayClient(relayUrl);
+        const all: NetworkItem[] = [];
+        let cursor: string | undefined;
+        for (let page = 0; page < 50; page += 1) {
+          const listed = await client.listNetworkItems({
+            kind: 'content',
+            visibility: 'public',
+            limit: 100,
+            ...(cursor ? { cursor } : {}),
+          });
+          all.push(...listed.items);
+          cursor = listed.nextCursor;
+          if (!cursor || !listed.items.length) break;
+        }
+        if (all.length) return all;
       } catch {
         /* 回退本地目录 */
       }
     }
+    // 取数拿全目录；"哪些值得看、先看哪些"留给后面的候选池与模型排序，这里不按固定窗口截断。
     const local = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-    const listed = await local.list({ kind: 'content', visibility: 'public', limit: 80 }, nowIso());
-    return listed.items;
+    return local.listAll({ kind: 'content', visibility: 'public' }, nowIso());
   }
 
   private async readStoredRelayUrl(packageRoot: string): Promise<string> {
@@ -1093,6 +3182,14 @@ export class DigitalMeRuntime {
           return { rootDir: pkg.rootDir, subjectId: pkg.id };
         },
         this.resolveDigitalSelfChat(),
+        nowIso,
+        async (sourceCopy) => {
+          const pkg = this.subject.getActive();
+          if (!pkg) return;
+          const thread = await readThread(pkg.rootDir, nowIso());
+          thread.materialPaths = [...new Set([...(thread.materialPaths || []), sourceCopy])];
+          await writeThread(pkg.rootDir, thread);
+        },
       );
     }
     return this.digitalSelfService;
@@ -1136,23 +3233,32 @@ export class DigitalMeRuntime {
               }),
           };
         },
-        async (text) => {
-          const learned = await this.getDigitalSelfService().invoke({ action: 'tell', text });
-          if (!learned.view.asked) return { asked: false };
+        async (text, taskContext, signal) => {
+          const learned = await this.getDigitalSelfService().invoke(
+            { action: 'tell', text },
+            taskContext,
+            signal,
+          );
+          if (!learned.view.asked) return { asked: false, ...(learned.goalUpdate ? {goalUpdate:learned.goalUpdate} : {}) };
           const pending = learned.view.groups.learning
             .filter((item) => item.confirmationLabel === '需要你确认')
             .map((item) => item.text)
             .filter(Boolean);
           return pending.length
-            ? { asked: true, askHint: pending.join('；') }
-            : { asked: true };
+            ? { asked: true, askHint: pending.join('；'), goalUpdate: learned.goalUpdate }
+            : { asked: true, goalUpdate: learned.goalUpdate };
         },
         async (pkg, query) => {
           const items = await this.loadDiscoverItems(pkg.rootDir);
-          const sought = await seekContent({ query, items });
+          const directives = await listContentPreferences(pkg.rootDir);
+          const allows = contentSourceAllowed(directives, items);
+          const sought = await seekContent({ query, items: items.filter(item => allows({url:item.content.url,publisherSubjectId:item.publisherSubjectId})) });
           return formatSeekContext(sought);
         },
         this.options.requestFolderAccess,
+        () => this.resolveContentSearch(),
+        () => async (query: string) =>
+          this.filterSourceSearchHits(await fetchNewsHeadlines(query, fetch, new Date(), undefined, this.resolveContentSearch())),
       );
     }
     return this.talkService;
@@ -1318,6 +3424,52 @@ export class DigitalMeRuntime {
 
   private resolveTalkChat(): TalkChatFn | null {
     if (this.options.talkChat) return this.options.talkChat;
+    const responsesConfig = this.options.openaiCompatible;
+    if (responsesConfig && this.options.secrets && supportsResponsesToolLoop(responsesConfig)) {
+      return async ({ messages, tools, signal, timeoutMs }) => {
+        const apiKey = await this.options.secrets!.get(
+          providerCredentialKey(responsesConfig.providerId || 'openai-compatible'),
+        );
+        if (!apiKey) throw new ModelHttpError('unauthorized', 'model credential is not configured');
+        const result = await runResponsesTurn({
+          baseUrl: responsesConfig.baseUrl,
+          apiKey,
+          model: responsesConfig.model,
+          messages,
+          ...(tools?.length ? { tools } : {}),
+          ...(signal ? { signal } : {}),
+          timeoutMs: typeof timeoutMs === 'number' && Number.isFinite(timeoutMs)
+            ? Math.max(timeoutMs, 240_000)
+            : 240_000,
+          maxOutputTokens: 8192,
+          onEvent: (event) => this.options.capabilityEventSink?.({
+            surface: 'talk',
+            requestId: this.activeTalkRequestId,
+            ...event,
+          }),
+        });
+        const pkg = this.subject.getActive();
+        if (pkg) {
+          const contentDir = path.join(pkg.rootDir, 'content');
+          await fs.mkdir(contentDir, { recursive: true }).catch(() => undefined);
+          await fs.appendFile(
+            path.join(contentDir, 'talk-diagnostics.ndjson'),
+            JSON.stringify({
+              at: nowIso(),
+              surface: 'talk',
+              phase: 'main_talk',
+              requestId: this.activeTalkRequestId,
+              trace: result.trace,
+            }) + '\n',
+          ).catch(() => undefined);
+        }
+        return {
+          text: result.text,
+          ...(result.toolCalls?.length ? { toolCalls: result.toolCalls } : {}),
+          capabilityTrace: result.trace,
+        };
+      };
+    }
     const understanding = resolveSubjectUnderstandingRuntime({
       ...(this.options.subjectUnderstanding
         ? { specialist: this.options.subjectUnderstanding }
@@ -1359,6 +3511,46 @@ export class DigitalMeRuntime {
 
   private resolveDigitalSelfChat(): DigitalSelfChatFn | null {
     if (this.options.digitalSelfChat) return this.options.digitalSelfChat;
+    const responsesConfig = this.options.openaiCompatible;
+    if (responsesConfig && this.options.secrets && supportsResponsesToolLoop(responsesConfig)) {
+      return async ({ messages, signal }) => {
+        const apiKey = await this.options.secrets!.get(
+          providerCredentialKey(responsesConfig.providerId || 'openai-compatible'),
+        );
+        if (!apiKey) throw new ModelHttpError('unauthorized', 'model credential is not configured');
+        const result = await runResponsesTurn({
+          baseUrl: responsesConfig.baseUrl,
+          apiKey,
+          model: responsesConfig.model,
+          messages,
+          includeWebTools: false,
+          ...(signal ? { signal } : {}),
+          timeoutMs: 180_000,
+          maxOutputTokens: 8192,
+          onEvent: (event) => this.options.capabilityEventSink?.({
+            surface: 'talk',
+            requestId: this.activeTalkRequestId,
+            ...event,
+          }),
+        });
+        const pkg = this.subject.getActive();
+        if (pkg) {
+          const contentDir = path.join(pkg.rootDir, 'content');
+          await fs.mkdir(contentDir, { recursive: true }).catch(() => undefined);
+          await fs.appendFile(
+            path.join(contentDir, 'talk-diagnostics.ndjson'),
+            JSON.stringify({
+              at: nowIso(),
+              surface: 'talk',
+              phase: 'digital_self_interpret',
+              requestId: this.activeTalkRequestId,
+              trace: result.trace,
+            }) + '\n',
+          ).catch(() => undefined);
+        }
+        return { text: result.text };
+      };
+    }
     const understanding = resolveSubjectUnderstandingRuntime({
       ...(this.options.subjectUnderstanding
         ? { specialist: this.options.subjectUnderstanding }
@@ -1373,13 +3565,14 @@ export class DigitalMeRuntime {
     });
     const runtime = understanding.runtime;
     if (!runtime?.enabled) return null;
-    return async ({ messages }) => {
+    return async ({ messages, signal }) => {
       const result = await runtime.chatComplete({
         messages,
         baseUrl: runtime.model.baseUrl,
         model: runtime.model.model,
         temperature: 0.2,
         responseFormat: { type: 'json_object' },
+        ...(signal ? { signal } : {}),
         // 单次 interpret 与 Talk 整轮同级：完整资料 JSON 比闲聊更长，不得比 Talk 更短。
         timeoutMs: 180_000,
       });
@@ -1689,8 +3882,28 @@ export class DigitalMeRuntime {
 
   async importSubjectMaterial(input: CommandMap['subject.importMaterial']['input']) {
     const result = await this.subject.importSubjectMaterial(input);
+    await this.bindImportedMaterialToCurrentTalk(result.materialRef);
     await this.maybeRecordGrowthStage();
     return result;
+  }
+
+  /** 导入的包内副本进入当前对话线程。不是语义选文件，只绑定这次导入的真实路径。 */
+  private async bindImportedMaterialToCurrentTalk(materialRef: string): Promise<void> {
+    const pkg = this.subject.getActive();
+    if (!pkg) return;
+    const dest = path.join(pkg.rootDir, ...String(materialRef || '').split('/').filter(Boolean));
+    try {
+      await fs.access(dest);
+    } catch {
+      return;
+    }
+    const now = nowIso();
+    const thread = await readThread(pkg.rootDir, now);
+    const next = [...new Set([...(thread.materialPaths || []), dest])];
+    if (next.length === (thread.materialPaths || []).length) return;
+    thread.materialPaths = next;
+    thread.updatedAt = now;
+    await writeThread(pkg.rootDir, thread);
   }
 
   removeSubjectMaterial(input: CommandMap['subject.removeMaterial']['input']) {
@@ -3381,18 +5594,66 @@ export class DigitalMeRuntime {
     return currentConversationFilePathSync(pkg.rootDir);
   }
 
-  listConversationSessions(): { currentId: string; sessions: Array<{ id: string; title: string; createdAt: string; updatedAt: string }> } {
+  listConversationSessions(): ReturnType<typeof listConversationSessionsSync> {
     const pkg = this.subject.requireActive();
     return listConversationSessionsSync(pkg.rootDir);
   }
 
+  /** 对话管理：改名、归档、项目、删除。全部落在同一份会话索引上。 */
+  manageConversation(input: {
+    op: 'rename' | 'archive' | 'unarchive' | 'move' | 'delete' | 'createProject' | 'renameProject' | 'removeProject';
+    id?: string;
+    title?: string;
+    projectId?: string | null;
+    scope?: string;
+  }): ReturnType<typeof listConversationSessionsSync> {
+    const pkg = this.subject.requireActive();
+    const root = pkg.rootDir;
+    const id = String(input.id || '').trim();
+    switch (input.op) {
+      case 'rename':
+        renameConversationSessionSync(root, id, String(input.title || ''));
+        break;
+      case 'archive':
+        archiveConversationSessionSync(root, id, true);
+        break;
+      case 'unarchive':
+        archiveConversationSessionSync(root, id, false);
+        break;
+      case 'move':
+        moveConversationSessionSync(root, id, input.projectId ? String(input.projectId) : null);
+        break;
+      case 'delete':
+        deleteConversationSessionSync(root, id, String(input.scope || ''));
+        break;
+      case 'createProject': {
+        const project = createConversationProjectSync(root, String(input.title || ''));
+        if (id) moveConversationSessionSync(root, id, project.id);
+        break;
+      }
+      case 'renameProject':
+        renameConversationProjectSync(root, String(input.projectId || ''), String(input.title || ''));
+        break;
+      case 'removeProject':
+        removeConversationProjectSync(root, String(input.projectId || ''));
+        break;
+      default:
+        throw new Error('不支持的对话操作');
+    }
+    return listConversationSessionsSync(root);
+  }
+
   createConversationSession(): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {
     const pkg = this.subject.requireActive();
+    this.lastIntentView = null;
+    this.beginSearchGeneration();
     return { session: createConversationSessionSync(pkg.rootDir) };
   }
 
   openConversationSession(sessionId: string): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {
     const pkg = this.subject.requireActive();
+    this.lastIntentView = null;
+    this.beginSearchGeneration();
     return { session: openConversationSessionSync(pkg.rootDir, sessionId) };
   }
 
@@ -3925,6 +6186,16 @@ export class DigitalMeRuntime {
     }
     return this.workspace;
   }
+}
+
+function terminalSupplementNotice(current: string | undefined, extra: string): string {
+  const base = String(current || '')
+    .replace(/正在读正文并核对。?/g, '')
+    .trim();
+  const add = String(extra || '').trim();
+  if (!add) return base;
+  if (base.includes(add)) return base;
+  return [base, add].filter(Boolean).join('');
 }
 
 function waitForAbort(signal: AbortSignal): Promise<void> {

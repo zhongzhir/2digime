@@ -17,6 +17,8 @@ export interface TalkTurn {
   /** 本回合实际发生的 Subject ↔ Subject 交换，不是协作阶段。 */
   exchangeIds?: string[];
   result?: { title: string; path?: string };
+  /** Provider execution facts only; never prompt, key, reasoning text or page body. */
+  capabilityTrace?: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace[];
 }
 
 /** 模型声明的目标可观察结果；不是对用户原句的关键词分类。 */
@@ -59,6 +61,15 @@ export interface TalkThread {
   openGoal?: string;
   turns: TalkTurn[];
   executions: TalkExecution[];
+  /** 本对话用户附上的文件路径。后续回合仍可读取，不是另一套记忆。 */
+  materialPaths?: string[];
+  /** 从发现进入的同一任务；当前条件唯一保存在本 thread，不是本人长期事实。 */
+  discoveryGoal?: {
+    originalRequest: string;
+    request: string;
+    scope: 'session' | 'keep';
+    objects: Array<{ contentId: string; title: string; url: string; source: string; publisherSubjectId?: string; summary: string }>;
+  };
 }
 
 export type TalkTurnOutcome = 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' | 'CANCELLED';
@@ -73,12 +84,15 @@ export interface TalkView {
     role: 'user' | 'assistant';
     text: string;
     result?: { title: string; path?: string };
+    /** Provider execution facts exposed for diagnostics; never prompt, key, reasoning or page body. */
+    capabilityTrace?: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace[];
   }>;
 }
 
 export interface TalkChatResult {
   text: string;
   toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+  capabilityTrace?: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace;
 }
 
 export type TalkChatFn = (input: {

@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "releaseUrl": "https://github.com/zhongzhir/2digime/releases/tag/v0.2.0-core-link-trial-win-x64-54adc4a",
+  "prerelease": true,
+  "productSourceSha": "54adc4adcb0c1c55941837625a6a37dd05453ca2",
+  "tag": "v0.2.0-core-link-trial-win-x64-54adc4a",
+  "peeledTagSha": "54adc4adcb0c1c55941837625a6a37dd05453ca2",
+  "downloadedGitHead": "54adc4adcb0c1c55941837625a6a37dd05453ca2",
+  "verifiedAt": "2026-10-07T10:26:16.195Z",
+  "downloadedFromGitHub": true,
+  "files": [
+    {
+      "name": "tujimi-0.2.0-core-link-trial-win-x64-setup.exe",
+      "expected": "01747163710956cdb12c4096badf3bee8a58c659313fb7a3f9a7c46f598c5113",
+      "actual": "01747163710956cdb12c4096badf3bee8a58c659313fb7a3f9a7c46f598c5113",
+      "verified": true
+    },
+    {
+      "name": "tujimi-0.2.0-core-link-trial-win-x64.zip",
+      "expected": "626c90213a0631cb2c8a434bd4f3c69003333cba8594f739849981372194c35d",
+      "actual": "626c90213a0631cb2c8a434bd4f3c69003333cba8594f739849981372194c35d",
+      "verified": true
+    }
+  ],
+  "manifestSha256": "7e7b95bb54dfdec5cd519ac9acb433a3ba8e626b3392adfeff7cb107b79a4f92",
+  "downloadedAsarSha256": "29d523cf0f8b9c26659e98291d394d9423d02afb5ce3ae52bc0e1e9ec015f044",
+  "privateAttachments": false,
+  "searchRequests": 0,
+  "modelRequests": 0
+}

@@ -1,0 +1,30 @@
+{
+  "phase": "self",
+  "startedAt": "2026-10-06T04:16:50.909Z",
+  "endedAt": "2026-10-06T04:16:51.524Z",
+  "elapsedMs": 615,
+  "applicationRequests": 1,
+  "searchCalls": 0,
+  "requestId": "d9039900-0a3d-40de-a166-c2e0eeadbff9",
+  "responseMetadata": {
+    "httpStatus": 200,
+    "status": "AVAILABLE",
+    "finishReason": "stop",
+    "outputLength": 45,
+    "usage": {
+      "inputTokens": 82,
+      "outputTokens": 12,
+      "totalTokens": 94
+    },
+    "truncated": false
+  },
+  "diagnostic": null,
+  "validation": {
+    "jsonParsed": true,
+    "durationMinutes": 30,
+    "scope": "current_goal",
+    "formalSubjectRead": false,
+    "formalSubjectWritten": false
+  },
+  "success": true
+}

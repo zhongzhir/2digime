@@ -1,0 +1,89 @@
+{
+  "sourceSha": "e95966ea781c5f17f5986312acf4d951b6a3b3cc",
+  "buildId": "v2-tujimi-20261007T083847Z-e95966ea",
+  "overallAcceptance": false,
+  "failureCheck": "Self task scope changed after a pure goal correction",
+  "goalPersistence": {
+    "verified": true,
+    "threadId": "conv_muw6utv8bcc2b398",
+    "originalRequestPreserved": true,
+    "scope": "session",
+    "latestRequest": "保留学习 AI 产品落地的方向、已选两门历史课程（FDE必修-AI产品落地指南课 https://coding.imooc.com/class/1036.html ；AI大模型微调，从原理剖析到企业级落地实战 https://coding.imooc.com/class/chapter/1003.html）及来源；工作日每天30分钟、周末每天60分钟；章节超出当天预算时分次学习，观看、笔记、练习合计不超过当天时间；到时记录实际章节与停点，下次接续；无可靠时间戳时不编造观看片段或起止秒数；不重做比较、不生成或写入计划、不联网、不付费。",
+    "objects": [
+      {
+        "contentId": "snippet_0_https://coding.imooc.com/class/1036.html",
+        "title": "FDE必修-AI产品落地指南课",
+        "url": "https://coding.imooc.com/class/1036.html",
+        "source": "慕课网（历史候选）"
+      },
+      {
+        "contentId": "snippet_1_https://coding.imooc.com/class/chapter/1003.html",
+        "title": "AI大模型微调，从原理剖析到企业级落地实战",
+        "url": "https://coding.imooc.com/class/chapter/1003.html",
+        "source": "慕课网（历史候选）"
+      }
+    ],
+    "executions": [
+      {
+        "id": "run_63224a72-66c4-4b81-a740-1b634d15d04c",
+        "capabilityId": "update_discovery_goal",
+        "ok": true,
+        "observedEffect": {
+          "kind": "content_modified",
+          "target": "current_discovery_goal",
+          "mutated": true
+        }
+      }
+    ]
+  },
+  "talkReply": "已确认保存结果。\n\n**保存状态**：完整条件已写入当前发现目标，并回读核实一致。\n\n**当前目标内容**\n- 学习方向：AI 产品落地，可跟着动手做出产品。\n- 两门历史课程及来源保留：\n  - FDE必修-AI产品落地指南课 — https://coding.imooc.com/class/1036.html\n  - AI大模型微调，从原理剖析到企业级落地实战 — https://coding.imooc.com/class/chapter/1003.html\n- 时长：工作日每天 30 分钟，周末每天 60 分钟。\n- 执行规则：\n  - 章节超出当天预算时分次学习。\n  - 观看、笔记、练习合计不超过当天时间。\n  - 到时记录实际章节与停点，下次接续。\n  - 无可靠时间戳时不编造观看片段或起止秒数。\n- 其他保留项：优先中文或有中文字幕；课程链接、课时、费用等未知项照旧保留；不联网、不报名、不付费。\n\n**边界说明**\n- 以上只属于当前这个学习目标，未写入「数字之我」，不是你的长期本人事实。\n- 本次未重做比较、未生成或写入计划、未联网、未付费。\n- 磁盘上的 `learning-plan.md` 与 `learning-plan-revised.md` 均保持原样，未按新规则改动。",
+  "discover": {
+    "adjustment": {
+      "id": "ra_muw6utab_g5j7",
+      "summary": "本次目标：保留学习 AI 产品落地的方向、已选两门历史课程（FDE必修-AI产品落地指南课 https://coding.imooc.com/class/1036.html ；AI大模型微调，从原理剖析到企业级落地实战 https://coding.imooc.com/class/chapter/1003.html）及来源；工作日每天30分钟、周末每天60分钟；章节超出当天预算时分次学习，观看、笔记、练习合计不超过当天时间；到时记录实际章节与停点，下次接续；无可靠时间戳时不编造观看片段或起止秒数；不重做比较、不生成或写入计划、不联网、不付费。",
+      "text": "保留学习 AI 产品落地的方向、已选两门历史课程（FDE必修-AI产品落地指南课 https://coding.imooc.com/class/1036.html ；AI大模型微调，从原理剖析到企业级落地实战 https://coding.imooc.com/class/chapter/1003.html）及来源；工作日每天30分钟、周末每天60分钟；章节超出当天预算时分次学习，观看、笔记、练习合计不超过当天时间；到时记录实际章节与停点，下次接续；无可靠时间戳时不编造观看片段或起止秒数；不重做比较、不生成或写入计划、不联网、不付费。",
+      "scope": "session",
+      "appliesTo": "default_feed",
+      "scopeNote": "仅作用于这次默认推荐。换主题搜索不自动套用。"
+    },
+    "cards": [
+      {
+        "itemId": "snippet_0_https://coding.imooc.com/class/1036.html",
+        "title": "FDE必修-AI产品落地指南课",
+        "url": "https://coding.imooc.com/class/1036.html"
+      },
+      {
+        "itemId": "snippet_1_https://coding.imooc.com/class/chapter/1003.html",
+        "title": "AI大模型微调，从原理剖析到企业级落地实战",
+        "url": "https://coding.imooc.com/class/chapter/1003.html"
+      }
+    ],
+    "relatedCards": []
+  },
+  "restart": {
+    "goalDeepEqual": true,
+    "modelCalls": 0,
+    "evidence": "original packaged harness assertions and 02-restored-talk.png"
+  },
+  "budget": {
+    "applications": 3,
+    "usage": {
+      "inputTokens": 9385,
+      "outputTokens": 1239,
+      "totalTokens": 10624
+    },
+    "elapsedMs": 17928,
+    "blockedSearch": 0,
+    "remainingApplicationRequests": 1
+  },
+  "gatewayLogCrossCheck": {
+    "verified": false,
+    "reason": "CUA trusted Node process fails to start; no replacement deployment or browser configuration change"
+  },
+  "supplierAttempts": {
+    "exact": null,
+    "minimum": 3,
+    "maximum": 9,
+    "reason": "3 completed gateway responses; current per-request maximum 3 attempts, remote log unavailable"
+  }
+}

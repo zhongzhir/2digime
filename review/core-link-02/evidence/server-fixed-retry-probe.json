@@ -1,0 +1,10 @@
+{
+  "kind": "offline provider fixture with injected clock",
+  "budgets": [
+    100,
+    100,
+    100
+  ],
+  "totalSimulatedElapsedMs": 240,
+  "status": "AVAILABLE"
+}

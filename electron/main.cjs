@@ -7,6 +7,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const { pathToFileURL } = require("node:url");
 const { installApplicationMenu } = require("./app-menu.cjs");
 const { loadBrand, publicBrandView } = require("./brand.cjs");
@@ -30,6 +31,12 @@ if (process.env.DIGITALME_V2_USER_DATA) {
 } else {
   app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_DIR_NAME));
 }
+// Windows 的"文档"来自系统已知文件夹，不跟随 HOME/USERPROFILE；隔离运行时项目目录必须落在 DIGITALME_V2_HOME 下。
+if (process.env.DIGITALME_V2_HOME) {
+  const isolatedDocuments = path.join(process.env.DIGITALME_V2_HOME, "Documents");
+  fs.mkdirSync(isolatedDocuments, { recursive: true });
+  app.setPath("documents", isolatedDocuments);
+}
 if (isElectronTestHarness()) {
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-dev-shm-usage");
@@ -41,6 +48,70 @@ let runtime = null;
 let bus = null;
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+const activeTalkAborts = new Set();
+const pendingFolderAccess = new Map();
+let activeTalkProgressRequestId = "";
+
+function currentTalkTurnSignal() {
+  try {
+    const mod = require(path.join(__dirname, "..", "dist", "intelligence", "service.js"));
+    return typeof mod.currentTalkTurnSignal === "function" ? mod.currentTalkTurnSignal() : null;
+  } catch {
+    return null;
+  }
+}
+
+function dismissFolderAccess() {
+  for (const finish of pendingFolderAccess.values()) {
+    try {
+      finish(false, true);
+    } catch {
+      /* ignore */
+    }
+  }
+  pendingFolderAccess.clear();
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (win) win.webContents.send("shell:folder-access-dismiss");
+}
+
+function askFolderAccessInPage(folderPath, label) {
+  const signal = currentTalkTurnSignal();
+  if (signal && signal.aborted) {
+    const reason = signal.reason;
+    if (reason instanceof Error) throw reason;
+    return Promise.resolve(false);
+  }
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (!win) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    let settled = false;
+    const finish = (allowed, aborted) => {
+      if (settled) return;
+      settled = true;
+      pendingFolderAccess.delete(id);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      if (aborted) {
+        const reason = signal && signal.reason;
+        reject(reason instanceof Error ? reason : Object.assign(new Error("已取消。"), { name: "TalkCancelled" }));
+        return;
+      }
+      resolve(allowed === true);
+    };
+    const onAbort = () => finish(false, true);
+    pendingFolderAccess.set(id, finish);
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    if (activeTalkProgressRequestId) {
+      win.webContents.send("shell:capability-progress", {
+        surface: "talk",
+        requestId: activeTalkProgressRequestId,
+        stage: "waiting_permission",
+        elapsedMs: 0,
+      });
+    }
+    win.webContents.send("shell:folder-access", { id, path: folderPath, label: label || folderPath });
+  });
+}
 /** @type {(() => void) | null} */
 let unsubscribe = null;
 /** @type {null | ((input: any) => Promise<any>)} */
@@ -498,25 +569,14 @@ async function bootstrapRuntime() {
   }
 
   options.autonomousCollabReceive = true;
+  options.capabilityEventSink = (event) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("shell:capability-progress", event);
+    }
+  };
   options.requestFolderAccess = isElectronTestHarness()
     ? async () => false
-    : async ({ path: folderPath, label }) => {
-        const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-        const payload = {
-          type: "question",
-          buttons: ["允许", "不允许"],
-          defaultId: 0,
-          cancelId: 1,
-          title: DISPLAY_NAME,
-          message: `允许${DISPLAY_NAME}访问${label}？`,
-          detail: folderPath,
-          noLink: true,
-        };
-        const result = parent
-          ? await dialog.showMessageBox(parent, payload)
-          : await dialog.showMessageBox(payload);
-        return result.response === 0;
-      };
+    : async ({ path: folderPath, label }) => askFolderAccessInPage(folderPath, label);
   runtime = createDigitalMeRuntime(options);
   bus = createCommandBus(runtime);
   unsubscribe = runtime.eventBus.subscribe((event) => {
@@ -609,6 +669,30 @@ function createWindow(bootInfo) {
   });
   const indexHtml = rendererIndexUrl();
   mainWindow.loadURL(indexHtml);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return { action: "deny" };
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { action: "deny" };
+    }
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions: {
+        width: 1100,
+        height: 800,
+        autoHideMenuBar: true,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+        },
+      },
+    };
+  });
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("shell:boot", bootInfo || lastBootInfo);
   });
@@ -746,6 +830,24 @@ function registerIpc() {
             runtime.setConverseAbortSignal(null);
           }
           if (requestId) workConverseAborts.delete(requestId);
+        }
+      }
+
+      if (name === "talk" && runtime && typeof runtime.setTalkAbortSignal === "function") {
+        const ac = new AbortController();
+        activeTalkAborts.add(ac);
+        const requestId = input && input.requestId ? String(input.requestId) : "";
+        const previousProgressRequestId = activeTalkProgressRequestId;
+        activeTalkProgressRequestId = requestId;
+        runtime.setTalkAbortSignal(ac.signal);
+        try {
+          return await bus.invoke(name, input || {});
+        } finally {
+          activeTalkAborts.delete(ac);
+          if (activeTalkProgressRequestId === requestId) activeTalkProgressRequestId = previousProgressRequestId;
+          if (runtime && typeof runtime.setTalkAbortSignal === "function") {
+            runtime.setTalkAbortSignal(activeTalkAborts.size ? [...activeTalkAborts].at(-1).signal : null);
+          }
         }
       }
 
@@ -1468,6 +1570,18 @@ function registerIpc() {
     return { currentId: "", sessions: [] };
   });
 
+  ipcMain.handle("shell:conversationManage", async (_evt, input) => {
+    if (!runtime || typeof runtime.manageConversation !== "function") {
+      throw new Error("请先建立数字之我");
+    }
+    // 删除或归档的对话如果正在回复，让它的回复不再落到别的对话上。
+    if (input && (input.op === "delete" || input.op === "archive")) {
+      const listed = typeof runtime.listConversationSessions === "function" ? runtime.listConversationSessions() : null;
+      if (listed && listed.currentId === String(input.id || "")) conversationGeneration += 1;
+    }
+    return runtime.manageConversation(input || {});
+  });
+
   ipcMain.handle("shell:conversationCreateSession", async () => {
     if (!runtime || typeof runtime.createConversationSession !== "function") {
       throw new Error("请先建立数字之我");
@@ -2062,7 +2176,24 @@ function registerIpc() {
       }
       conversationAbort = null;
     }
+    const err = new Error("已取消。");
+    err.name = "TalkCancelled";
+    for (const ac of activeTalkAborts) {
+      try {
+        if (!ac.signal.aborted) ac.abort(err);
+      } catch {
+        /* ignore */
+      }
+    }
+    dismissFolderAccess();
     return { ok: true };
+  });
+
+  ipcMain.on("shell:folder-access-reply", (_evt, payload) => {
+    const id = payload && payload.id ? String(payload.id) : "";
+    const finish = pendingFolderAccess.get(id);
+    if (!finish) return;
+    finish(payload.allowed === true, false);
   });
 
   ipcMain.handle("shell:cancelWorkRequest", async (_evt, input) => {
@@ -2118,6 +2249,116 @@ app.whenReady().then(async () => {
           error: String(err && err.message ? err.message : err),
         }),
       );
+      app.exit(1);
+    }
+    return;
+  }
+
+  if (Number(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_FEED_PAGES || 0) > 0) {
+    const pageCount = Math.min(20, Math.max(1, Number(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_FEED_PAGES || 10)));
+    const startedAt = Date.now();
+    try {
+      await bootstrapRuntime();
+      const attached = await ensureDefaultPackageAttached();
+      if (!attached.ok) throw new Error(`default_package_attach_failed:${attached.reason || "unknown"}`);
+      let result = await bus.invoke("content", { action: "discover", searchGenerationId: `feed_acceptance_${Date.now()}` });
+      let view = result && result.view ? result.view : {};
+      const generationId = String(view.searchGenerationId || "");
+      const initialCount = Array.isArray(view.cards) ? view.cards.length : 0;
+      const pages = [];
+      for (let index = 0; index < pageCount; index += 1) {
+        const pageStartedAt = Date.now();
+        let polls = 0;
+        result = await bus.invoke("content", { action: "more", searchGenerationId: generationId });
+        view = result && result.view ? result.view : {};
+        while (
+          view.replenishing === true &&
+          (!Array.isArray(view.cards) || view.cards.length === 0) &&
+          Date.now() - pageStartedAt < 20000
+        ) {
+          polls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          result = await bus.invoke("content", { action: "more", searchGenerationId: generationId });
+          view = result && result.view ? result.view : {};
+        }
+        pages.push({
+          page: index + 1,
+          elapsedMs: Date.now() - pageStartedAt,
+          polls,
+          cardCount: Array.isArray(view.cards) ? view.cards.length : 0,
+          replenishing: view.replenishing === true,
+          notice: view.notice || null,
+        });
+      }
+      console.log(JSON.stringify({
+        ok: true,
+        elapsedMs: Date.now() - startedAt,
+        initialCount,
+        pages,
+      }));
+      app.exit(0);
+    } catch (err) {
+      console.error(JSON.stringify({
+        ok: false,
+        elapsedMs: Date.now() - startedAt,
+        error: String(err && err.message ? err.message : err),
+      }));
+      app.exit(1);
+    }
+    return;
+  }
+
+  if (String(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_QUERY || "").trim()) {
+    const query = String(process.env.DIGITALME_V2_DISCOVER_ACCEPTANCE_QUERY || "").trim();
+    const startedAt = Date.now();
+    try {
+      await bootstrapRuntime();
+      const attached = await ensureDefaultPackageAttached();
+      if (!attached.ok) throw new Error(`default_package_attach_failed:${attached.reason || "unknown"}`);
+      const searchGenerationId = `owner_acceptance_${Date.now()}`;
+      let result = await bus.invoke("content", {
+        action: "seek",
+        text: query,
+        searchGenerationId,
+      });
+      let view = result && result.view ? result.view : {};
+      let replenishRounds = 0;
+      while (view.replenishing === true && replenishRounds < 2 && Date.now() - startedAt < 90000) {
+        replenishRounds += 1;
+        result = await bus.invoke("content", {
+          action: "replenish",
+          searchGenerationId,
+        });
+        view = result && result.view ? result.view : {};
+      }
+      const sanitizeCards = (cards) => Array.isArray(cards)
+        ? cards.map((card) => ({
+            title: card.title || null,
+            url: card.sourceUrl || card.openUrl || card.url || null,
+            source: card.sourceLabel || card.sourceHost || null,
+          }))
+        : [];
+      console.log(JSON.stringify({
+        ok: true,
+        query,
+        elapsedMs: Date.now() - startedAt,
+        replenishRounds,
+        headline: view.headline || null,
+        notice: view.notice || null,
+        responseText: view.responseText || null,
+        replenishing: view.replenishing === true,
+        cards: sanitizeCards(view.cards),
+        relatedCards: sanitizeCards(view.relatedCards),
+        unjudgedCards: sanitizeCards(view.unjudgedCards),
+      }));
+      app.exit(0);
+    } catch (err) {
+      console.error(JSON.stringify({
+        ok: false,
+        query,
+        elapsedMs: Date.now() - startedAt,
+        error: String(err && err.message ? err.message : err),
+      }));
       app.exit(1);
     }
     return;

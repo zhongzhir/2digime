@@ -3,6 +3,7 @@
  * 禁止按查询词 if/else 分流 consume / research。
  */
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
+import { completeStructured, JUDGMENT_JSON_PASSES, type StructuredAttempt } from './structured-call';
 
 export type DiscoverIntentKind = 'consume' | 'research';
 export type DiscoverObjectWanted = 'work_itself' | 'commentary' | 'mixed';
@@ -19,7 +20,15 @@ export interface DiscoverIntent {
   searchQueries: string[];
   suggestTalk: boolean;
   scope: 'current_search';
+  /** 模型决定这次要不要用已连接的新闻来源。不是查询词路由。 */
+  newsFeed?: boolean;
+  /** 模型给出的报道日期 YYYY-MM-DD。要今天时就是用户本地今天。 */
+  reportDay?: string;
   honestyNote?: string;
+  /** 用户希望在哪里看：应用内播放 / 去原站 / 都可以。由模型从请求里读出，缺省 any。 */
+  viewing?: 'in_app' | 'original_site' | 'any';
+  /** 用户这次明确提出的质量、风格、时长等偏好，一句话。推荐依据按它来写，不编造。 */
+  preferences?: string;
 }
 
 export type ContentPageRole =
@@ -49,6 +58,26 @@ export interface ConsumableCandidate {
   url: string;
   summary: string;
   contentType?: string;
+  publishedAt?: string;
+  /** 来源给出的时长（秒）。没有就不传，不估算。 */
+  durationSeconds?: number;
+}
+
+export function localCalendarDate(now = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export class DiscoverIntentError extends Error {
+  readonly kind: 'model' | 'parse';
+
+  constructor(kind: 'model' | 'parse', message: string) {
+    super(message);
+    this.name = 'DiscoverIntentError';
+    this.kind = kind;
+  }
 }
 
 export function defaultDiscoverIntent(query: string): DiscoverIntent {
@@ -121,10 +150,16 @@ export function intentFromModelText(text: string, query: string): DiscoverIntent
   const topic = String(rec.topic || '').trim().slice(0, 80) || fallback.topic;
   const popularityClaim = rec.popularityClaim === true;
   const suggestTalk = intent === 'research' || rec.suggestTalk === true;
+  const newsFeed = rec.newsFeed === true;
+  const reportDayRaw = String(rec.reportDay || '').trim();
+  const reportDay = /^\d{4}-\d{2}-\d{2}$/.test(reportDayRaw) ? reportDayRaw : undefined;
   const honestyNote =
     popularityClaim && intent === 'consume'
-      ? '没有跨平台统一播放榜，先找近期公开、可以看/听/读的内容。'
+      ? '没有跨平台统一榜单。下面的推荐依据来自来源里能看到的评价、口碑和内容特点，不是官方排名。'
       : undefined;
+  const viewing =
+    rec.viewing === 'in_app' || rec.viewing === 'original_site' ? rec.viewing : 'any';
+  const preferences = String(rec.preferences || '').trim().slice(0, 160);
   return {
     intent,
     topic,
@@ -135,7 +170,11 @@ export function intentFromModelText(text: string, query: string): DiscoverIntent
     searchQueries: searchQueries.length ? searchQueries : fallback.searchQueries,
     suggestTalk,
     scope: 'current_search',
+    ...(newsFeed ? { newsFeed: true } : {}),
+    ...(reportDay ? { reportDay } : {}),
     ...(honestyNote ? { honestyNote } : {}),
+    ...(viewing !== 'any' ? { viewing } : {}),
+    ...(preferences ? { preferences } : {}),
   };
 }
 
@@ -143,45 +182,61 @@ export async function interpretDiscoverIntent(input: {
   query: string;
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
+  signal?: AbortSignal;
+  onAttempt?: (attempt: StructuredAttempt) => void;
+  deadlineAt?: number;
 }): Promise<DiscoverIntent> {
   const query = String(input.query || '').trim();
   const fallback = defaultDiscoverIntent(query);
   if (!query) return fallback;
   const system = [
     '你在判断用户在「发现」里这一次主动搜索的意图。这是 CURRENT_SEARCH_MODE，不是为你发现。',
-    '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk。',
+    '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk, newsFeed, reportDay, viewing, preferences。',
     'mode: consume 或 research。发现的强默认是 consume（看/听/读），不是做研究任务。',
     'topic: 用户这次要的主题短词，不要整句。例如「找几个 AI 视频看看」的 topic 是 AI。',
-    'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频→["video"]；要图/摄影作品→["image"]；要听/播客→["audio"]；要读文章→["article"]。说「内容」且未点名媒介→[]。',
-    '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]。',
+    'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频、影像、纪录片、片子→["video"]；要图/摄影作品→["image"]；要听、曲子、播客、音乐→["audio"]；要读文章或新闻报道→["article"]。说「内容」且未点名媒介→[]。',
+    '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]；「今天的新闻」→ ["article"]。',
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
-    'freshness: current / classic / unspecified。',
-    'popularityClaim: 用户是否在要「最火/热门/排行」且你没有统一播放榜可引用。',
-    'searchQueries: 1 到 3 条发给公开搜索和开放目录的检索词，不要照抄用户整句。必须留在这次的 topic 与 requestedContentTypes 内。',
-    '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜、盘点、新闻。',
+    'freshness: current / classic / unspecified。current 表示用户在意时效：当下、最近、最新、这阵子。它不等于「今天发布」；只有用户明确要某一天（今天、昨天、某月某日）才算指定日期。',
+    'popularityClaim: 用户是否在要「最好/最火/热门/口碑/排行」这类带评价的推荐。为 true 时 searchQueries 里第一条仍然指向作品/节目本身（节目名、系列、官方主页或播放页这类具体对象），另一条才带能找到评价依据的词（如 口碑、评分、获奖），避免全部搜回行业盘点文章。',
+    'searchQueries: 1 到 3 条发给公开搜索和开放目录的短检索词。必须拆成对象名、地名、作品名或主题短词；不要照抄用户整句。复杂需求拆成目录和搜索能命中的短词，再由系统分别检索后整合。必须留在这次的 topic 与 requestedContentTypes 内。',
+    '搜索只按查询文本返回结果，不会另吃时效或新闻分类参数。仅当用户明确要某一天的报道时，第一条 searchQuery 才包含那一天的日期；「当下/最近/最新」不要写成今天的日期。',
+    'viewing: 用户说了想在哪里看——「在这里看/应用里播放」填 in_app，「去原站/官网看」填 original_site，没提就填 any。',
+    'preferences: 用户这次明确提出的质量、风格、时长、人群等偏好，用一句话保留（例如「口碑好、长视频」）。没有就留空。不要加用户没说的偏好。',
+    '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜或十大盘点。',
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
-    '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。',
+    '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。用户要课、动画、漫剧、纪录片、住宿或一部作品时，searchQueries 必须指向对象本身：作品名、合集名、单集名，需要时可带出品方、国内播出平台或创作者；不要改写成搭建教程、学习路线、行业分析、介绍文章。用户说「不想开会员 / 免费 / 全集 / 无广告」时，只写进 preferences，不要写进 searchQueries。是否免费、是否要会员由作品页核实，检索词不要带这些营销词。不要把海外平台写成唯一检索词。',
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
+    'newsFeed: 这次要看近期公开报道，并且应该使用已连接的新闻来源时为 true。图片、音频、视频作品和稳定知识为 false。',
+    'reportDay: 仅当用户明确要某一天的报道时才填，写成 YYYY-MM-DD；要今天就填用户消息里的今天。「当下/最近/最新/最好」不是指定某一天，省略。',
+    'newsFeed 只用于新闻报道。节目、纪录片、播客、影视、图片、音乐、教程等作品推荐即使要「最新/当下」，也是 false。',
     '不要使用数字之我、长期偏好或最近浏览去扩大范围。不要输出 score。不要编造播放量。',
   ].join('\n');
-  try {
-    const result = await input.chatComplete({
+  const today = localCalendarDate();
+  const outcome = await completeStructured<DiscoverIntent>({
+    chat: input.chatComplete,
+    request: {
       baseUrl: input.model.baseUrl,
       ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
       model: input.model.model,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: query },
+        { role: 'user', content: `${query}\n今天的日期是 ${today}。` },
       ],
       temperature: 0,
-      maxTokens: 500,
-      timeoutMs: 45_000,
       responseFormat: { type: 'json_object' },
-    });
-    return intentFromModelText(result.text, query);
-  } catch {
-    return fallback;
-  }
+    },
+    passes: JUDGMENT_JSON_PASSES,
+    parse: (text) => (parseJsonObject(text) ? intentFromModelText(text, query) : null),
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+    stage: 'discover.intent',
+  });
+  if (outcome.value) return outcome.value;
+  if (input.signal?.aborted) throw new DiscoverIntentError('model', '这次搜索已经取消。');
+  if (outcome.lastError instanceof Error) throw outcome.lastError;
+  throw new DiscoverIntentError('parse', '这次模型没有给出可用的搜索意图。');
 }
 
 export function isDomainLikeTitle(title: string, url?: string): boolean {
@@ -204,25 +259,44 @@ export function isDomainLikeTitle(title: string, url?: string): boolean {
   return false;
 }
 
-/** 机械 URL 结构：首页或搜索结果页。不是站点特例表。 */
-export function isGenericHubUrl(raw: string): boolean {
-  let parsed: URL;
+function parsedPublicUrl(raw: string): URL | null {
   try {
-    parsed = new URL(raw);
+    return new URL(raw);
   } catch {
-    return false;
+    return null;
   }
-  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
-  if (path === '/' || /^\/index\.html?$/i.test(path)) return true;
-  if (
+}
+
+function isSearchResultsUrl(parsed: URL): boolean {
+  const hasSearchParameter = (
     parsed.searchParams.has('q') ||
     parsed.searchParams.has('wd') ||
     parsed.searchParams.has('query') ||
     parsed.searchParams.has('search')
-  ) {
-    return true;
-  }
-  return false;
+  );
+  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+  const hasSearchPath = /(^|\/)(search|search-results|results|find)(\/|$)/i.test(path);
+  // Query keys alone are not enough: article URLs commonly retain q/query as
+  // tracking or in-page state. Only a root query or an explicit search path is
+  // a mechanical search-results identity.
+  return hasSearchPath || (path === '/' && hasSearchParameter);
+}
+
+/** 机械 URL 结构：首页或搜索结果页。不是站点特例表。 */
+export function isGenericHubUrl(raw: string): boolean {
+  const parsed = parsedPublicUrl(raw);
+  if (!parsed) return false;
+  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+  if (path === '/' || /^\/index\.html?$/i.test(path)) return true;
+  return isSearchResultsUrl(parsed);
+}
+
+/** 网站首页。搜索结果页不是可继续取报道的入口。 */
+export function isSiteEntranceUrl(raw: string): boolean {
+  const parsed = parsedPublicUrl(raw);
+  if (!parsed || isSearchResultsUrl(parsed)) return false;
+  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+  return path === '/' || /^\/index\.html?$/i.test(path);
 }
 
 export function isPrimaryContentRole(role: ContentPageRole | undefined): boolean {
@@ -256,9 +330,36 @@ export function strictRequestedTypes(intent: DiscoverIntent): string[] {
   );
 }
 
-export function rolesFromModelText(text: string, ids: string[]): Map<string, ContentPageRole> {
+export type CandidateMedium = 'article' | 'video' | 'audio' | 'image' | 'unknown';
+
+export interface CandidateJudgment {
+  role: ContentPageRole;
+  /** 模型从页面内容判断的主要消费形态。不要求页面有直接播放文件。 */
+  medium: CandidateMedium;
+  /** 推荐依据：只来自候选材料里可见的评价、口碑、内容特点，没有就为空。 */
+  basis: string;
+  /** 去掉导航、赞助、目录杂项后的简短摘要。只依据候选给出的文字，没有可用信息则为空。 */
+  summary: string;
+  /** 用户这次明确提出的条件（高分、长视频、适合周末……）材料是否确认满足；没提条件为 none。 */
+  conditions: CandidateConditions;
+  /** 观看/收听页本身是不是完整节目、来源可信；只由模型依据页面材料判断。不是观看页为 none。 */
+  entrance: CandidateEntrance;
+  /** 这个页面是观看入口、发现依据，还是补充入口。由模型依据页面材料判断。 */
+  channel: CandidateChannel;
+}
+
+export type CandidateConditions = 'met' | 'unconfirmed' | 'unmet' | 'none';
+export type CandidateEntrance = 'full' | 'excerpt' | 'unverified' | 'none';
+export type CandidateChannel = 'watch' | 'discover' | 'supplement' | 'none';
+
+const CANDIDATE_MEDIA = new Set(['article', 'video', 'audio', 'image']);
+const CANDIDATE_CONDITIONS = new Set(['met', 'unconfirmed', 'unmet', 'none']);
+const CANDIDATE_ENTRANCE = new Set(['full', 'excerpt', 'unverified', 'none']);
+const CANDIDATE_CHANNEL = new Set(['watch', 'discover', 'supplement', 'none']);
+
+export function judgmentsFromModelText(text: string, ids: string[]): Map<string, CandidateJudgment> {
   const rec = parseJsonObject(text);
-  const out = new Map<string, ContentPageRole>();
+  const out = new Map<string, CandidateJudgment>();
   const rows = rec && Array.isArray(rec.roles) ? rec.roles : [];
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
@@ -268,8 +369,26 @@ export function rolesFromModelText(text: string, ids: string[]): Map<string, Con
       .trim()
       .toUpperCase();
     if (!ids.includes(id) || !PAGE_ROLES.has(role)) continue;
-    out.set(id, role as ContentPageRole);
+    const mediumRaw = asMediaType(recRow.medium);
+    const conditionsRaw = String(recRow.conditions || '').trim().toLowerCase();
+    const entranceRaw = String(recRow.entrance || '').trim().toLowerCase();
+    const channelRaw = String(recRow.channel || '').trim().toLowerCase();
+    out.set(id, {
+      role: role as ContentPageRole,
+      medium: mediumRaw && CANDIDATE_MEDIA.has(mediumRaw) ? (mediumRaw as CandidateMedium) : 'unknown',
+      basis: String(recRow.basis || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      summary: String(recRow.summary || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+      conditions: CANDIDATE_CONDITIONS.has(conditionsRaw) ? (conditionsRaw as CandidateConditions) : 'none',
+      entrance: CANDIDATE_ENTRANCE.has(entranceRaw) ? (entranceRaw as CandidateEntrance) : 'none',
+      channel: CANDIDATE_CHANNEL.has(channelRaw) ? (channelRaw as CandidateChannel) : 'none',
+    });
   }
+  return out;
+}
+
+export function rolesFromModelText(text: string, ids: string[]): Map<string, ContentPageRole> {
+  const out = new Map<string, ContentPageRole>();
+  for (const [id, row] of judgmentsFromModelText(text, ids)) out.set(id, row.role);
   return out;
 }
 
@@ -279,42 +398,185 @@ export async function classifyCandidateRoles(input: {
   candidates: ConsumableCandidate[];
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
-}): Promise<Map<string, ContentPageRole>> {
-  const ids = input.candidates.map((row) => row.id);
-  if (!input.candidates.length || !input.chatComplete || !input.model) return new Map();
+  signal?: AbortSignal;
+  onAttempt?: (attempt: StructuredAttempt) => void;
+  deadlineAt?: number;
+}): Promise<{
+  roles: Map<string, ContentPageRole>;
+  judgments: Map<string, CandidateJudgment>;
+  unjudgedIds: string[];
+  attempts: number;
+}> {
+  const empty = {
+    roles: new Map<string, ContentPageRole>(),
+    judgments: new Map<string, CandidateJudgment>(),
+    unjudgedIds: [] as string[],
+    attempts: 0,
+  };
+  if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
   const system = [
-    '你在判断每个候选相对「用户这次搜索」的对象忠实度。只输出 JSON：{"roles":[{"id":"","role":""}]}。',
+    '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","conditions":"","entrance":"","channel":"","basis":"","summary":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
-    'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。未点名媒介时，主题匹配的文章、视频、图片、音频都是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
-    'SERIES：一部作品或播客的主页/详情页。',
-    'EPISODE：可直接看/读/听的一集、一章或一条内容。',
+    'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。先分开写三件事：来源说这是什么类型，来源有没有写风格或氛围，观看入口是完整节目还是片段。不要混成一条，也不要用作品名气补材料。',
+    '未点名媒介时，主题匹配的正文、视频、图片、音频可以是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
+    '用户要的是对象本身（一门可上的课、一部可看的动画或漫剧、一处可住的住宿、一部作品）时：只有对象页是 PRIMARY_CONTENT / SERIES / EPISODE。介绍文章、学习路线图、行业新闻、盘点不是对象本身，标 COMMENTARY 或 LISTING。不要用相关话题把主结果填满。',
+    'SERIES：一部作品、节目或播客的主页/详情页。',
+    'EPISODE：一集、一章或一条具体内容。',
     'HUB：平台频道、分类、专题入口、网站首页。',
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
-    '用户要视频：具体视频是 PRIMARY_CONTENT；《最佳视频榜单》文章是 LISTING/COMMENTARY。',
+    '用户这次在 query / preferences 里明确提出的类型、风格、人群等条件，只看来源有没有写。来源写明的类型或风格和用户要的不一致，不要当成已经符合，也不要把条件放宽后再标 met。',
+    'conditions：与 role 分开写。用户这次没有提出这类条件写 none；材料能确认满足写 met；材料没写、无法确认写 unconfirmed，并在 basis 里写明哪一条还没确认；来源写明的类型或风格和用户要的不一致写 unmet，并在 basis 里写明哪一条不合。条件只改 conditions：对象页不要因此改成 COMMENTARY 或 UNRELATED。价格、课时、是否要会员、单集时长材料里没有时写 unconfirmed，不要写成 unmet，仍把课程或作品本身当作候选。',
+    '文章里的「免费、全集、无广告、公共领域、不用会员」只是文章说法，不能直接标 met。必须看这部作品当前页面或权利说明。文件可下载不等于已经获得授权。当前页没写就 unconfirmed。',
+    'entrance：只在候选本身是视频或音频的观看/收听页时填写，其它写 none。full：材料能确认是完整的一部、一集或一整期，并且来自出品方、播出平台、获得授权的平台或创作者本人；excerpt：片段、预告、花絮、剪辑、解说；unverified：自称全集、高清完整版之类，但看不出来源或授权，或者看不出是否完整。只依据候选材料，标题里的说法不能替来源作保。没有 RSS 或直链媒体文件，只要能在原站打开作品/合集/单集页，仍可写 full 或 excerpt。',
+    'channel：watch=出品方、国内播出平台或创作者本人的观看/收听入口；discover=评分站、片单、百科、评论，只作发现依据，不是观看入口；supplement=开放影像库或海外平台等补充入口，不能当作国内用户的唯一入口；不是这三类写 none。不要看域名表，只看这个页面自己在说什么。',
+    '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。能在原站观看就是有效交付。',
+    'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。作品页、合集页、单集页即使是 HTML、没有直链，只要是给用户看/听的，medium 仍写 video 或 audio，不要写成 article。',
+    '用户要视频或节目：具体视频、节目主页、系列页、单集页都是有效的推荐对象，用户可以去原站观看；没有 RSS 或直链也不要改成 HUB 或 UNRELATED。《最佳视频榜单》这类文章是 LISTING/COMMENTARY。',
     '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
-    '用户要播客：podcast episode / audio 是 PRIMARY_CONTENT；十大播客推荐文章是 COMMENTARY。',
+    '用户要播客或音乐：节目、专辑或单集页面是 PRIMARY_CONTENT；介绍文章是 COMMENTARY。',
     '用户要「AI 内容」且未点名媒介：一篇具体 AI 文章是 PRIMARY_CONTENT。',
-    '不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
+    '仅当 newsFeed 为 true（用户要的是某段时间的新闻报道）时：带发布时间、且标题和正文对得上的具体报道才是 PRIMARY_CONTENT。综述、盘点、事件日历、百科栏目、词条说明和网站首页不是报道，标 LISTING、HUB 或 UNRELATED。没有发布时间的候选，不要当成新闻。newsFeed 不是 true 时，freshness 只是用户对时效的偏好：来源给出的发布时间可以作为依据，但没有日期的好作品不因此被排除。',
+    'basis：一句话说明为什么值得推荐。只能依据候选的标题、摘要、发布时间和其中明确出现的评价、口碑、获奖、内容特点，并对照用户这次的 preferences。材料里没有评价依据时留空，不要编造排名、评分、播放量。popularityClaim 为 true 时尤其不能凭空说"最好"。',
+    'summary：把候选给出的文字整理成一两句有用的介绍。去掉导航、赞助、版权、目录、推广这类与内容无关的杂项；只能用候选原文里已有的信息，不要补充；原文里没有有用信息就留空。',
+    '每个候选都要有一条 role。不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
+  ].join('\n');
+  const today = localCalendarDate();
+  const chat = input.chatComplete;
+  const model = input.model;
+  const batchSize = 4;
+  let attempts = 0;
+
+  const judgeBatch = async (batch: ConsumableCandidate[]): Promise<Map<string, CandidateJudgment> | null> => {
+    const ids = batch.map((row) => row.id);
+    const user = JSON.stringify({
+      query: input.query,
+      mode: input.intent.intent,
+      topic: input.intent.topic,
+      scope: 'current_search',
+      objectWanted: input.intent.objectWanted,
+      freshness: input.intent.freshness,
+      newsFeed: input.intent.newsFeed === true,
+      popularityClaim: input.intent.popularityClaim,
+      ...(input.intent.preferences ? { preferences: input.intent.preferences } : {}),
+      ...(input.intent.reportDay ? { reportDay: input.intent.reportDay } : {}),
+      today,
+      requestedContentTypes: input.intent.requestedMedia,
+      candidates: batch.map((row) => ({
+        id: row.id,
+        title: row.title,
+        url: row.url,
+        contentType: row.contentType || '',
+        ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
+        ...(row.durationSeconds ? { durationSeconds: row.durationSeconds } : {}),
+        summary: row.summary.slice(0, 400),
+      })),
+    });
+    const outcome = await completeStructured<Map<string, CandidateJudgment>>({
+      chat,
+      request: {
+        baseUrl: model.baseUrl,
+        ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+        model: model.model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: 0,
+        responseFormat: { type: 'json_object' },
+      },
+      passes: JUDGMENT_JSON_PASSES,
+      parse: (text) => {
+        const parsed = judgmentsFromModelText(text, ids);
+        return parsed.size ? parsed : null;
+      },
+      ...(input.signal ? { signal: input.signal } : {}),
+      ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+    stage: 'discover.judgment',
+    });
+    attempts += outcome.attempts;
+    return outcome.value;
+  };
+
+  const batches: ConsumableCandidate[][] = [];
+  for (let index = 0; index < input.candidates.length; index += batchSize) {
+    batches.push(input.candidates.slice(index, index + batchSize));
+  }
+  // 各批互不依赖，并行判断；任一批失败只影响它自己的候选。
+  const results = await Promise.all(batches.map((batch) => judgeBatch(batch)));
+  const roles = new Map<string, ContentPageRole>();
+  const judgments = new Map<string, CandidateJudgment>();
+  const unjudgedIds: string[] = [];
+  batches.forEach((batch, i) => {
+    const judged = results[i];
+    if (!judged) {
+      unjudgedIds.push(...batch.map((row) => row.id));
+      return;
+    }
+    for (const [id, row] of judged) {
+      judgments.set(id, row);
+      roles.set(id, row.role);
+    }
+    for (const row of batch) {
+      if (!judged.has(row.id)) unjudgedIds.push(row.id);
+    }
+  });
+  return { roles, judgments, unjudgedIds, attempts };
+}
+
+export interface MentionedWork {
+  title: string;
+  kind: string;
+  medium: CandidateMedium;
+  sourceId: string;
+  /** 只转述来源材料对这部作品的评价或介绍。 */
+  basis: string;
+  searchQuery: string;
+}
+
+const groundKey = (value: string) =>
+  String(value || '')
+    .replace(/[《》〈〉「」『』“”"'‘’\s·・:：,，。.!！?？()（）\-—_]/g, '')
+    .toLowerCase();
+
+/**
+ * 从这次实际读到的片单、榜单、评论里取出被点名、并符合这次请求的作品。
+ * 只收原文里出现过的名字（机械核对），作品是否存在、去哪里看由调用方用现有搜索再核实。
+ */
+export async function extractMentionedWorks(input: {
+  query: string;
+  intent: DiscoverIntent;
+  sources: Array<{ id: string; title: string; text: string }>;
+  chatComplete?: ChatCompleteFn;
+  model?: { baseUrl: string; model: string; apiKey?: string };
+  signal?: AbortSignal;
+  onAttempt?: (attempt: StructuredAttempt) => void;
+  deadlineAt?: number;
+}): Promise<MentionedWork[]> {
+  if (!input.sources.length || !input.chatComplete || !input.model) return [];
+  const system = [
+    '你在读用户这次搜索读到的片单、榜单和评论文章，从中取出被明确点名、并且符合用户这次请求的具体对象。只输出 JSON：{"works":[{"title":"","kind":"","medium":"","sourceId":"","basis":"","searchQuery":""}]}。',
+    'title：对象名，必须和材料原文里写的一致，不翻译、不补全、不改写。材料没有点名的不要输出。',
+    'kind：材料能确定的类型；不确定就留空。',
+    'medium：article、video、audio、image 或 unknown。',
+    'sourceId：这个对象出现在哪一篇材料里。',
+    'basis：只转述这篇材料对它的评价或介绍。材料里没有的评分、排名、时长、价格、播放量一律不写，不要编造。',
+    'searchQuery：用来找到这个对象本身的页面（作品页、合集页、单集页、课程页、攻略页）的搜索词，优先指向出品方、国内播出平台或创作者本人的观看入口，不是找盘点、评分站或评论；材料提到出处时可以带上。不要只搜开放影像库，也不要写成「免费全集无广告」。',
+    '按用户这次的条件挑（例如长视频、纪录片、适合周末），明显不符合的不要输出。最多 4 部，挑材料里评价最明确的，宁缺毋滥；多篇材料提到的同一部只输出一次。',
   ].join('\n');
   const user = JSON.stringify({
     query: input.query,
-    mode: input.intent.intent,
     topic: input.intent.topic,
-    scope: 'current_search',
-    objectWanted: input.intent.objectWanted,
     requestedContentTypes: input.intent.requestedMedia,
-    candidates: input.candidates.map((row) => ({
-      id: row.id,
-      title: row.title,
-      url: row.url,
-      contentType: row.contentType || '',
-      summary: row.summary.slice(0, 240),
-    })),
+    ...(input.intent.preferences ? { preferences: input.intent.preferences } : {}),
+    sources: input.sources.map((row) => ({ id: row.id, title: row.title, text: row.text.slice(0, 1800) })),
   });
-  try {
-    const result = await input.chatComplete({
+  const byId = new Map(input.sources.map((row) => [row.id, groundKey(`${row.title}\n${row.text}`)]));
+  const outcome = await completeStructured<MentionedWork[]>({
+    chat: input.chatComplete,
+    request: {
       baseUrl: input.model.baseUrl,
       ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
       model: input.model.model,
@@ -323,12 +585,43 @@ export async function classifyCandidateRoles(input: {
         { role: 'user', content: user },
       ],
       temperature: 0,
-      maxTokens: 800,
-      timeoutMs: 45_000,
       responseFormat: { type: 'json_object' },
-    });
-    return rolesFromModelText(result.text, ids);
-  } catch {
-    return new Map();
-  }
+    },
+    passes: JUDGMENT_JSON_PASSES,
+    parse: (text) => {
+      const rec = parseJsonObject(text);
+      if (!rec || !Array.isArray(rec.works)) return null;
+      const seen = new Set<string>();
+      const out: MentionedWork[] = [];
+      for (const row of rec.works) {
+        if (!row || typeof row !== 'object') continue;
+        const r = row as Record<string, unknown>;
+        const title = String(r.title || '').replace(/[《》]/g, '').trim().slice(0, 80);
+        const sourceId = String(r.sourceId || '').trim();
+        const key = groundKey(title);
+        const source = byId.get(sourceId);
+        if (key.length < 2 || !source || !source.includes(key) || seen.has(key)) continue;
+        seen.add(key);
+        const medium = asMediaType(r.medium);
+        out.push({
+          title,
+          kind: String(r.kind || '').trim().slice(0, 20),
+          medium:
+            medium === 'video' || medium === 'audio' || medium === 'article' || medium === 'image'
+              ? medium
+              : 'unknown',
+          sourceId,
+          basis: String(r.basis || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          searchQuery: String(r.searchQuery || '').trim().slice(0, 80) || title,
+        });
+        if (out.length >= 4) break;
+      }
+      return out;
+    },
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+    stage: 'discover.extract',
+  });
+  return outcome.value || [];
 }

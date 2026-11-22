@@ -249,6 +249,20 @@ export function compareNetworkItems(a: NetworkItem, b: NetworkItem): number {
   return t !== 0 ? t : a.itemId.localeCompare(b.itemId);
 }
 
+/**
+ * 三种时间各自的含义：createdAt 是入库（获取）时间，不代表内容何时发布；
+ * content.publishedAt 才是来源声明的发布时间；没有它的内容是"未标日期"。
+ * 返回可信的发布时间戳；缺失、无法解析、早于 1990 或晚于 now+2 天的都视为不可信（返回 undefined）。
+ */
+export function trustedPublishedMs(item: NetworkItem, nowMs: number): number | undefined {
+  const raw = String(item.content.publishedAt || '').trim();
+  if (!raw) return undefined;
+  const t = Date.parse(raw);
+  if (!Number.isFinite(t)) return undefined;
+  if (t < Date.UTC(1990, 0, 1) || t > nowMs + 2 * 24 * 60 * 60 * 1000) return undefined;
+  return t;
+}
+
 export function encodeNetworkItemCursor(item: NetworkItem): string {
   return Buffer.from(`${item.createdAt}\t${item.itemId}`, 'utf8').toString('base64url');
 }

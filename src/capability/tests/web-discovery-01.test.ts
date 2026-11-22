@@ -5,7 +5,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createServer } from 'node:http';
 import { createWebDiscoveryGateway } from '../../relay-service/web-discovery-gateway';
-import { createRelayServer, FileRelayStore, resolveManagedWebDiscoveryGateway } from '../../relay-service/server';
+import {
+  createFailoverWebDiscoveryProvider,
+  createRelayServer,
+  FileRelayStore,
+  resolveManagedWebDiscoveryGateway,
+} from '../../relay-service/server';
 import { createAliyunIqsWebDiscoveryProvider } from '../adapters/aliyun-iqs-web-discovery';
 import { createAliyunOpenSearchWebDiscoveryProvider } from '../adapters/aliyun-opensearch-web-discovery';
 import {
@@ -81,6 +86,37 @@ test('managed gateway caches public results and rate-limits per install token', 
   assert.equal(third.body.status, 'RATE_LIMITED');
   const other = await gateway.search({ body: { query: 'another public topic' }, installToken: 'install-capability-token-test-0002' });
   assert.equal(other.body.status, 'AVAILABLE');
+});
+
+test('managed web discovery fails over between mature providers without changing the app contract', async () => {
+  const attempts: string[] = [];
+  const events: Array<{ event: string; provider?: string }> = [];
+  const provider = createFailoverWebDiscoveryProvider([
+    {
+      id: 'aliyun-iqs',
+      async search() {
+        attempts.push('aliyun-iqs');
+        throw new WebDiscoveryError('RATE_LIMITED', 'iqs_Retrieval.PackageExhausted', 403);
+      },
+    },
+    {
+      id: 'gemini',
+      async search() {
+        attempts.push('gemini');
+        return [{ title: 'Second provider result', url: 'https://example.com/fallback' }];
+      },
+    },
+  ], (event, fields) => events.push({ event, provider: String(fields.provider || '') }));
+  const gateway = createWebDiscoveryGateway({ provider });
+  const result = await gateway.search({
+    body: { query: '持械入宋 短剧', limit: 8 },
+    installToken: 'install-capability-token-test-failover',
+  });
+  assert.deepEqual(attempts, ['aliyun-iqs', 'gemini']);
+  assert.equal(result.body.status, 'AVAILABLE');
+  assert.equal(result.body.provider, 'web-discovery');
+  assert.equal(result.body.results?.[0]?.url, 'https://example.com/fallback');
+  assert.equal(events.some((row) => row.event === 'web_discovery_failover_ok' && row.provider === 'gemini'), true);
 });
 
 test('gateway 429 from provider is RATE_LIMITED; missing secret is MANAGED_PROVIDER_SECRET_REQUIRED', async () => {
@@ -293,7 +329,7 @@ test('Aliyun IQS UnifiedSearch maps pageItems and never sends Digital Self', asy
       const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
       assert.deepEqual(Object.keys(body).sort(), ['advancedParams', 'contents', 'engineType', 'query']);
       assert.equal(body.query, '今天人工智能有什么重要进展');
-      assert.equal(body.engineType, 'Generic');
+      assert.equal(body.engineType, 'CNAuto');
       assert.equal((body.contents as { mainText?: boolean }).mainText, false);
       assert.equal((body.contents as { rerankScore?: boolean }).rerankScore, false);
       assert.equal((body.advancedParams as { numResults?: number }).numResults, 8);
@@ -422,6 +458,16 @@ test('IQS official pageItems fixture maps title/link/snippet; empty pageItems is
   assert.equal(emptyResult.body.ok, true);
   assert.equal(emptyResult.body.status, 'AVAILABLE');
   assert.equal(emptyResult.body.results?.length, 0);
+});
+
+test('IQS explicit package exhaustion is quota even when upstream uses HTTP 401', async () => {
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async () => new Response(JSON.stringify({code:'iqs_Retrieval.PackageExhausted',message:'package exhausted'}), {status:401}),
+  });
+  await assert.rejects(() => provider.search({query:'course'}), (error: any) => {
+    assert.equal(error.status,'RATE_LIMITED'); assert.equal(error.httpStatus,401); return true;
+  });
 });
 
 test('IQS HTTP body with BOM still maps official pageItems', async () => {

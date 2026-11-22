@@ -3,6 +3,11 @@
  * 不爬站、不托管原文、不写用户偏好。AI 描述只看内容本身。
  */
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
+
+/** 读一个来源页最多等这么久。一个慢站不应让整次搜索跟着等 20 秒。 */
+const PAGE_READ_TIMEOUT_MS = 8_000;
+const pageReadGet: typeof safePublicHttpGet = (url, headers, redirectLeft, deps) =>
+  safePublicHttpGet(url, headers, redirectLeft, { timeoutMs: PAGE_READ_TIMEOUT_MS, ...(deps || {}) });
 import type { NetworkItemStore } from '../relay-service/network-item-store';
 import {
   NETWORK_ITEM_KIND_CONTENT,
@@ -73,6 +78,15 @@ export interface IngestSourceInput {
   enrich?: ContentEnricher;
   fetchImpl?: typeof safePublicHttpGet;
   via?: NetworkItemDiscoveryVia;
+  signal?: AbortSignal;
+}
+
+export interface IngestSourceResult {
+  sourceTitle: string;
+  records: IngestRecord[];
+  items: NetworkItem[];
+  /** HTTP 304 是成功检查但没有新正文，不得记作来源失败。 */
+  notModified?: boolean;
 }
 
 function xmlUnescape(raw: string): string {
@@ -208,8 +222,19 @@ async function toNetworkItem(input: {
   } catch (err) {
     return { status: 'rejected', reason: (err as { code?: string }).code || 'invalid_url' };
   }
-  const title = clipTitle(input.item.title || canonicalUrl);
-  let text = clipText(input.item.text || title);
+  const sourceTitle = String(input.item.title || '').trim();
+  if (/^(title|untitled|undefined|null)$/i.test(sourceTitle)) {
+    return { status: 'rejected', reason: 'placeholder_title' };
+  }
+  const title = clipTitle(sourceTitle || canonicalUrl);
+  const provided = clipText(input.item.text || '');
+  let host = '';
+  try {
+    host = new URL(canonicalUrl).hostname.replace(/^www\./, '');
+  } catch {
+    host = '';
+  }
+  let text = provided && provided !== title ? provided : clipText(host ? `来自 ${host}，页面没有单独摘录。` : '页面没有单独摘录。');
   if (!title || !text) return { status: 'rejected', reason: 'empty_item' };
   let actor: 'owner' | 'model' = 'owner';
   if (input.enrich) {
@@ -238,7 +263,9 @@ async function toNetworkItem(input: {
       title,
       text,
       url: canonicalUrl,
-      ...(media.contentType ? { contentType: media.contentType } : {}),
+      ...((media.contentType || (!media.mediaUrl && !media.embedUrl ? 'article' : ''))
+        ? { contentType: media.contentType || 'article' }
+        : {}),
       ...(media.author || input.item.author ? { author: media.author || input.item.author } : {}),
       ...(input.item.publishedAt && Number.isFinite(Date.parse(input.item.publishedAt))
         ? { publishedAt: new Date(input.item.publishedAt).toISOString() }
@@ -310,13 +337,12 @@ async function existingById(store: NetworkItemStore, itemId: string, now: string
   return listed.items.find((item) => item.itemId === itemId);
 }
 
-export async function ingestSource(input: IngestSourceInput): Promise<{
-  sourceTitle: string;
-  records: IngestRecord[];
-  items: NetworkItem[];
-}> {
+export async function ingestSource(input: IngestSourceInput): Promise<IngestSourceResult> {
+  if (input.signal?.aborted) {
+    return { sourceTitle: '', records: [{ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl }], items: [] };
+  }
   const now = input.now || new Date().toISOString();
-  const fetchImpl = input.fetchImpl || safePublicHttpGet;
+  const fetchImpl = input.fetchImpl || pageReadGet;
   let fetched;
   try {
     fetched = await fetchImpl(input.sourceUrl, {
@@ -328,6 +354,14 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
       sourceTitle: '',
       records: [{ status: 'unavailable', reason: (err as { code?: string }).code || 'fetch_failed', canonicalUrl: input.sourceUrl }],
       items: [],
+    };
+  }
+  if (fetched.status === 304) {
+    return {
+      sourceTitle: '',
+      records: [],
+      items: [],
+      notModified: true,
     };
   }
   if (fetched.status < 200 || fetched.status >= 300) {
@@ -355,16 +389,28 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
       limit: Math.min(Math.max(input.limit ?? 12, 1), 50),
       via: input.via || 'feed',
       ...(input.enrich ? { enrich: input.enrich } : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
     });
   }
   const looksFeed = looksLikeXmlFeed(body);
+  const pagePreview = looksFeed ? null : parseHtmlPreview(body, fetched.finalUrl);
+  const pageMeta = looksFeed ? null : parsePageMetadata(body, fetched.finalUrl);
   const parsed = looksFeed
     ? parseFeed(body)
-    : { sourceTitle: clipTitle(parseHtmlPreview(body, fetched.finalUrl).title), items: [parseHtmlPreview(body, fetched.finalUrl)] };
+    : {
+        sourceTitle: clipTitle(pageMeta?.publisher || (() => {
+          try {
+            return new URL(fetched.finalUrl).hostname.replace(/^www\./, '');
+          } catch {
+            return fetched.finalUrl;
+          }
+        })()),
+        items: pagePreview ? [pagePreview] : [],
+      };
   if (!looksFeed) {
     const preview = parsed.items[0];
-    const meta = parsePageMetadata(body, fetched.finalUrl);
-    if (preview && meta.oembedUrl) {
+    const meta = pageMeta;
+    if (preview && meta?.oembedUrl) {
       const oem = await resolveOEmbed({ url: fetched.finalUrl, html: body, fetchImpl });
       if (oem) preview.media = mergeOpenMedia(preview.media, oem.media);
     }
@@ -377,6 +423,7 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
     limit: Math.min(Math.max(input.limit ?? 12, 1), 50),
     via: input.via || (looksFeed ? 'feed' : 'page'),
     ...(input.enrich ? { enrich: input.enrich } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
   });
 }
 
@@ -388,10 +435,15 @@ async function persistParsed(input: {
   limit: number;
   enrich?: ContentEnricher;
   via?: NetworkItemDiscoveryVia;
+  signal?: AbortSignal;
 }): Promise<{ sourceTitle: string; records: IngestRecord[]; items: NetworkItem[] }> {
   const records: IngestRecord[] = [];
   const items: NetworkItem[] = [];
   for (const rawItem of input.parsed.items.slice(0, input.limit)) {
+    if (input.signal?.aborted) {
+      records.push({ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl });
+      break;
+    }
     const itemIdGuess = (() => {
       try {
         return contentItemId(normalizeCanonicalUrl(rawItem.url));
@@ -412,6 +464,10 @@ async function persistParsed(input: {
     if (result.status === 'rejected') {
       records.push({ status: 'rejected', reason: result.reason, sourceTitle: input.parsed.sourceTitle });
       continue;
+    }
+    if (input.signal?.aborted) {
+      records.push({ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl });
+      break;
     }
     await input.store.put(result.item);
     items.push(result.item);

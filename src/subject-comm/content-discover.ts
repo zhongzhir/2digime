@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
+import type { ResponsesToolTrace } from '../capability/adapters/responses-tool-loop';
 import type { DigitalSelf } from '../subject-core/digital-self/types';
 import { digitalSelfFilePath } from '../subject-core/digital-self/store';
 import type { NetworkItem } from './network-item';
@@ -28,11 +29,38 @@ export interface DiscoverCard {
   thumbnailUrl?: string;
   embedUrl?: string;
   mediaUrl?: string;
+  mimeType?: string;
   durationSeconds?: number;
   consumption?: string;
   access?: string;
+  /** 打开后的页面状态。验证页和读失败不是正常正文。 */
+  accessState?: 'challenge' | 'login' | 'unreadable';
+  /** 新闻聚合入口。和媒体原文不是同一个地址。 */
+  entryUrl?: string;
+  publisherUrl?: string;
+  linkKind?: 'original' | 'aggregator';
+  /** snippet 是来源摘要；body 才是读过的正文。 */
+  textOrigin?: 'snippet' | 'body';
   /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
+  /** 推荐依据出自哪篇片单、榜单或评论。依据文章不是作品本身。 */
+  basisSource?: { title: string; url?: string };
+  /** 用户这次提出的条件：材料能确认、不足，或这次没有这类条件。 */
+  conditionStatus?: 'met' | 'unconfirmed' | 'unmet' | 'none';
+  /** 证据不足时写明哪一条还没核实。不得写成已确认。 */
+  conditionNote?: string;
+  /** 对象类型，来自页面或判断，不是排序分。 */
+  objectKind?: string;
+  /** 入口用途：去原站打开 / 观看 / 收听 / 访问验证。 */
+  entrancePurpose?: string;
+  /** 模型依据页面判断这是片段、预告或剪辑，不是完整节目。 */
+  excerpt?: boolean;
+  /** 观看入口 / 发现依据 / 补充入口。由模型依据页面材料判断。 */
+  channelUse?: 'watch' | 'discover' | 'supplement';
+  /** 稍后看来源已不在目录里。收藏记录仍保留。 */
+  unavailable?: boolean;
+  /** 收藏仍在，但不进入国内默认供给。 */
+  sourceBoundary?: 'excluded_from_default';
 }
 
 export interface DiscoverPreference {
@@ -44,9 +72,16 @@ export interface DiscoverPreference {
 export interface DiscoverView {
   headline: string;
   lead: string;
+  /** 没有可展示卡片时，Digital Me 对本次请求的直接答复或必要追问。 */
+  responseText?: string;
   cards: DiscoverCard[];
   relatedCards?: DiscoverCard[];
   relatedTitle?: string;
+  /** 判断没完成的候选。可以打开，但不是已确认推荐。 */
+  unjudgedCards?: DiscoverCard[];
+  unjudgedTitle?: string;
+  /** 访问验证、登录墙、读取失败。不是未判断内容。 */
+  accessCards?: DiscoverCard[];
   preferences: DiscoverPreference[];
   notice: string;
   /** 内部诊断，UI 不得展示。 */
@@ -63,6 +98,24 @@ export interface DiscoverView {
   searchQuery?: string;
   /** 一次主动搜索的请求身份。过期 generation 不得覆盖当前可见状态。 */
   searchGenerationId?: string;
+  /** 连续浏览时只追加，不替换当前列表。 */
+  append?: boolean;
+  /** 稍后看收藏。刷新和重置不得清空。 */
+  laterCards?: DiscoverCard[];
+  /** 这次请求实际发给联网搜索的次数；同一请求内重复的搜索词复用结果，不再计次。UI 不得展示。 */
+  searchUsage?: { calls: number; reused: number; skippedAfterQuota: number; rateLimited: boolean };
+  /** 统一能力的真实供应商调用事实；不含密钥、提示正文或网页正文。UI 不得据此虚构阶段。 */
+  capabilityTrace?: ResponsesToolTrace[];
+  /** 发现页「本次调整」。不是数字之我，也不是打开/收藏推断。 */
+  adjustment?: {
+    id: string;
+    summary: string;
+    text: string;
+    scope: 'session' | 'keep';
+    appliesTo?: 'default_feed' | 'all';
+    scopeNote?: string;
+    question?: string;
+  };
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;
@@ -101,6 +154,7 @@ export function cardFromNetworkItem(
     ...(item.content.thumbnailUrl ? { thumbnailUrl: item.content.thumbnailUrl } : {}),
     ...(item.content.embedUrl ? { embedUrl: item.content.embedUrl } : {}),
     ...(item.content.mediaUrl ? { mediaUrl: item.content.mediaUrl } : {}),
+    ...(item.content.mimeType ? { mimeType: item.content.mimeType } : {}),
     ...(item.content.durationSeconds != null ? { durationSeconds: item.content.durationSeconds } : {}),
     ...(item.content.consumption ? { consumption: item.content.consumption } : {}),
     ...(item.content.access ? { access: item.content.access } : {}),
@@ -130,7 +184,7 @@ export async function discoverForSubject(input: {
 > {
   const empty = (notice: string): DiscoverView => ({
     headline: '发现',
-    lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+    lead: '看文章、图片、音频和视频。',
     cards: [],
     relatedCards: [],
     preferences: input.preferences || [],
@@ -185,7 +239,7 @@ export async function discoverForSubject(input: {
     ok: true,
     view: {
       headline: '发现',
-      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+      lead: '看文章、图片、音频和视频。',
       cards,
       relatedCards: [],
       preferences: input.preferences || [],

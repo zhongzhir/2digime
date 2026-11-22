@@ -1,0 +1,9 @@
+{
+  "environment": "local Ubuntu WSL root, temporary fixture paths only",
+  "realServiceCommands": 0,
+  "networkCalls": 0,
+  "passed": 8,
+  "cases": ["copy1", "copy2", "copy3", "environment", "restart", "health", "baseline", "successful deploy then manual rollback"],
+  "assertions": ["old files restored on mutation failure", "nonzero original deployment status retained", "baseline mismatch mutates nothing", "environment bytes restored", "environment mode 0640 retained", "uid and gid 65534 retained"],
+  "limits": ["cannot recover from SIGKILL or machine power loss", "persistent disk/service failure may also prevent rollback; logs report ROLLBACK FAILED and retain backup"]
+}

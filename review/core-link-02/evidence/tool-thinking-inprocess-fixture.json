@@ -1,0 +1,600 @@
+{
+  "fixture-summary": {
+    "passed": true,
+    "realSupplierCalls": 0,
+    "cases": [
+      "error_return_continue_final",
+      "real_read",
+      "authorized_write_readback",
+      "HTTP_error_no_retry",
+      "deadline_no_next_call",
+      "budget_no_next_call",
+      "cancel_before_write",
+      "cancel_after_write"
+    ],
+    "recoveryCalls": 4,
+    "before": false,
+    "after": true
+  },
+  "fixture-recovery-success": {
+    "status": "completed",
+    "elapsedMs": 24,
+    "stageCalls": 4,
+    "text": "已收到空参数错误，修正核验点后完成说明。",
+    "events": [
+      {
+        "id": "run_497031ba-3611-4132-a87c-734a439e9429",
+        "at": "2026-10-06T08:42:52.724Z",
+        "turnId": "turn_a438eedf-5804-4f52-80e4-7738599e554e",
+        "capabilityId": "set_expected_effects",
+        "instruction": "这是隔离测试，请在对话中说明核验结果，不读写文件、不联网。",
+        "ok": false,
+        "summary": "expected effects 为空",
+        "failureReason": "expected effects 为空"
+      },
+      {
+        "id": "run_a81f1359-7f34-43f2-ad91-90b5a04a828d",
+        "at": "2026-10-06T08:42:52.724Z",
+        "turnId": "turn_a438eedf-5804-4f52-80e4-7738599e554e",
+        "capabilityId": "set_expected_effects",
+        "instruction": "这是隔离测试，请在对话中说明核验结果，不读写文件、不联网。",
+        "ok": true,
+        "summary": "expected: observation",
+        "safeDetail": "{\"effects\":[{\"effect\":\"observation\",\"expectedState\":\"已完成核验\"}]}"
+      }
+    ],
+    "rows": [
+      {
+        "requestId": "cc35434a-f4cb-4ac4-bedf-2765b619846d",
+        "stage": "recovery",
+        "startedAt": "2026-10-06T08:42:52.727Z",
+        "remainingMs": 89995,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "4cd045dfae78714333cb79382fbee896b96c3d72495ae30827bd49ac86c47507",
+        "elapsedMs": 17,
+        "httpStatus": 200,
+        "finishReason": "tool_calls",
+        "outputLength": 0,
+        "toolCallCount": 1,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "",
+        "rawToolCalls": [
+          {
+            "id": "empty",
+            "type": "function",
+            "function": {
+              "name": "set_expected_effects",
+              "arguments": "{\"effects\":[]}"
+            }
+          }
+        ]
+      },
+      {
+        "requestId": "2019ab27-2f66-479d-be5a-370793e91690",
+        "stage": "recovery",
+        "startedAt": "2026-10-06T08:42:52.744Z",
+        "remainingMs": 89977,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "5781092485de71f1e5bbe66feff4c1b87099077094222706107c06f1293262a6",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "tool_calls",
+        "outputLength": 0,
+        "toolCallCount": 1,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "",
+        "rawToolCalls": [
+          {
+            "id": "corrected",
+            "type": "function",
+            "function": {
+              "name": "set_expected_effects",
+              "arguments": "{\"effects\":[{\"effect\":\"observation\",\"expectedState\":\"已完成核验\"}]}"
+            }
+          }
+        ]
+      },
+      {
+        "requestId": "84aa2bfc-f8ea-43f8-9717-73b2ec5a2c0d",
+        "stage": "recovery",
+        "startedAt": "2026-10-06T08:42:52.745Z",
+        "remainingMs": 89976,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "9f8ef1ef7182e7aed131d39c5f52517a5e500bbc5cb6a2ab8a7583b040139913",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "stop",
+        "outputLength": 20,
+        "toolCallCount": 0,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "已收到空参数错误，修正核验点后完成说明。",
+        "rawToolCalls": []
+      },
+      {
+        "requestId": "348d39af-b841-4d25-b338-94c2b85b2ac7",
+        "stage": "recovery",
+        "startedAt": "2026-10-06T08:42:52.746Z",
+        "remainingMs": 89976,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 0,
+        "inputHash": "049f366e817978a34925140aa525e27e0f74c532382168048b9ba69502595b5e",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "stop",
+        "outputLength": 20,
+        "toolCallCount": 0,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "已收到空参数错误，修正核验点后完成说明。",
+        "rawToolCalls": []
+      }
+    ]
+  },
+  "fixture-read": {
+    "status": "completed",
+    "elapsedMs": 9,
+    "stageCalls": 3,
+    "text": "文件夹总数10个，核验码Q7R3。",
+    "events": [
+      {
+        "id": "run_cbe792d1-f163-4e82-a247-a15f3460612a",
+        "at": "2026-10-06T08:42:52.751Z",
+        "turnId": "turn_b9a92f51-f1f3-4e9f-8cfc-f16d824371ed",
+        "capabilityId": "read_file",
+        "instruction": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral.txt",
+        "ok": true,
+        "summary": "已读取 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral.txt",
+        "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral.txt",
+        "observedEffect": {
+          "kind": "file_read",
+          "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral.txt",
+          "mutated": false
+        }
+      }
+    ],
+    "rows": [
+      {
+        "requestId": "8b45c9f5-195f-4404-8465-dd6073310b13",
+        "stage": "read",
+        "startedAt": "2026-10-06T08:42:52.753Z",
+        "remainingMs": 89996,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "3c5c7345f86f51c243e8cf5f3cf1e157fc66a559dbe3aca97d869cee06b0901c",
+        "elapsedMs": 1,
+        "httpStatus": 200,
+        "finishReason": "tool_calls",
+        "outputLength": 0,
+        "toolCallCount": 1,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "",
+        "rawToolCalls": [
+          {
+            "id": "tool_1",
+            "type": "function",
+            "function": {
+              "name": "read_file",
+              "arguments": "{\"path\":\"D:\\\\Projects\\\\Digital Me\\\\.task-worktrees\\\\core-link-01\\\\build\\\\evidence\\\\tool-thinking-inprocess-fixture-final\\\\authorized\\\\neutral.txt\"}"
+            }
+          }
+        ]
+      },
+      {
+        "requestId": "08abc7d8-aaa8-4272-a484-f20af0abffa1",
+        "stage": "read",
+        "startedAt": "2026-10-06T08:42:52.757Z",
+        "remainingMs": 89992,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "dc4c27e287ab1e8e60688f4529bbeed82ede5a2ecfae08b0a4cca82467397b80",
+        "elapsedMs": 1,
+        "httpStatus": 200,
+        "finishReason": "stop",
+        "outputLength": 17,
+        "toolCallCount": 0,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "文件夹总数10个，核验码Q7R3。",
+        "rawToolCalls": []
+      },
+      {
+        "requestId": "25f723e3-c3ef-4ea1-8863-49313e28e728",
+        "stage": "read",
+        "startedAt": "2026-10-06T08:42:52.758Z",
+        "remainingMs": 89991,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 0,
+        "inputHash": "3ab922d5064a63f83b1324c2ff5ea191a58c69741e32d22ecf59243b59c1c38f",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "stop",
+        "outputLength": 17,
+        "toolCallCount": 0,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "文件夹总数10个，核验码Q7R3。",
+        "rawToolCalls": []
+      }
+    ]
+  },
+  "fixture-write": {
+    "status": "completed",
+    "elapsedMs": 12,
+    "stageCalls": 2,
+    "text": "已写入并回读，总计10个，核验码Q7R3。",
+    "events": [
+      {
+        "id": "run_d57d0e24-9271-47bc-814c-7b88bcbc1d85",
+        "at": "2026-10-06T08:42:52.760Z",
+        "turnId": "turn_ca650093-9663-4f27-886a-3918bc892620",
+        "capabilityId": "write_file",
+        "instruction": "neutral-result.txt",
+        "ok": true,
+        "summary": "已写入 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt。回读全文 21 字。",
+        "producedOutputs": [
+          "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt"
+        ],
+        "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt",
+        "observedEffect": {
+          "kind": "file_created",
+          "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt",
+          "mutated": true
+        }
+      },
+      {
+        "id": "run_d4c2cd07-e0c8-4ee4-bf44-3439a2affc81",
+        "at": "2026-10-06T08:42:52.760Z",
+        "turnId": "turn_ca650093-9663-4f27-886a-3918bc892620",
+        "capabilityId": "read_file",
+        "instruction": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt",
+        "ok": true,
+        "summary": "已读取 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt",
+        "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt",
+        "observedEffect": {
+          "kind": "file_read",
+          "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\neutral-result.txt",
+          "mutated": false
+        }
+      }
+    ],
+    "rows": [
+      {
+        "requestId": "16234efe-f4d7-46d3-919d-315c193cab24",
+        "stage": "write",
+        "startedAt": "2026-10-06T08:42:52.761Z",
+        "remainingMs": 89998,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "ce46275b227ff7fee838d35c9b39a247c223e98d07b7357ee1da146cf97a053c",
+        "elapsedMs": 1,
+        "httpStatus": 200,
+        "finishReason": "tool_calls",
+        "outputLength": 0,
+        "toolCallCount": 2,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "",
+        "rawToolCalls": [
+          {
+            "id": "write",
+            "type": "function",
+            "function": {
+              "name": "write_file",
+              "arguments": "{\"relativePath\":\"neutral-result.txt\",\"content\":\"库存核验完成：总计10个，核验码Q7R3。\"}"
+            }
+          },
+          {
+            "id": "read",
+            "type": "function",
+            "function": {
+              "name": "read_file",
+              "arguments": "{\"path\":\"D:\\\\Projects\\\\Digital Me\\\\.task-worktrees\\\\core-link-01\\\\build\\\\evidence\\\\tool-thinking-inprocess-fixture-final\\\\authorized\\\\neutral-result.txt\"}"
+            }
+          }
+        ]
+      },
+      {
+        "requestId": "a79c8778-6062-4ecf-a845-ae73312a2e6b",
+        "stage": "write",
+        "startedAt": "2026-10-06T08:42:52.771Z",
+        "remainingMs": 89988,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "8d0ae3a09124a4d3d2020d54917cc631c34427d4cbb242c2fd6667aeddfe892e",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "stop",
+        "outputLength": 21,
+        "toolCallCount": 0,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "已写入并回读，总计10个，核验码Q7R3。",
+        "rawToolCalls": []
+      }
+    ],
+    "disk": {
+      "text": "库存核验完成：总计10个，核验码Q7R3。",
+      "bytes": 51,
+      "sha256": "55db2be740738895b3f0524e7af9a2cc0ffd2cbdd37aa4885426de6130a0b092"
+    }
+  },
+  "fixture-network-failure": {
+    "status": "stopped",
+    "error": "supplier_failed",
+    "elapsedMs": 3,
+    "stageCalls": 1,
+    "cancelled": false,
+    "events": [],
+    "rows": [
+      {
+        "requestId": "c63732a8-fbe8-4ec3-888c-9688ee6b1a87",
+        "stage": "recovery",
+        "startedAt": "2026-10-06T08:42:52.775Z",
+        "remainingMs": 89998,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "4cd045dfae78714333cb79382fbee896b96c3d72495ae30827bd49ac86c47507",
+        "error": "ModelHttpError",
+        "failureKind": "server_error",
+        "httpStatus": 503,
+        "elapsedMs": 1,
+        "cancelSource": null
+      }
+    ]
+  },
+  "fixture-deadline": {
+    "status": "stopped",
+    "error": "shared_deadline",
+    "elapsedMs": 36,
+    "stageCalls": 1,
+    "cancelled": true,
+    "cancelSource": "shared_deadline",
+    "events": [],
+    "rows": [
+      {
+        "requestId": "d566497c-17d6-4b0f-bb86-b4dfdaf80813",
+        "stage": "recovery",
+        "startedAt": "2026-10-06T08:42:52.779Z",
+        "remainingMs": 23,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "4cd045dfae78714333cb79382fbee896b96c3d72495ae30827bd49ac86c47507",
+        "error": "ModelHttpError",
+        "failureKind": "aborted",
+        "elapsedMs": 34,
+        "cancelSource": "shared_deadline"
+      }
+    ]
+  },
+  "fixture-budget": {
+    "status": "stopped",
+    "error": "supplier call budget exhausted",
+    "elapsedMs": 2,
+    "stageCalls": 0,
+    "cancelled": false,
+    "events": [],
+    "rows": []
+  },
+  "fixture-cancel-before_write": {
+    "status": "stopped",
+    "error": "user_cancel_after_async_stat_before_write",
+    "elapsedMs": 3,
+    "stageCalls": 1,
+    "cancelled": true,
+    "cancelSource": "user_cancel_after_async_stat_before_write",
+    "events": [
+      {
+        "type": "cancel",
+        "source": "user",
+        "boundary": "before_write"
+      }
+    ],
+    "rows": [
+      {
+        "requestId": "7eeedddb-5c1a-49f0-a2bc-0a355941ccfa",
+        "stage": "cancel",
+        "startedAt": "2026-10-06T08:42:52.820Z",
+        "remainingMs": 89998,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "4d429cb42dc8b30fb79648c208412263ffffd11c42d38c644ec13016e222b77e",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "tool_calls",
+        "outputLength": 0,
+        "toolCallCount": 1,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "",
+        "rawToolCalls": [
+          {
+            "id": "tool_1",
+            "type": "function",
+            "function": {
+              "name": "write_file",
+              "arguments": "{\"relativePath\":\"cancelled.txt\",\"content\":\"取消边界测试\"}"
+            }
+          }
+        ]
+      }
+    ],
+    "cancelFileExists": false,
+    "boundaryTriggered": true,
+    "transportAttemptedAfterStop": 0
+  },
+  "fixture-cancel-after_write": {
+    "status": "stopped",
+    "error": "user_cancel_after_actual_write",
+    "elapsedMs": 6,
+    "stageCalls": 1,
+    "cancelled": true,
+    "cancelSource": "user_cancel_after_actual_write",
+    "events": [
+      {
+        "type": "cancel",
+        "source": "user",
+        "boundary": "after_write"
+      },
+      {
+        "id": "run_e34bceef-d4dc-4a67-9a2d-a5b8aac04730",
+        "at": "2026-10-06T08:42:52.823Z",
+        "turnId": "turn_5165b5ec-ed73-46eb-ab13-bab57c8db075",
+        "capabilityId": "write_file",
+        "instruction": "cancelled.txt",
+        "ok": true,
+        "summary": "已写入 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\cancelled.txt。回读全文 6 字。",
+        "producedOutputs": [
+          "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\cancelled.txt"
+        ],
+        "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\cancelled.txt",
+        "observedEffect": {
+          "kind": "file_created",
+          "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\tool-thinking-inprocess-fixture-final\\authorized\\cancelled.txt",
+          "mutated": true
+        }
+      }
+    ],
+    "rows": [
+      {
+        "requestId": "aec17956-6d6f-41a0-8308-c1abb6a02cdf",
+        "stage": "cancel",
+        "startedAt": "2026-10-06T08:42:52.824Z",
+        "remainingMs": 89998,
+        "configuredModel": "fixture-model",
+        "maxTokens": 2048,
+        "thinking": "disabled",
+        "toolCount": 5,
+        "inputHash": "4d429cb42dc8b30fb79648c208412263ffffd11c42d38c644ec13016e222b77e",
+        "elapsedMs": 0,
+        "httpStatus": 200,
+        "finishReason": "tool_calls",
+        "outputLength": 0,
+        "toolCallCount": 1,
+        "reasoningLength": 0,
+        "reasoningTokens": null,
+        "returnedModel": "fixture-model",
+        "usage": {
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0
+        },
+        "usageSource": "fixture",
+        "text": "",
+        "rawToolCalls": [
+          {
+            "id": "tool_1",
+            "type": "function",
+            "function": {
+              "name": "write_file",
+              "arguments": "{\"relativePath\":\"cancelled.txt\",\"content\":\"取消边界测试\"}"
+            }
+          }
+        ]
+      }
+    ],
+    "cancelFileExists": true,
+    "boundaryTriggered": true,
+    "transportAttemptedAfterStop": 0
+  }
+}

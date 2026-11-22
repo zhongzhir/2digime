@@ -49,6 +49,9 @@ export interface ChatMessage {
 }
 
 export interface ChatCompleteOptions {
+  /** Transient request metadata; never contains prompt/body/credentials. */
+  deadlineAt?: number;
+  stage?: string;
   baseUrl: string; // 例:https://api.example.com/v1
   apiKey?: string;
   model: string;
@@ -71,9 +74,17 @@ export interface ChatCompleteOptions {
   /** OpenAI-compatible tool calling. 工具是能力合同，不是任务类型枚举。 */
   tools?: ChatToolDefinition[];
   toolChoice?: 'auto' | 'none';
+  /**
+   * 短 JSON 判断不必先写长推理。当前端点接受 `{ type: 'disabled' }`。
+   * 端点拒绝时由调用方再试一次不带该字段的请求。
+   */
+  thinking?: { type: 'disabled' };
 }
 
 export interface ChatCompleteResult {
+  /** Provider transport metadata only; never includes reasoning or response bodies. */
+  providerMeta?: { httpStatus: number; responseId?: string; model?: string; reasoningLength: number; reasoningTokens?: number };
+  diagnostic?: ModelCallDiagnostic;
   text: string;
   toolCalls?: ChatToolCall[];
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -81,6 +92,17 @@ export interface ChatCompleteResult {
   finishReason?: string;
   /** true when provider stopped due to token/length limit (or equivalent). */
   truncated?: boolean;
+}
+
+export interface ModelCallDiagnostic {
+  stage: string;
+  requestId?: string;
+  httpStatus: number | null;
+  finishReason: string | null;
+  outputLength: number | null;
+  parseError: 'json' | 'envelope' | 'schema' | null;
+  cancellation: 'deadline' | 'user' | 'superseded' | 'caller' | null;
+  failure: 'truncated' | 'empty' | 'format' | 'network' | 'cancelled' | 'timeout' | 'http' | null;
 }
 
 export function parseChatUsage(usage: unknown): { inputTokens: number; outputTokens: number; totalTokens: number } | undefined {
@@ -102,7 +124,10 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 export const DEFAULT_CHAT_MAX_TOKENS = 4096;
 
 export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCompleteResult> {
-  const body = JSON.parse(await requestCompletion(options, false)) as {
+  const response = await requestCompletion(options, false);
+  const body = JSON.parse(response.text) as {
+    model?: string;
+    id?: string;
     choices?: Array<{
       message?: {
         content?: string | null;
@@ -115,6 +140,7 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
       total_tokens?: number;
       prompt_tokens?: number;
       completion_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
       input_tokens?: number;
       output_tokens?: number;
     };
@@ -127,6 +153,12 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
   const contentText = typeof content === 'string' ? content : '';
   const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : undefined;
   const truncated = finishReason === 'length';
+  const usage = parseChatUsage(body.usage);
+  const reasoningTokens = body.usage?.completion_tokens_details?.reasoning_tokens;
+  const providerMeta = { httpStatus: response.httpStatus, reasoningLength: typeof message?.reasoning_content === 'string' ? message.reasoning_content.length : 0,
+    ...(typeof body.id === 'string' && /^[A-Za-z0-9._:-]{1,128}$/.test(body.id) ? { responseId: body.id } : {}),
+    ...(typeof body.model === 'string' && /^[A-Za-z0-9._/-]{1,80}$/.test(body.model) ? { model: body.model } : {}),
+    ...(typeof reasoningTokens === 'number' && Number.isFinite(reasoningTokens) ? { reasoningTokens } : {}) };
   if (contentText.trim().length === 0 && !(toolCalls && toolCalls.length > 0)) {
     // token 上限耗尽且无 final 正文：仍标 truncated，供上层显示「回复未完成」
     if (truncated) {
@@ -134,6 +166,8 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
         text: '',
         finishReason,
         truncated: true,
+        ...(usage ? { usage } : {}),
+        providerMeta,
       };
     }
     throw new ModelHttpError(
@@ -143,11 +177,11 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
   }
   const result: ChatCompleteResult = {
     text: contentText,
+    providerMeta,
     ...(toolCalls && toolCalls.length ? { toolCalls } : {}),
     ...(finishReason ? { finishReason } : {}),
     ...(truncated ? { truncated: true } : {}),
   };
-  const usage = parseChatUsage(body.usage);
   if (usage) result.usage = usage;
   return result;
 }
@@ -159,7 +193,7 @@ export async function chatCompleteStream(
   const raw = await requestCompletion(options, true);
   let text = '';
   let finishReason: string | undefined;
-  for (const line of raw.split('\n')) {
+  for (const line of raw.text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('data:')) continue;
     const payload = trimmed.slice('data:'.length).trim();
@@ -196,7 +230,7 @@ export async function chatCompleteStream(
   };
 }
 
-async function requestCompletion(options: ChatCompleteOptions, stream: boolean): Promise<string> {
+async function requestCompletion(options: ChatCompleteOptions, stream: boolean): Promise<{ text: string; httpStatus: number }> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(new ModelHttpError('timeout', `timeout after ${timeoutMs}ms`)), timeoutMs);
@@ -224,6 +258,7 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
     if (options.responseFormat) payload.response_format = options.responseFormat;
     if (options.tools && options.tools.length > 0) payload.tools = options.tools;
     if (options.toolChoice) payload.tool_choice = options.toolChoice;
+    if (options.thinking) payload.thinking = options.thinking;
 
     let response: Response;
     try {
@@ -240,7 +275,7 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
       throw classifyHttpStatus(response.status, await safeReadBody(response));
     }
     try {
-      return await response.text();
+      return { text: await response.text(), httpStatus: response.status };
     } catch (error) {
       throw classifyFetchFailure(error, controller.signal);
     }

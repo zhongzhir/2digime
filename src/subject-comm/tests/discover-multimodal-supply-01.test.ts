@@ -6,8 +6,13 @@ import * as path from 'node:path';
 import { seekContent, openMediaQueries } from '../content-seek';
 import { intentFromModelText, objectFidelity, defaultDiscoverIntent } from '../discover-intent';
 import { ensurePersonalFeed } from '../personal-feed';
-import { catalogEndpointsFor, OPEN_SOURCE_CATALOG } from '../open-source-catalog';
-import { searchOpenMedia, sourceKindsForRequest } from '../content-source-capabilities';
+import {
+  catalogEndpointsFor,
+  OPEN_SOURCE_CATALOG,
+  supportsDefaultCatalogListing,
+  type OpenSourceEndpoint,
+} from '../open-source-catalog';
+import { listOpenCatalog, searchOpenMedia, sourceKindsForRequest } from '../content-source-capabilities';
 import { hasPlayableAudioRepresentation } from '../content-media';
 import { validateNetworkItem, type NetworkItem } from '../network-item';
 import type { DigitalSelf } from '../../subject-core/digital-self/types';
@@ -192,31 +197,30 @@ test('SOURCE ROUTING: current search does not spray all media APIs when type is 
 test('SOURCE ROUTING: article / video / image / audio pick distinct open capabilities', async () => {
   assert.deepEqual(sourceKindsForRequest([]), ['article', 'video', 'image', 'audio']);
   assert.deepEqual(sourceKindsForRequest(['video']), ['video']);
-  assert.equal(catalogEndpointsFor(['video']).some((row) => row.kind === 'peertube_search'), true);
+  assert.equal(catalogEndpointsFor(['video']).some((row) => row.kind === 'wikimedia_commons' || row.kind === 'internet_archive'), true);
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => row.contentTypes.includes('image')), true);
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => row.kind === 'itunes_podcast'), true);
+  assert.equal(OPEN_SOURCE_CATALOG.some((row) => /bbc|guardian|npr|aljazeera|epoch/i.test(row.url)), false);
+  const defaultSources = OPEN_SOURCE_CATALOG.filter(supportsDefaultCatalogListing);
+  assert.equal(defaultSources.length >= 20, true);
+  assert.equal(new Set(defaultSources.map((row) => new URL(row.url).hostname)).size >= 6, true);
 
   const fetchImpl = async (url: string) => {
-    if (url.includes('framatube.org/api')) {
+    if (url.includes('commons.wikimedia.org') && url.includes('filetype')) {
       return {
         status: 200,
         body: JSON.stringify({
-          total: 1,
-          data: [
-            {
-              name: 'AI talk',
-              url: 'https://framatube.org/w/abc',
-              thumbnailPath: '/t.jpg',
-              embedPath: '/videos/embed/abc',
-              duration: 42,
+          query: {
+            pages: {
+              '2': {
+                title: 'File:AI-talk.webm',
+                imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/ai.webm', mime: 'video/webm' }],
+              },
             },
-          ],
+          },
         }),
         finalUrl: url,
       };
-    }
-    if (url.includes('commons.wikimedia.org') && url.includes('filetype')) {
-      return { status: 200, body: JSON.stringify({ query: { pages: {} } }), finalUrl: url };
     }
     if (url.includes('commons.wikimedia.org')) {
       return {
@@ -261,7 +265,7 @@ test('SOURCE ROUTING: article / video / image / audio pick distinct open capabil
 
   const videos = await searchOpenMedia({ query: 'AI', kinds: ['video'], fetchImpl });
   assert.equal(videos[0]?.contentType, 'video');
-  assert.equal(videos[0]?.capability, 'peertube-framatube-search');
+  assert.equal(videos[0]?.capability, 'wikimedia-commons');
   const images = await searchOpenMedia({ query: '航天摄影', kinds: ['image'], fetchImpl });
   assert.equal(images[0]?.contentType, 'image');
   const audio = await searchOpenMedia({ query: '科技播客', kinds: ['audio'], fetchImpl });
@@ -277,7 +281,8 @@ test('SOURCE ROUTING: article / video / image / audio pick distinct open capabil
     }),
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
-  assert.equal(routed.cards.some((card) => card.contentType === 'video'), true);
+  const routedMedia = [...routed.cards, ...routed.unjudgedCards];
+  assert.equal(routedMedia.some((card) => card.contentType === 'video'), true);
   assert.equal(routed.cards.some((card) => card.contentType === 'article'), false);
 });
 
@@ -366,10 +371,12 @@ test('UI consumes image as visual subject, video at source, audio controls witho
   const ui = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
   assert.equal(ui.includes("card.contentType === 'image'"), true);
   assert.equal(ui.includes('content-discover-cover--image'), true);
-  assert.equal(ui.includes("type === 'video'") && ui.includes('在来源观看'), true);
+  assert.equal(ui.includes("type === 'video'") && ui.includes('去原站观看'), true);
   assert.equal(ui.includes("loadedmetadata"), true);
-  assert.equal(ui.includes('audio.controls = true'), true);
-  assert.equal(ui.includes('audio.hidden = true'), true);
+  assert.equal(ui.includes('media.controls = true'), true);
+  assert.equal(ui.includes("'content-discover-video'"), true);
+  assert.equal(ui.includes('togglePlayer'), true);
+  assert.equal(ui.includes('media.hidden = true'), true);
   assert.equal(ui.includes("img.addEventListener('error'"), true);
   assert.equal(ui.includes("skipRender: true"), true);
   assert.equal(/0:00\/0:00/.test(ui), false);
@@ -445,10 +452,11 @@ test('IMAGE: open media still runs after web articles, and full-sentence query i
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(commonsSearches.some((row) => row && row !== query), true);
-  assert.equal(sought.cards.some((card) => card.contentType === 'image'), true);
+  const visible = [...sought.cards, ...sought.unjudgedCards, ...sought.relatedCards];
+  assert.equal(visible.some((card) => card.contentType === 'image'), true);
   assert.equal(sought.cards.some((card) => card.contentType === 'article'), false);
-  assert.equal(sought.relatedCards.some((card) => /相关报道/.test(card.title)), true);
-  const image = sought.cards.find((card) => card.contentType === 'image');
+  assert.equal(visible.some((card) => /相关报道/.test(card.title)), true);
+  const image = visible.find((card) => card.contentType === 'image');
   assert.ok(image?.mediaUrl || image?.thumbnailUrl);
   assert.match(String(image?.thumbnailUrl || image?.mediaUrl || ''), /https:\/\/upload\.wikimedia\.org\//);
 });
@@ -502,4 +510,262 @@ test('AUDIO: episode preview is playable representation; show landing page is no
   assert.equal(show?.contentType, 'audio');
   assert.equal(show?.mediaUrl, undefined);
   assert.equal(show?.url, 'https://podcasts.apple.com/podcast/id9');
+});
+
+test('commons image keeps the API description, preview and original date', async () => {
+  const hits = await searchOpenMedia({
+    query: 'Jupiter',
+    kinds: ['image'],
+    endpoints: [
+      {
+        id: 'commons-test',
+        label: 'Wikimedia Commons',
+        kind: 'wikimedia_commons',
+        url: 'https://commons.wikimedia.org/w/api.php',
+        contentTypes: ['image'],
+      },
+    ],
+    fetchImpl: async () => ({
+      status: 200,
+      body: JSON.stringify({
+        query: {
+          pages: {
+            '1': {
+              title: 'File:Jupiter_from_Cassini.jpg',
+              imageinfo: [
+                {
+                  url: 'https://upload.wikimedia.org/wikipedia/commons/j.jpg',
+                  thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/j.jpg',
+                  mime: 'image/jpeg',
+                  extmetadata: {
+                    ObjectName: { value: 'Jupiter from Cassini' },
+                    ImageDescription: { value: '<p>The Great Red Spot seen by Cassini.</p>' },
+                    DateTimeOriginal: { value: '2000-12-29 00:00:00' },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+      finalUrl: 'https://commons.wikimedia.org/w/api.php',
+    }),
+  });
+  assert.equal(hits[0]?.title, 'Jupiter from Cassini');
+  assert.match(hits[0]?.snippet || '', /Great Red Spot/);
+  assert.equal(hits[0]?.thumbnailUrl, 'https://upload.wikimedia.org/wikipedia/commons/thumb/j.jpg');
+  assert.equal(hits[0]?.publishedAt, '2000-12-29T00:00:00.000Z');
+});
+
+test('internet archive returns a public file, and a page without a file is not an audio card', async () => {
+  const fetchImpl = async (url: string) => {
+    if (url.includes('advancedsearch.php')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          response: { docs: [{ identifier: 'bach-cello-suite', title: 'Bach Cello Suite No. 1' }] },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('/metadata/')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          metadata: { title: 'Bach Cello Suite No. 1' },
+          files: [{ name: 'disc1/prelude.mp3', format: 'VBR MP3' }],
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('itunes.apple.com')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          resultCount: 1,
+          results: [
+            {
+              kind: 'podcast',
+              collectionName: 'A blog about the suite',
+              collectionViewUrl: 'https://example.org/blog/suite',
+            },
+          ],
+        }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+  const hits = await searchOpenMedia({
+    query: 'Bach Cello Suite',
+    kinds: ['audio'],
+    fetchImpl,
+    endpoints: [
+      {
+        id: 'internet-archive',
+        label: 'Internet Archive',
+        kind: 'internet_archive',
+        url: 'https://archive.org/advancedsearch.php',
+        contentTypes: ['audio'],
+      },
+    ],
+  });
+  assert.equal(hits[0]?.contentType, 'audio');
+  assert.equal(hits[0]?.mediaUrl, 'https://archive.org/download/bach-cello-suite/disc1/prelude.mp3');
+  const sought = await seekContent({
+    query: 'Bach Cello Suite',
+    items: [],
+    fetchOpenMedia: fetchImpl,
+    intent: {
+      intent: 'consume',
+      topic: 'Bach Cello Suite',
+      requestedMedia: ['audio'],
+      objectWanted: 'work_itself',
+      freshness: 'classic',
+      popularityClaim: false,
+      searchQueries: ['Bach Cello Suite'],
+      suggestTalk: false,
+      scope: 'current_search',
+    },
+  });
+  assert.equal(sought.cards.some((card) => card.mediaUrl && card.mediaUrl.endsWith('.mp3')), true);
+  assert.equal(sought.cards.some((card) => /blog\/suite/.test(String(card.url || ''))), false);
+});
+
+test('internet archive catalog resumes by official page and emits the next source cursor', async () => {
+  const requestedPages: string[] = [];
+  const attempts: Array<{ sourceId: string; ok: boolean; itemCount: number; cursor?: string | null }> = [];
+  const endpoint: OpenSourceEndpoint = {
+    id: 'internet-archive',
+    label: 'Internet Archive',
+    kind: 'internet_archive' as const,
+    url: 'https://archive.org/advancedsearch.php',
+    contentTypes: ['audio'],
+  };
+  const fetchImpl = async (url: string) => {
+    if (url.includes('advancedsearch.php')) {
+      const page = new URL(url).searchParams.get('page') || '';
+      requestedPages.push(page);
+      return {
+        status: 200,
+        body: JSON.stringify({
+          response: {
+            docs: page === '3' ? [] : [{ identifier: `audio-page-${page}`, title: `Audio page ${page}` }],
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('/metadata/')) {
+      return {
+        status: 200,
+        body: JSON.stringify({ metadata: {}, files: [{ name: 'track.mp3' }] }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+
+  await listOpenCatalog({
+    kinds: ['audio'],
+    endpoints: [endpoint],
+    fetchImpl,
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+  await listOpenCatalog({
+    kinds: ['audio'],
+    endpoints: [endpoint],
+    fetchImpl,
+    cursorBySourceId: { 'internet-archive': 'internet-archive:page:2' },
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+  await listOpenCatalog({
+    kinds: ['audio'],
+    endpoints: [endpoint],
+    fetchImpl,
+    cursorBySourceId: { 'internet-archive': 'internet-archive:page:3' },
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+
+  assert.deepEqual(requestedPages, ['1', '2', '3']);
+  assert.equal(attempts[0]?.cursor, 'internet-archive:page:2');
+  assert.equal(attempts[1]?.cursor, 'internet-archive:page:3');
+  assert.equal(attempts[2]?.cursor, null);
+});
+
+test('commons catalog keeps independent continuation for image, audio and video streams', async () => {
+  const calls: Array<{ kind: string; continuation: string }> = [];
+  const attempts: Array<{ sourceId: string; ok: boolean; itemCount: number; cursor?: string | null }> = [];
+  let round = 1;
+  const endpoint: OpenSourceEndpoint = {
+    id: 'wikimedia-commons',
+    label: 'Wikimedia Commons',
+    kind: 'wikimedia_commons',
+    url: 'https://commons.wikimedia.org/w/api.php',
+    contentTypes: ['image', 'audio', 'video'],
+  };
+  const fetchImpl = async (url: string) => {
+    const parsed = new URL(url);
+    const search = parsed.searchParams.get('gsrsearch') || '';
+    const kind = parsed.searchParams.get('generator') === 'allimages'
+      ? 'image'
+      : search.includes('audio')
+        ? 'audio'
+        : 'video';
+    const continuation = parsed.searchParams.get('gaicontinue') || parsed.searchParams.get('gsroffset') || '';
+    calls.push({ kind, continuation });
+    const tokenKey = kind === 'image' ? 'gaicontinue' : 'gsroffset';
+    const hasMore = round === 1 && kind !== 'video';
+    const suffix = kind === 'image' ? 'jpg' : kind === 'audio' ? 'ogg' : 'webm';
+    return {
+      status: 200,
+      body: JSON.stringify({
+        ...(hasMore
+          ? {
+              continue: {
+                continue: kind === 'image' ? 'gaicontinue||' : 'gsroffset||',
+                [tokenKey]: kind === 'image' ? 'image-next' : 8,
+              },
+            }
+          : {}),
+        query: {
+          pages: {
+            '1': {
+              title: `File:${kind}-${round}.${suffix}`,
+              imageinfo: [
+                {
+                  url: `https://upload.wikimedia.org/wikipedia/commons/${kind}-${round}.${suffix}`,
+                  mime: kind === 'image' ? 'image/jpeg' : kind === 'audio' ? 'audio/ogg' : 'video/webm',
+                },
+              ],
+            },
+          },
+        },
+      }),
+      finalUrl: url,
+    };
+  };
+
+  await listOpenCatalog({
+    endpoints: [endpoint],
+    fetchImpl,
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+  const cursor = attempts[0]?.cursor;
+  assert.equal(typeof cursor, 'string');
+  assert.match(String(cursor), /^wikimedia-commons:v1:/);
+
+  round = 2;
+  await listOpenCatalog({
+    endpoints: [endpoint],
+    fetchImpl,
+    cursorBySourceId: { 'wikimedia-commons': String(cursor) },
+    onSourceAttempt: (attempt) => attempts.push(attempt),
+  });
+
+  assert.deepEqual(calls.slice(0, 3).map((call) => call.kind).sort(), ['audio', 'image', 'video']);
+  assert.deepEqual(calls.slice(3).map((call) => call.kind).sort(), ['audio', 'image']);
+  assert.equal(calls.some((call) => call.kind === 'image' && call.continuation === 'image-next'), true);
+  assert.equal(calls.some((call) => call.kind === 'audio' && call.continuation === '8'), true);
+  assert.equal(attempts[1]?.cursor, null);
 });

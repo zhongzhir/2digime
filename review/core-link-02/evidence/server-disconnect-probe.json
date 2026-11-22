@@ -1,0 +1,14 @@
+{
+  "kind": "local HTTP fixture, real socket disconnect; proposed compiled-only change restored",
+  "current": {
+    "requestBodyComplete": true,
+    "clientDisconnected": true,
+    "providerSignalAborted": false
+  },
+  "proposed": {
+    "requestBodyComplete": true,
+    "clientDisconnected": true,
+    "providerSignalAborted": true
+  },
+  "restored": true
+}

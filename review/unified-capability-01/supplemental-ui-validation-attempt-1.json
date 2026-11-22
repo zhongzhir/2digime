@@ -1,0 +1,36 @@
+{
+  "task": "DIGITALME-UNIFIED-CAPABILITY-01 supplemental validation",
+  "startedAt": "2026-10-10T09:07:49.936Z",
+  "head": "dc0a191a2d27315d80843763b58037344256adf9",
+  "endpoint": "https://ws-ok2fv132ihswnia7.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+  "model": "qwen3.8-flash",
+  "isolatedUserData": "C:\\Users\\46554\\AppData\\Local\\Temp\\digitalme-unified-supplemental-aw4hvx",
+  "credential": {
+    "source": "local CSV read in runner process",
+    "valueRecorded": false
+  },
+  "budget": {
+    "priorAdmissionCny": 1.8442125,
+    "supplementalTargetCny": 2,
+    "supplementalKnownCny": 0,
+    "supplementalUnknownReserveCny": 0,
+    "requests": [],
+    "supplementalAdmissionCny": 0,
+    "totalAdmissionIncludingPriorCny": 1.8442125
+  },
+  "tasks": {},
+  "failures": [
+    "page.waitForFunction: EvalError: Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: \"script-src 'self'\".\n\n    at eval (<anonymous>)\n    at predicate (eval at evaluate (:234:30), <anonymous>:11:37)\n    at next (eval at evaluate (:234:30), <anonymous>:32:31)\n    at waitForTalkCompletion (D:\\Projects\\Digital Me\\.task-worktrees\\unified-capability-01\\review\\unified-capability-01\\ui-request-lifecycle.cjs:40:14)\n    at finishTalk (D:\\Projects\\Digital Me\\.task-worktrees\\unified-capability-01\\review\\unified-capability-01\\run-supplemental-ui-validation.cjs:183:29)\n    at sendTalk (D:\\Projects\\Digital Me\\.task-worktrees\\unified-capability-01\\review\\unified-capability-01\\run-supplemental-ui-validation.cjs:205:12)\n    at async main (D:\\Projects\\Digital Me\\.task-worktrees\\unified-capability-01\\review\\unified-capability-01\\run-supplemental-ui-validation.cjs:248:21)"
+  ],
+  "configuration": {
+    "saveModelReady": true,
+    "activeModelReady": true,
+    "model": "qwen3.8-flash",
+    "host": "ws-ok2fv132ihswnia7.cn-beijing.maas.aliyuncs.com"
+  },
+  "subjectDir": "C:\\Users\\46554\\AppData\\Local\\Temp\\digitalme-unified-supplemental-aw4hvx\\subjects\\default",
+  "stoppedForBudget": false,
+  "completedAt": "2026-10-10T09:07:52.394Z",
+  "talkDiagnostics": [],
+  "discoveryDiagnostics": []
+}

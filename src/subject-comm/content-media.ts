@@ -186,14 +186,14 @@ export function inferContentType(input: {
   const oembed = String(input.oembedType || '').toLowerCase();
   if (oembed === 'video') return 'video';
   if (oembed === 'photo') return 'image';
-  if (input.mimeType) {
-    const fromMime = mimeContentType(input.mimeType);
-    if (fromMime) return fromMime;
-  }
   const medium = String(input.medium || '').toLowerCase();
   if (medium === 'video') return 'video';
   if (medium === 'audio') return 'audio';
   if (medium === 'image') return 'image';
+  if (input.mimeType) {
+    const fromMime = mimeContentType(input.mimeType);
+    if (fromMime) return fromMime;
+  }
   if (input.mediaUrl) return suffixHint(input.mediaUrl);
   return undefined;
 }

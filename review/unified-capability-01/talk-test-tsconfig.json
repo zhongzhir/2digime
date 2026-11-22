@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./talk-test-dist",
+    "rootDir": "../../src",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [],
+  "files": [
+    "./compile-shims.d.ts",
+    "../../src/intelligence/tests/unified-capability-consult-artifact.test.ts"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "job_muto3wxo37ed93178810",
+  "taskId": "task_muto3wwbfa83a4cd81b0",
+  "capabilityId": "cap_model_openai_compatible",
+  "createdAt": "2026-10-04T10:18:12.733Z",
+  "status": "failed",
+  "startedAt": "2026-10-04T10:18:12.790Z",
+  "phase": "capability",
+  "progress": {
+    "note": "正在整理成果",
+    "updatedAt": "2026-10-04T10:18:19.637Z"
+  },
+  "snapshotId": "snap_muto3x0t50fc7fd35a8d",
+  "finishedAt": "2026-10-04T10:18:19.637Z",
+  "failure": {
+    "stage": "capability",
+    "message": "成果未通过质量检查：成果主题未紧扣任务要求：缺少「本地优先数字主体概念」。。这不是模型不可用。",
+    "actionable": "可查看已生成内容，调整要求后重试"
+  }
+}

@@ -13,7 +13,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
 test('使用反馈 P0：协作入口与页面使用用户语言，并将动作和状态并列', async () => {
   const html = await fs.readFile(path.join(repoRoot, 'electron/renderer/index.html'), 'utf8');
   const css = await fs.readFile(path.join(repoRoot, 'electron/renderer/styles.css'), 'utf8');
-  assert.match(html, /id="nav-collab">协作<\/button>/);
+  assert.match(html, /id="nav-collab"[^>]*hidden[^>]*>协作<\/button>/);
   assert.doesNotMatch(html, /协作（实验）|实验能力：协作|这是实验能力/);
   assert.match(html, /可以联系另一个用户的数字之我/);
   assert.match(html, /当前支持范围/);

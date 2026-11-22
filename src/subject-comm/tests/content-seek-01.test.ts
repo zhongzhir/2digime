@@ -52,12 +52,12 @@ test('seek matches directory, keeps provenance URL, dedups web, and is not a cra
   assert.equal(/puppeteer|playwright|sitemap|crawlSite|robots\.txt/i.test(src), false);
 });
 
-test('real BBC title can be found by a natural-language request', async (t) => {
+test('real domestic feed title can be found by a natural-language request', async (t) => {
   const store = new MemoryNetworkItemStore();
   let ingested;
   try {
     ingested = await ingestSource({
-      sourceUrl: 'https://feeds.bbci.co.uk/news/rss.xml',
+      sourceUrl: 'https://www.ithome.com/rss/',
       store,
       limit: 5,
     });

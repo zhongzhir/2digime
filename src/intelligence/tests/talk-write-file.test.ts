@@ -11,6 +11,30 @@ import { createCommandBus } from '../../runtime/command-bus';
 import { talkThreadFilePath } from '../store';
 import { resolveAuthorizedWritePath, classifyAuthorizedPaths } from '../mechanical-tools';
 import type { TalkChatFn } from '../types';
+import { runTalkTurn } from '../loop';
+import { emptyThread } from '../store';
+
+test('folder grant without attached material exposes exact output readback and refuses adjacent files', async () => {
+  const root = await tempDir('grant-readback');
+  const folder = path.join(root, 'allowed');
+  await fs.mkdir(folder);
+  await fs.writeFile(path.join(folder, 'result.md'), 'actual saved plan');
+  await fs.writeFile(path.join(root, 'outside.md'), 'outside');
+  const executions: Array<{ capabilityId: string; ok: boolean }> = [];
+  let step = 0;
+  await runTalkTurn({thread: emptyThread(new Date().toISOString()), userText:'回读成果', selfContext:'', agents:[], workRoot:folder, writeFolders:[folder], now:new Date().toISOString(),
+    onExecution: row => { executions.push(row); },
+    chat:async ({tools,messages}) => {
+      if (step === 0) assert.ok(tools?.some(t => t.function.name === 'read_file'));
+      if (step++ === 0) return {text:'',toolCalls:[{id:'w1',name:'write_file',arguments:JSON.stringify({relativePath:'result.md',content:'actual saved plan'})},{id:'r1',name:'read_file',arguments:JSON.stringify({path:path.join(folder,'result.md')})}]};
+      if (step === 2) {
+        assert.match(String(messages.at(-1)?.content), /actual saved plan/);
+        return {text:'',toolCalls:[{id:'r2',name:'read_file',arguments:JSON.stringify({path:path.join(root,'outside.md')})}]};
+      }
+      return {text:'已回读授权成果，未读取目录外文件。'};
+    }});
+  assert.deepEqual(executions.filter(e=>e.capabilityId==='read_file').map(e=>e.ok),[true,false]);
+});
 
 async function tempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `dm-write-${prefix}-`));
@@ -180,4 +204,21 @@ test('多个授权根时必须显式选择列出的 root，不做语义路由', 
   if (picked.ok) assert.equal(picked.abs, path.join(b, 'note.txt'));
   const wrong = resolveAuthorizedWritePath(auth, 'note.txt', path.join(os.tmpdir(), 'not-authorized'));
   assert.equal(wrong.ok, false);
+});
+
+
+test('goal save receipt is scoped before the model writes and reads a commissioned file', async () => {
+  const folder = await tempDir('goal-receipt-file');
+  let step = 0;
+  const result = await runTalkTurn({ thread:emptyThread(new Date().toISOString()), userText:'修改文件并回读', selfContext:'', agents:[], workRoot:folder, writeFolders:[folder], now:new Date().toISOString(), goalReceipt:'当前目标已保存',
+    chat:async ({ messages }) => {
+      if (step++ === 0) {
+        assert.match(String(messages[0]?.content), /此回执只证明当前目标条件保存/);
+        assert.match(String(messages[0]?.content), /不证明任何文件已创建、修改或读取/);
+        return { text:'', toolCalls:[{id:'w',name:'write_file',arguments:JSON.stringify({relativePath:'result.md',content:'updated actual content'})},{id:'r',name:'read_file',arguments:JSON.stringify({path:path.join(folder,'result.md')})}] };
+      }
+      return { text:'已按本轮文件执行结果交付。' };
+    }});
+  assert.deepEqual(result.thread.executions.map(x=>x.capabilityId), ['update_discovery_goal','write_file','read_file']);
+  assert.equal(await fs.readFile(path.join(folder,'result.md'),'utf8'),'updated actual content');
 });
