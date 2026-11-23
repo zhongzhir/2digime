@@ -1,18 +1,18 @@
 # 03 — CURRENT PLAN
 
 **状态：** `current_authority / only_execution_plan`
-**日期：** 2026-11-22
+**日期：** 2026-11-23
 **性质：** 当前唯一执行计划。旧 roadmap、execution index、context 文首指针、01A baseline 附录中的「下一步」均不得再当 current plan。
 
 开始任何实现前读 AGENTS.md 所列四份文件。本文件只回答：现在做什么、按什么顺序、什么不准做、还有哪些未决冲突。
 
 ---
 
-## 0A. 当前覆盖指针（2026-11-22）
+## 0A. 当前覆盖指针（2026-11-23）
 
 **任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
 
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_IMPLEMENTED / REAL_LOCAL_OIDC_DEVELOPER_VALIDATED / EXTERNAL_PROVIDER_AND_FAPI_PENDING / NOT_OWNER_ACCEPTED`
 
 **详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
 
@@ -24,6 +24,7 @@
 2. 直接观看能力受内容平台生态、账号、付费、地区和 App 跳转限制影响，等待内容开放生态成熟；当前优先把文字等相对容易到达的内容做到可用、好用。
 3. 当前已接受能力进入主干；中间开发成果按“代码与可复现证据入库、运行态和一次性探针封存、凭据永不入库”的规则收束。
 4. 下一阶段恢复停留已久的协作能力与做事能力建设，面向银行、电信、大型机构和大用户平台，落实主体身份、认证、安全、授权与 A2A 互操作。
+5. 长期产品目标是：用户可用邮箱、电话等简便入口安全找回和管理自己的 2digime；真实身份认证与简便入口分层，前者用于接入银行、电信等高等级服务；未来在合规身份、委托、交易确认和监管接口成熟后再评估数字人民币等金融工具；不同 2digime 既可在关键节点由人参与，也可在明确授权和风险边界内自动协作。
 
 ### 新阶段动作顺序
 
@@ -38,7 +39,7 @@
 
 `docs/reference` 的两类探索只作为外部启发，不覆盖产品宪法：HackerTube 类“个人算法”落实为平台/来源只供候选、同一个 Digital Self 与当前模型完成个人选择；Second 类“长期个人上下文”落实为一个本机可拥有、可纠正、可迁移的 Digital Self，外部 Agent/Tool/Subject 只能按目的取得短期最小投影。明确不吸收全时屏幕/键盘/OS 监控、后台 Agent 群、第二份长期记忆或中心画像。
 
-2026-11-22 已完成 Slice 0 审计以及 Slice 1A、1B、1C 开发者验证：已配对主体的公开卡使用现有 Ed25519 身份签名，绑定 Subject、Endpoint、key id 和有效期；同一 Relay 内的端点/key 轮换通过旧、新 key 双签交接、准备/提交确认、持久化恢复点和对端撤销记录完成闭环；每次外部协作由当前模型选择最少的本人字段，runtime 从唯一 Digital Self 编译短期 Personal Context Contract，绑定目的、接收主体与端点、来源摘要、digest、有效期和可撤销 Grant，并在发送/接收两侧记录实际请求 digest、字节和端点。当前实现仍不是标准 A2A Agent Card、Owner 身份证明、OpenID4VP 选择披露或跨 Relay 迁移协议，合同也尚无独立签名和远程撤销查询；尚未 Owner 验收、合并、推送、打包、发布或部署。下一顺序是在 Owner 确认无费用沙箱身份源后进入 Slice 2 真实机构身份联邦。
+2026-11-23 已完成 Slice 2A 机构身份联邦开发地基：集成成熟 OIDC 客户端，真实走通本机独立开发身份源、浏览器授权码回调、PKCE S256、state、nonce 和 ID Token 校验；以 `issuer + subject` 建立稳定 Owner identity，邮箱/电话只保存脱敏且带验证状态的联系提示；机构登录不会自动获得 Subject 权限，必须另行确认绑定且可撤销。事务材料加密、一次性消费，不保存 token、客户端密钥或原始联系方式。真实本机 OIDC 开发门和新增专项测试通过；但两项既有协作回归独立重跑仍复现 `artifact committer not attached`，npm 官方生产依赖审计仍有 4 个既有公告（含 1 critical、1 high），因此不得写成全回归或产品安全门通过。当前尚未接外部机构租户、真实身份数据或 FAPI 2.0 的 PAR、`private_key_jwt`、DPoP/mTLS，也未接产品 UI、Owner 验收、合并、推送、打包、发布或部署。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2A-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2A-DEVELOPER-VALIDATION.md)。
 
 ### Discover 收束结论
 

@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "smoke": "node dist/smoke.js",
-    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/intelligence/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/identity/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/intelligence/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
     "electron:version": "node scripts/check-electron-version.cjs",
     "preflight:electron": "node scripts/electron-preflight.cjs",
     "dev": "node scripts/start-dev.cjs",
@@ -17,6 +17,7 @@
     "brand:validate": "node institution/brand-kit/validate.cjs",
     "brand:verify": "node institution/brand-kit/run-verify.cjs",
     "institution:accept": "node institution/acceptance-e/run-acceptance.cjs",
+    "identity:oidc:verify": "node institution/identity-sandbox/oidc-provider/run-verify.cjs",
     "smoke:packaged": "node scripts/run-packaged-trial-smoke.cjs",
     "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
@@ -26,6 +27,7 @@
     "express": "^5.2.1",
     "fast-xml-parser": "^5.11.1",
     "node-html-parser": "^9.0.4",
+    "openid-client": "^6.9.1",
     "pdf-parse": "^1.1.1",
     "robots-parser": "^3.0.1"
   },
@@ -34,6 +36,7 @@
     "@types/node": "^24.0.0",
     "electron": "^32.0.0",
     "electron-builder": "^25.1.8",
+    "oidc-provider": "^9.15.1",
     "playwright": "^1.49.1",
     "rcedit": "^5.0.1",
     "typescript": "^5.9.3"

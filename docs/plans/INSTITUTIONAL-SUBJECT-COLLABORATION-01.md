@@ -1,7 +1,7 @@
 # INSTITUTIONAL-SUBJECT-COLLABORATION-01 — 机构级主体协作与做事能力
 
-**日期：** 2026-11-22  
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / DEVELOPER_VALIDATED / NOT_OWNER_ACCEPTED`
+**日期：** 2026-11-23
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_IMPLEMENTED / REAL_LOCAL_OIDC_DEVELOPER_VALIDATED / EXTERNAL_PROVIDER_AND_FAPI_PENDING / NOT_OWNER_ACCEPTED`
 **前序地基：** `04-COLLABORATION-FOUNDATION`、`INSTITUTION-DISTRIBUTION-V01` 已接受  
 **目标：** 在不破坏 Owner 主权和单一 Talk 入口的前提下，让 2digime 能以可验证的 Digital Subject 身份接入银行、电信、大型机构和大用户平台，并通过标准 A2A 协议安全协作、完成事情。
 
@@ -16,6 +16,8 @@
 5. 在授权过期、密钥轮换、端点变更或对方失联时安全恢复，不让旧授权继续有效。
 
 银行、电信和平台可以管理其用户映射、权益、配额、模型池、使用量和品牌，但不能据此读取用户的 Digital Self、Talk、文件、记忆或其他机构中的主体关系。
+
+Owner 对长期目标的进一步确认如下：邮箱、电话等应作为简便登录、通知和恢复入口，让普通用户能够安全管理自己的 2digime；它们不能单独冒充真实身份。接入银行、电信等高等级服务时，使用机构认可的真实身份认证，并把 Owner identity、Digital Subject identity 和 Runtime endpoint 继续分开。数字人民币等金融工具只作为远期受监管交易能力，在身份、委托、交易确认、额度、审计和监管接口成熟后另立任务。不同 2digime 之间既支持人参与关键节点，也支持在明确授权、风险和撤销边界内自动协作，二者共用同一主体协作事实链。
 
 ## 2. 两类 Personal Agent 探索带来的计划修订
 
@@ -94,6 +96,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - 普通机构先实现授权码 + PKCE、明确 audience/scope、短期 token 和服务端密钥保护。
 - 银行、电信等高价值 API 采用 FAPI 2.0：PAR、PKCE、`private_key_jwt`，以及 mTLS 或 DPoP 的 sender-constrained token；关闭隐式流和弱客户端认证。
 - 机构登录只证明 Owner/组织身份，不直接等于 Subject 授权；必须经过独立绑定与撤销。
+- **Slice 2A（本轮已实现）：** 通过成熟 `openid-client` 集成 OIDC discovery、浏览器授权码、PKCE S256、state、nonce、ID Token 和可选 UserInfo 校验；本地独立 `oidc-provider` 开发身份源完成真实协议闭环。稳定身份键只使用 `issuer + subject`，邮箱/电话只保存脱敏验证提示。登录事务加密、限时、一次性消费；Owner identity 到 Subject 的绑定必须显式确认，可单独撤销，撤销身份会级联撤销绑定，再次登录不会静默恢复被撤销身份。
+- **Slice 2A 的诚实边界：** 这是标准协议的本机开发者门，不是真实银行、电信租户，不证明法定实名或机构合规；没有外部账号、第三方条款、真实身份数据或费用。`fapi2` 配置当前机械拒绝，避免把普通 OIDC 冒充 FAPI 2.0；PAR、`private_key_jwt`、DPoP/mTLS、外部 provider 注册、产品 UI、Owner 恢复流程和生产密钥管理仍待后续切片。
 
 ### Slice 3 — Owner → Subject 委托凭证
 
@@ -156,19 +160,24 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 
 ## 8. 当前检查点与下一执行批次
 
-### 2026-11-22 开发者检查点
+### 2026-11-23 开发者检查点
 
 - Slice 0 现状/威胁审计已形成；
 - Slice 1A 签名公开卡、对端 key 撤销持久记录和 Relay 严格 key 绑定已实现；
 - Slice 1B 原子密钥 bundle、双签交接证明、四步 Relay 交接、撤销同步和重启恢复已实现；
 - Slice 1C 一次任务 Personal Context Contract、短期 Grant、接收方核验和双侧实际披露审计已实现；
-- TypeScript 构建通过；Personal Context、内存/Relay/两 Owner 协作、轮换、签名卡、Relay 恢复和既有远程协作定向回归 23/23 通过；
+- Slice 2A OIDC 授权码 + PKCE 身份联邦、稳定 Owner identity、脱敏联系提示、显式 Subject 绑定与撤销已实现；
+- TypeScript 构建、新增身份专项测试 3/3 与真实本机 OIDC 浏览器闭环通过；
+- 定向协作回归中两项既有用例独立重跑仍失败，原因均为 `artifact committer not attached; open or create a package first`；本 Slice 未改协作运行时，因此本检查点不宣称全回归通过；
+- npm 官方生产依赖审计仍有 4 个既有公告（1 critical、1 high、1 moderate、1 low），报告未指向本轮新增 OIDC 客户端，但产品安全门仍未通过；
 - 尚未 Owner 验收，尚未合并主干、推送、打包、发布或部署；
-- 尚未完成合同独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、真实机构登录、Owner 委托凭证或独立实现互操作。
+- 尚未完成合同独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、外部真实机构租户、FAPI 2.0 高保障通道、Owner 委托凭证或独立实现互操作。
 
 ### 下一执行批次
 
-1. 由 Owner 决定是否对 Slice 1A–1C 做当前边界内验收；未验收前不得写成产品完成；
-2. Owner 确认后，选择一个无外部费用、无需真实机构数据的开发/沙箱机构身份源进入 Slice 2；选择真实机构、创建外部账号或接受第三方条款需要另行确认；
-3. Slice 2 只接真实 OIDC/OAuth2/SAML 身份联邦，不自建用户名密码或模拟登录冒充通过；
-4. 未通过前不扩建 UI、不做平台定制、A2A 市场、生产接入或真实机构数据试验。
+1. 由 Owner 决定是否对 Slice 1A–1C 与 Slice 2A 做当前边界内验收；未验收前不得写成产品完成；
+2. 在扩大身份验收前，用最小依赖升级清理当前生产依赖安全公告，并对受影响的 HTTP/XML 路径做专项回归；不得直接用无边界 `npm audit fix` 替代分析；
+3. Slice 2B 选择一个无外部费用、无需真实身份数据的外部开发/沙箱身份源，注册 OIDC client 并接入现有适配器；创建外部账号、接受第三方条款或提供组织租户必须另行确认；
+4. Slice 2C 在支持条件成熟时接 FAPI 2.0：PAR、`private_key_jwt`、DPoP 或 mTLS，并为 audience、scope、重放、密钥轮换和 token 泄露建立负向门；不自研替代协议；
+5. 在扩大验收前单独修复并复验当前 `artifact committer not attached` 协作回归；不把它混入身份联邦实现；
+6. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。
