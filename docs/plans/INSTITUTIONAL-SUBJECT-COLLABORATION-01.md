@@ -99,7 +99,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - **Slice 2A（本轮已实现）：** 通过成熟 `openid-client` 集成 OIDC discovery、浏览器授权码、PKCE S256、state、nonce、ID Token 和可选 UserInfo 校验；本地独立 `oidc-provider` 开发身份源完成真实协议闭环。稳定身份键只使用 `issuer + subject`，邮箱/电话只保存脱敏验证提示。登录事务加密、限时、一次性消费；Owner identity 到 Subject 的绑定必须显式确认，可单独撤销，撤销身份会级联撤销绑定，再次登录不会静默恢复被撤销身份。
 - **Slice 2A 的诚实边界：** 这是标准协议的本机开发者门，不是真实银行、电信租户，不证明法定实名或机构合规；没有外部账号、第三方条款、真实身份数据或费用。`fapi2` 配置当前机械拒绝，避免把普通 OIDC 冒充 FAPI 2.0；PAR、`private_key_jwt`、DPoP/mTLS、外部 provider 注册、产品 UI、Owner 恢复流程和生产密钥管理仍待后续切片。
 - **Slice 2B 外部公开门（本轮已实现）：** 复用同一适配器连接 Duende 官方公开 demo，以预配置 `interactive.public` client 真实完成 HTTPS discovery、独立浏览器授权码 + PKCE S256、动态 loopback 回调、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定。外部 issuer 必须 HTTPS；原生应用 HTTP loopback 回调必须地址受限且显式允许。
-- **Slice 2B 的诚实边界：** 使用公开测试身份和服务方预配置 public client；未创建账号、接受新条款、使用真实身份、录入付款方式或产生费用。它证明外部协议互通，不是 2digime/Owner 自有 client 注册，不证明真实租户、实名、KYC、组织归属或 FAPI 2.0。独立 client 注册及其撤销、redirect URI 管理、租户隔离仍需单独授权后验证。
+- **Slice 2B Owner 控制 client 门（本轮已实现）：** Owner 明确授权并亲自创建零费用 Auth0 开发租户、Native client 与合成测试账号，保存固定 `127.0.0.1:43120` 回调白名单。2digime 只读取公开 issuer/client ID，以 public client 的 `none` 认证方式真实完成授权码 + PKCE S256、state、nonce、ID Token/UserInfo、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定；不读取 client secret，不接触密码，不保存 token。
+- **Slice 2B 的诚实边界：** Auth0 开发租户和合成账号证明 Owner 控制的外部 client 可以完成普通 OIDC 协议闭环与 redirect URI 管理；它不是银行、电信或政府真实租户，不证明法定实名、KYC、组织归属或 FAPI 2.0。未录入付款方式、未产生费用、未使用真实身份数据；client 撤销、跨租户隔离负向门、产品 UI 和 Owner 产品验收仍待后续切片。
 
 ### Slice 3 — Owner → Subject 委托凭证
 

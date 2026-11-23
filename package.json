@@ -19,6 +19,7 @@
     "institution:accept": "node institution/acceptance-e/run-acceptance.cjs",
     "identity:oidc:verify": "node institution/identity-sandbox/oidc-provider/run-verify.cjs",
     "identity:oidc:external:verify": "node institution/identity-sandbox/duende-demo/run-verify.cjs",
+    "identity:oidc:auth0:verify": "node institution/identity-sandbox/auth0/run-verify.cjs",
     "smoke:packaged": "node scripts/run-packaged-trial-smoke.cjs",
     "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
