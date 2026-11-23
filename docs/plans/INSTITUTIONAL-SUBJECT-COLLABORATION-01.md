@@ -1,7 +1,7 @@
 # INSTITUTIONAL-SUBJECT-COLLABORATION-01 — 机构级主体协作与做事能力
 
 **日期：** 2026-11-23
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / FAPI_IMPLEMENTATION_PENDING / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / SLICE_3A_DELEGATION_CORE_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / OPENID4VC_INTEROP_PENDING / NOT_OWNER_ACCEPTED`
 **前序地基：** `04-COLLABORATION-FOUNDATION`、`INSTITUTION-DISTRIBUTION-V01` 已接受  
 **目标：** 在不破坏 Owner 主权和单一 Talk 入口的前提下，让 2digime 能以可验证的 Digital Subject 身份接入银行、电信、大型机构和大用户平台，并通过标准 A2A 协议安全协作、完成事情。
 
@@ -109,6 +109,9 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - 评估并优先集成 OpenID4VCI 1.0 与 OpenID4VP 1.0，分别完成凭证签发和按需出示；不自研二维码/钱包互操作协议。
 - 默认最小披露；另一主体只能看到当前协作所需的身份与授权事实，不能获得完整 Owner 档案。
 - 覆盖撤销、过期、重新签发、设备丢失、机构账号停用和主体迁移。
+- **Slice 3A 委托核心（本轮已实现）：** 复用现有 `AuthorizationGrant` 作为唯一授权事实源，用 W3C VC 2.0 紧凑 JSON-LD 形状表达 Owner issuer、目标 Digital Subject、actions、resource refs、purpose、有效期与撤销引用；使用 W3C VC-JOSE-COSE 的 `application/vc+jwt` / `application/vp+jwt` 形状和成熟 `jose` 实现。Owner Ed25519 私钥只进入既有加密 SecretStore；Subject 用既有通信 Ed25519 key 对 5 分钟 presentation 签名，并绑定 verifier audience 与 challenge。
+- **Slice 3A 最小披露与生命周期门（本轮已实现）：** 默认不披露邮箱、电话、外部 issuer subject、ACR/AMR 或完整机构范围；只有调用方明确选择的 organization/tenant claim 才能进入凭证。Binding 保存当时的 authority scope；同一机构 subject 重新认证但 organization/tenant 变化时，旧 binding 自动撤销，不能继承旧授权。撤销/过期 Grant、停用 Owner identity、撤销 Owner→Subject binding、Owner 签名 key 轮换、Subject key/endpoint 替换都会使旧出示失败；重新签发的新凭证通过。
+- **Slice 3A 的诚实边界：** 当前信任根是本机 Owner identity binding 与显式提供给 verifier 的 Owner 公钥，尚未由机构身份源为该公钥背书；Grant 撤销状态由当前权威存储注入验证，尚无公网状态端点。OpenID4VCI 1.0 / OpenID4VP 1.0 已确认为 Final 并完成进入评估，但尚未接独立钱包、credential issuer、DCQL、`vp_token`、`direct_post` 或二维码/跨设备流程，因此不宣称 OpenID4VC 互操作通过。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-3A-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-3A-DEVELOPER-VALIDATION.md)。
 
 ### Slice 4 — A2A 互操作
 
@@ -172,12 +175,13 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 1C 一次任务 Personal Context Contract、短期 Grant、接收方核验和双侧实际披露审计已实现；
 - Slice 2A OIDC 授权码 + PKCE 身份联邦、稳定 Owner identity、脱敏联系提示、显式 Subject 绑定与撤销已实现；
 - Slice 2B 已连接公开外部 OIDC 开发源；Owner 控制的零费用 Auth0 Native client 门，以及本机 client 撤销、配置替换和跨租户绑定负向门均已通过；
+- Slice 3A 已实现 Owner→Subject 的 VC 2.0 + JOSE 委托核心、最小披露、短时挑战绑定出示，以及撤销/过期/Owner 停用/双侧 key 轮换负向门；
 - TypeScript 构建、身份专项测试 6/6、真实本机 OIDC 浏览器闭环与 Owner 控制 Auth0 浏览器闭环通过；
 - 真实外部 OIDC 浏览器闭环通过，账号创建、真实身份、付款方式和费用均为 false；
 - 物化前按需挂载既有 work runtime，已关闭 initiator 本地物化和远端 pull 共用的 artifact committer 回归；原始失败套件 7/7 通过；
 - 生产依赖已最小升级，npm 官方 `--omit=dev` 审计为 0；HTTP/XML/Relay/A2A 定向路径 55/55、A2A adapter 独立 3/3 通过；包含开发/打包工具的完整审计仍有 28 项，留给独立工具链升级批次；
 - 尚未 Owner 验收，尚未合并主干、推送、打包、发布或部署；
-- 尚未完成合同独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、外部真实机构租户、FAPI 2.0 高保障通道、Owner 委托凭证或独立实现互操作。
+- 尚未完成 Personal Context Contract 独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、外部真实机构租户、FAPI 2.0 高保障通道、OpenID4VCI/OpenID4VP 独立实现互操作或公网凭证状态服务。
 
 ### 下一执行批次
 
@@ -185,5 +189,7 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 2. Slice 2C-0 已完成进入评估：继续复用已安装且具有 FAPI 2.0 RP 认证覆盖的 `openid-client 6.9.1`，不自研协议；桌面端优先组合为 `private_key_jwt + PAR + DPoP`，mTLS 作为机构要求时的替代 sender constraint；
 3. Slice 2C-1 只在具备免费、真实 HTTPS、同时支持 PAR、`private_key_jwt`、DPoP nonce 和受保护资源调用的测试提供方后实施。密钥进入既有 SecretStore，事务只绑定 `kid` 与配置指纹，不保存 token；必须通过 audience、scope、重放、client/key 撤销、密钥轮换和 token 泄露负向门；
 4. 在 2C-1 全部真实端到端门通过前，`fapi2` 配置继续机械拒绝，普通 Auth0 Native client、本机普通 OIDC 或只有 PAR 的局部演示均不得写成 FAPI 2.0 已实现；
-5. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
-6. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。
+5. Slice 3B 只在具备独立、零费用 OpenID4VCI/VP 测试 issuer/wallet/verifier 后实施互操作门；优先复用 Final 规范实现，不自研二维码、DCQL、`vp_token` 或 `direct_post` 协议栈。没有独立对端时不得用本机回环冒充互操作；
+6. 若 3B 外部条件暂不成熟，下一实现进入 Slice 4 的 A2A 标准对象映射，并继续使用 Slice 3A 的真实授权事实，不增加协作中心或第二套 runtime；
+7. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
+8. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。

@@ -48,7 +48,8 @@ export interface AuthorizationScope {
 
 export type GranteeRef =
   | { kind: 'capability'; capabilityId: string }
-  | { kind: 'remote_subject'; subjectId: string };
+  | { kind: 'remote_subject'; subjectId: string }
+  | { kind: 'owned_subject'; subjectId: string };
 
 export type GrantOrigin =
   | { kind: 'owner_direct' }
@@ -72,6 +73,14 @@ export type GrantOrigin =
       contractId: string;
       exchangeId: string;
       purposeDigest: string;
+    }
+  | {
+      /** Owner identity 对其 Digital Subject 的明确、可撤销委托。 */
+      kind: 'owner_delegation';
+      ownerIdentityId: string;
+      ownerSubjectBindingId: string;
+      purposeDigest: string;
+      credentialId: string;
     };
 
 export const LOCAL_COLLAB_ACTIONS = [

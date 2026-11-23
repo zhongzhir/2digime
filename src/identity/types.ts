@@ -77,6 +77,7 @@ export interface SubjectOwnerBinding {
   subjectId: string;
   createdAt: string;
   confirmationRef: string;
+  authorityScope?: InstitutionAuthorityScope;
   revokedAt?: string;
 }
 

@@ -44,6 +44,9 @@ export function projectRemoteAuthorization(
   input: ProjectAuthorizationInput,
 ): RemoteAuthorizationProjection {
   const grant = input.grant ?? null;
+  if (grant?.grantee.kind === 'owned_subject') {
+    throw new Error('Owner→Subject 委托不能直接作为远端 Capability/Subject 的再委托授权');
+  }
   const materials = normalizePaths([
     ...(input.allowedMaterialPaths ?? []),
     ...((grant?.scope.resourceRefs as string[] | undefined) ?? []),

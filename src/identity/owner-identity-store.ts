@@ -94,6 +94,10 @@ export class OwnerIdentityStore {
     }
     const emailHint = maskEmail(verified.email);
     const phoneHint = maskPhone(verified.phoneNumber);
+    const authorityChanged = Boolean(
+      existing &&
+      (existing.organizationId !== verified.organizationId || existing.tenantId !== verified.tenantId),
+    );
     const next: OwnerIdentityRecord = {
       id,
       providerId: verified.providerId,
@@ -118,12 +122,20 @@ export class OwnerIdentityStore {
       ...(existing?.revokedAt ? { revokedAt: existing.revokedAt } : {}),
     };
     file.identities[id] = next;
+    if (authorityChanged) {
+      for (const binding of Object.values(file.bindings)) {
+        if (binding.ownerIdentityId === id && !binding.revokedAt) {
+          binding.revokedAt = verified.verifiedAt;
+        }
+      }
+    }
     await this.save(file);
     await this.audit({
       at: verified.verifiedAt,
       action: existing ? 'owner_identity_reverified' : 'owner_identity_verified',
       ownerIdentityId: id,
       providerId: verified.providerId,
+      ...(authorityChanged ? { authorityChanged: true, bindingsRevoked: true } : {}),
     });
     return next;
   }
@@ -156,13 +168,51 @@ export class OwnerIdentityStore {
     }
     const id = stableId('osb', input.ownerIdentityId, input.subjectId);
     const existing = file.bindings[id];
-    if (existing && !existing.revokedAt) return existing;
+    if (existing && !existing.revokedAt) {
+      const scopeMatches =
+        existing.authorityScope?.organizationId === input.targetAuthority?.organizationId &&
+        existing.authorityScope?.tenantId === input.targetAuthority?.tenantId;
+      if (scopeMatches) return existing;
+      // 旧版本 binding 没有保存 authority scope；只有再次显式确认才原位升级。
+      existing.authorityScope = {
+        ...(input.targetAuthority?.organizationId
+          ? { organizationId: input.targetAuthority.organizationId }
+          : {}),
+        ...(input.targetAuthority?.tenantId
+          ? { tenantId: input.targetAuthority.tenantId }
+          : {}),
+      };
+      existing.createdAt = input.at;
+      existing.confirmationRef = input.confirmationRef;
+      await this.save(file);
+      await this.audit({
+        at: input.at,
+        action: 'owner_subject_binding_scope_confirmed',
+        ownerIdentityId: input.ownerIdentityId,
+        subjectId: input.subjectId,
+        bindingId: id,
+        confirmationRef: input.confirmationRef,
+      });
+      return existing;
+    }
     const binding: SubjectOwnerBinding = {
       id,
       ownerIdentityId: input.ownerIdentityId,
       subjectId: input.subjectId,
       createdAt: input.at,
       confirmationRef: input.confirmationRef,
+      ...(targetScoped
+        ? {
+            authorityScope: {
+              ...(input.targetAuthority?.organizationId
+                ? { organizationId: input.targetAuthority.organizationId }
+                : {}),
+              ...(input.targetAuthority?.tenantId
+                ? { tenantId: input.targetAuthority.tenantId }
+                : {}),
+            },
+          }
+        : {}),
     };
     file.bindings[id] = binding;
     await this.save(file);

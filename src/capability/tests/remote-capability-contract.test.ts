@@ -10,6 +10,7 @@ import { RemoteSecurityGate } from '../remote-security';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import { ADAPTER_TYPES } from '../registration';
 import type { CapabilityInput } from '../adapter';
+import type { AuthorizationGrant } from '../../collaboration/schema';
 import type { ContextSnapshot } from '../../work-runtime/context-snapshot';
 
 function sampleInput(paths: string[]): CapabilityInput {
@@ -42,6 +43,29 @@ test('authorization projection defaults deny persist and redelegate', () => {
   assert.equal(auth.allowRedelegate, false);
   assert.equal(auth.maxCalls, 1);
   assert.ok(auth.allowedFields.includes('goal'));
+});
+
+test('Owner→Subject 委托不得直接投影成远端能力授权', () => {
+  const ownerDelegation: AuthorizationGrant = {
+    id: 'grant-owner-1',
+    grantorSubjectId: 'subject-a',
+    grantee: { kind: 'owned_subject', subjectId: 'subject-a' },
+    scope: { actions: ['read_account_summary'], resourceRefs: ['account:masked:001'] },
+    origin: {
+      kind: 'owner_delegation',
+      ownerIdentityId: 'owner-1',
+      ownerSubjectBindingId: 'binding-1',
+      purposeDigest: 'a'.repeat(64),
+      credentialId: 'urn:uuid:test-owner-delegation',
+    },
+    status: 'granted',
+    grantedAt: '2026-11-23T08:00:00.000Z',
+    expiresAt: '2026-11-23T09:00:00.000Z',
+  };
+  assert.throws(
+    () => projectRemoteAuthorization({ goal: '不应外发', grant: ownerDelegation }),
+    /不能直接作为远端/,
+  );
 });
 
 test('prepareAuthorizedInput clips unauthorized materials', () => {

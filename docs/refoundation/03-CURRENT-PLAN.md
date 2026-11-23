@@ -12,7 +12,7 @@
 
 **任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
 
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / FAPI_IMPLEMENTATION_PENDING / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / SLICE_3A_DELEGATION_CORE_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / OPENID4VC_INTEROP_PENDING / NOT_OWNER_ACCEPTED`
 
 **详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
 
@@ -48,6 +48,8 @@ Owner 随后明确授权零费用开发租户与独立 client 门，并亲自完
 Slice 2B 随后补齐本机负向安全门：加密登录事务绑定 issuer、client、redirect URI、scopes、client authentication 与 security profile 指纹，配置替换会在 token 调用前拒绝；机构身份若携带 organization/tenant 范围，Subject 绑定必须提供完整且相同的目标范围。标准本机 OIDC provider 真实签发授权码后撤销动态 client，token 交换被拒绝且没有新增身份；跨租户绑定拒绝、同租户绑定通过。为避免破坏 Owner 的外部开发环境，本轮没有删除 Auth0 client；因此只证明 2digime 正确服从身份源撤销，不宣称完成 Auth0 管理台 client 删除恢复流程。
 
 Slice 2C 已完成进入条件评估，不等于协议实现。仓库实际安装的 `openid-client 6.9.1` 已提供 PAR、`private_key_jwt` 与 DPoP 能力，并处于 OpenID Foundation 公布的 FAPI 2.0 RP 认证版本范围；因此继续集成成熟库，不自研协议。桌面端第一实现路线定为 `private_key_jwt + PAR + DPoP`，但只有在免费真实 HTTPS 提供方同时支持强客户端认证、DPoP nonce 和受保护资源后才进入 2C-1。完整真实端到端门通过前，`fapi2` 配置继续机械拒绝，不把普通 OIDC 或局部协议演示写成 FAPI 2.0 已实现。进入评估见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2C-ENTRY-ASSESSMENT.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2C-ENTRY-ASSESSMENT.md)。
+
+Slice 3A 已实现 Owner→Digital Subject 委托核心：既有 `AuthorizationGrant` 继续作为唯一授权事实源；W3C VC 2.0 数据形状只投影最小 issuer/subject/scope/purpose/有效期/撤销引用，使用成熟 `jose` 生成 `application/vc+jwt` 和 challenge/audience 绑定的短时 `application/vp+jwt`。Owner 私钥进入既有加密 SecretStore，Subject 复用现有通信 key 完成 holder proof。Binding 固化当时的 organization/tenant authority scope，同一机构 subject 重新认证但租户范围变化时旧 binding 自动撤销。撤销、过期、Owner identity/绑定停用、Owner key 轮换和 Subject key/endpoint 替换均拒绝；新 key 重新签发通过。OpenID4VCI 1.0 与 OpenID4VP 1.0 已确认 Final，但没有独立 wallet/issuer/verifier 互操作，因此当前不宣称支持 OpenID4VC、选择性披露钱包或机构为 Owner key 背书。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-3A-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-3A-DEVELOPER-VALIDATION.md)。
 
 ### Discover 收束结论
 
