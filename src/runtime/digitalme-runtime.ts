@@ -4503,8 +4503,9 @@ export class DigitalMeRuntime {
     provenance: import('../work-runtime/artifact').ArtifactProvenance;
     existingArtifactId?: string;
   }): Promise<{ artifactId: string; headVersionId: string; contentDigest: string }> {
+    await this.ensureLegacyWorkRuntime();
     if (!this.artifactCommitter) {
-      throw new Error('artifact committer not attached; open or create a package first');
+      throw new Error('artifact committer unavailable after work runtime attachment');
     }
     const pkg = this.subject.requireActive();
     const { artifact, contentDigest } = await this.artifactCommitter.materializePeerText({
@@ -5372,6 +5373,8 @@ export class DigitalMeRuntime {
     if (this.work) await this.work.stop();
     this.work = null;
     this.workspace = null;
+    this.contentStore = null;
+    this.artifactCommitter = null;
   }
 
   private async attachWorkRuntime(): Promise<void> {

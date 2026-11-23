@@ -168,16 +168,15 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 1C 一次任务 Personal Context Contract、短期 Grant、接收方核验和双侧实际披露审计已实现；
 - Slice 2A OIDC 授权码 + PKCE 身份联邦、稳定 Owner identity、脱敏联系提示、显式 Subject 绑定与撤销已实现；
 - TypeScript 构建、新增身份专项测试 3/3 与真实本机 OIDC 浏览器闭环通过；
-- 定向协作回归中两项既有用例独立重跑仍失败，原因均为 `artifact committer not attached; open or create a package first`；本 Slice 未改协作运行时，因此本检查点不宣称全回归通过；
-- npm 官方生产依赖审计仍有 4 个既有公告（1 critical、1 high、1 moderate、1 low），报告未指向本轮新增 OIDC 客户端，但产品安全门仍未通过；
+- 物化前按需挂载既有 work runtime，已关闭 initiator 本地物化和远端 pull 共用的 artifact committer 回归；原始失败套件 7/7 通过；
+- 生产依赖已最小升级，npm 官方 `--omit=dev` 审计为 0；HTTP/XML/Relay/A2A 定向路径 55/55、A2A adapter 独立 3/3 通过；包含开发/打包工具的完整审计仍有 28 项，留给独立工具链升级批次；
 - 尚未 Owner 验收，尚未合并主干、推送、打包、发布或部署；
 - 尚未完成合同独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、外部真实机构租户、FAPI 2.0 高保障通道、Owner 委托凭证或独立实现互操作。
 
 ### 下一执行批次
 
 1. 由 Owner 决定是否对 Slice 1A–1C 与 Slice 2A 做当前边界内验收；未验收前不得写成产品完成；
-2. 在扩大身份验收前，用最小依赖升级清理当前生产依赖安全公告，并对受影响的 HTTP/XML 路径做专项回归；不得直接用无边界 `npm audit fix` 替代分析；
-3. Slice 2B 选择一个无外部费用、无需真实身份数据的外部开发/沙箱身份源，注册 OIDC client 并接入现有适配器；创建外部账号、接受第三方条款或提供组织租户必须另行确认；
-4. Slice 2C 在支持条件成熟时接 FAPI 2.0：PAR、`private_key_jwt`、DPoP 或 mTLS，并为 audience、scope、重放、密钥轮换和 token 泄露建立负向门；不自研替代协议；
-5. 在扩大验收前单独修复并复验当前 `artifact committer not attached` 协作回归；不把它混入身份联邦实现；
-6. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。
+2. Slice 2B 选择一个无外部费用、无需真实身份数据的外部开发/沙箱身份源，注册 OIDC client 并接入现有适配器；创建外部账号、接受第三方条款或提供组织租户必须另行确认；
+3. Slice 2C 在支持条件成熟时接 FAPI 2.0：PAR、`private_key_jwt`、DPoP 或 mTLS，并为 audience、scope、重放、密钥轮换和 token 泄露建立负向门；不自研替代协议；
+4. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
+5. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。

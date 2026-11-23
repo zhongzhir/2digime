@@ -1,7 +1,7 @@
 # INSTITUTIONAL-SUBJECT-COLLABORATION-01 — Slice 2A 开发者验证
 
 **日期：** 2026-11-23
-**结论：** `IMPLEMENTED / REAL_LOCAL_OIDC_DEVELOPER_GATE_PASS / EXTERNAL_PROVIDER_AND_FAPI_PENDING / NOT_OWNER_ACCEPTED`
+**结论：** `IMPLEMENTED / REAL_LOCAL_OIDC_DEVELOPER_GATE_PASS / PRODUCTION_DEPENDENCY_AUDIT_PASS / COLLABORATION_REGRESSION_CLOSED / EXTERNAL_PROVIDER_AND_FAPI_PENDING / NOT_OWNER_ACCEPTED`
 
 ## 1. 本轮结果
 
@@ -35,16 +35,20 @@
 
 开发 provider 的内存 adapter、临时 signing key 和开发交互均只用于本机门，不能用于产品或生产。
 
-## 4. 回归事实与未关闭问题
+## 4. Slice 2A 后续加固与回归关闭
 
-选择的 Personal Context、签名卡、远程通信与协作回归中，大部分通过，但以下两项独立重跑仍失败：
+首次定向回归暴露两项既有协作运行时失败：
 
 1. `REAL-SUBJECT-COLLAB-02 CASE A`：A 未物化 B 的成果；
 2. `CASE1+CASE3`：期望 `delivered`，实际 `failed`。
 
-两项落盘事件均记录 `artifact committer not attached; open or create a package first`。本 Slice 没有修改 collaboration、runtime 或 artifact committer 代码；因此它被记录为既有协作运行时回归，不能用身份专项和 OIDC 通过掩盖，也不能写成全回归通过。后续应另立修复批次，对原始失败用例端到端复验。
+根因是 `materializePeerArtifact()` 允许已打开 Subject package 的调用路径，却没有像其他成果操作一样按需挂载既有 work runtime，因而在 initiator 本地物化和远端 pull 两条路径上都可能取得空的 artifact committer。修复在物化前调用既有 `ensureLegacyWorkRuntime()`，并在 work runtime 卸载时同时清空 content store 与 artifact committer 引用；没有新增第二套 runtime、成果存储或协作状态机。
 
-生产依赖的官方 `npm audit --omit=dev --audit-level=high` 还报告 4 个既有依赖公告：`proxy-addr` 1 个 critical、`body-parser` 1 个 high、`qs` 1 个 moderate，以及 `fast-xml-parser` 1 个 low。报告路径没有指向本轮新增的 `openid-client`，但仓库整体安全门仍未通过。为避免无边界批量升级，本轮没有执行 `npm audit fix`；应另作最小依赖升级并完整复验后，才能进入产品或生产验收。
+原始失败套件现为 7/7 通过；受依赖升级影响的 HTTP、RSS/Atom、JSON Feed、Media RSS、schema.org、oEmbed、Relay 恢复、远程 Subject 通信与 A2A probe 路径 55/55 通过；A2A adapter 独立 3/3 通过。一次并行扩展回归曾发生本机 A2A 测试 agent 启动失败，独立重跑及最终分组回归均通过，未形成稳定产品故障。这里仍只宣称定向回归，不宣称全仓测试绿色。
+
+生产依赖通过最小升级落到 `express 5.3.0`、`body-parser 2.4.0`、`proxy-addr 2.0.8`、`qs 6.17.1` 与 `fast-xml-parser 5.12.1`。`npm audit --omit=dev --audit-level=high` 报告 0 vulnerabilities，且 TypeScript build、真实本机 OIDC 门均复验通过。没有执行无边界 `npm audit fix` 或 `--force`。
+
+包含开发和打包工具的完整 `npm audit` 仍报告 28 项（7 moderate、20 high、1 critical），路径集中在 Electron、electron-builder、Playwright 及其打包/下载依赖。它们不在当前生产依赖审计结果中，但也不能据此宣称“全依赖零风险”；应在独立工具链升级批次评估兼容性和 Windows 安装包影响。
 
 ## 5. 明确未完成
 
@@ -54,7 +58,7 @@
 - 未建立真实实名、KYC、银行/电信业务授权或数字人民币接口；
 - 未接产品 UI、邮箱/电话恢复流程、Owner 委托凭证或 A2A 标准互操作；
 - 未 Owner 验收、合并主干、推送、打包、发布或部署。
-- 生产依赖安全审计尚未清零。
+- 未清理开发/打包工具链的 28 项依赖公告，也未据此重新生产或验收 Windows 安装包。
 
 ## 6. 下一门
 
