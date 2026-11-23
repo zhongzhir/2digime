@@ -12,7 +12,7 @@
 
 **任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
 
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / SLICE_3A_DELEGATION_CORE_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / OPENID4VC_INTEROP_PENDING / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / SLICE_3A_DELEGATION_CORE_IMPLEMENTED / SLICE_4_A2A_OBJECT_MAPPING_DEVELOPER_VALIDATED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / OPENID4VC_INTEROP_PENDING / NOT_OWNER_ACCEPTED`
 
 **详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
 
@@ -50,6 +50,8 @@ Slice 2B 随后补齐本机负向安全门：加密登录事务绑定 issuer、c
 Slice 2C 已完成进入条件评估，不等于协议实现。仓库实际安装的 `openid-client 6.9.1` 已提供 PAR、`private_key_jwt` 与 DPoP 能力，并处于 OpenID Foundation 公布的 FAPI 2.0 RP 认证版本范围；因此继续集成成熟库，不自研协议。桌面端第一实现路线定为 `private_key_jwt + PAR + DPoP`，但只有在免费真实 HTTPS 提供方同时支持强客户端认证、DPoP nonce 和受保护资源后才进入 2C-1。完整真实端到端门通过前，`fapi2` 配置继续机械拒绝，不把普通 OIDC 或局部协议演示写成 FAPI 2.0 已实现。进入评估见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2C-ENTRY-ASSESSMENT.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2C-ENTRY-ASSESSMENT.md)。
 
 Slice 3A 已实现 Owner→Digital Subject 委托核心：既有 `AuthorizationGrant` 继续作为唯一授权事实源；W3C VC 2.0 数据形状只投影最小 issuer/subject/scope/purpose/有效期/撤销引用，使用成熟 `jose` 生成 `application/vc+jwt` 和 challenge/audience 绑定的短时 `application/vp+jwt`。Owner 私钥进入既有加密 SecretStore，Subject 复用现有通信 key 完成 holder proof。Binding 固化当时的 organization/tenant authority scope，同一机构 subject 重新认证但租户范围变化时旧 binding 自动撤销。撤销、过期、Owner identity/绑定停用、Owner key 轮换和 Subject key/endpoint 替换均拒绝；新 key 重新签发通过。OpenID4VCI 1.0 与 OpenID4VP 1.0 已确认 Final，但没有独立 wallet/issuer/verifier 互操作，因此当前不宣称支持 OpenID4VC、选择性披露钱包或机构为 Owner key 背书。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-3A-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-3A-DEVELOPER-VALIDATION.md)。
+
+Slice 4 已实现 A2A v1 标准对象映射：复用官方 `@a2a-js/sdk 1.0.1`，用签名 Agent Card 表达 Subject、Endpoint、技能和现有 Relay/E2EE 安全事实，用 Message/Task/Artifact 承载一次真实协作；现有 Relay 同时核验既有签名卡和标准签名 Card，拒绝篡改、过期、撤销 key、错误绑定与 token-only 降级。一个不导入 Digital Me 代码的独立官方 A2A server 进程已完成 Agent Card discovery、Message、Task + Artifact 离线零费用协议门；相关构建和定向回归 37/37 通过。该门不是公网外部组织互操作、第二位 Owner 真实 Subject、机构信任或产品验收；当前也没有公网 A2A endpoint、协作中心、Task Store、第二套 runtime、主干合并、推送、打包、发布或部署。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-4-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-4-DEVELOPER-VALIDATION.md)。下一推荐路线是具备真实外部条件后的 Slice 5 两 Owner 机构试验；若条件不足，不以单机回放冒充。
 
 ### Discover 收束结论
 

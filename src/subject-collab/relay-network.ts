@@ -2,7 +2,7 @@
  * 配对目录 + Relay/E2EE 上的 SubjectCollabNetwork。
  * 不持有对方 runtime 引用；不打开对方 Package。
  */
-import { nowIso } from '../shared/ids';
+import { AgentCard, Message, Task, type AgentCard as A2AAgentCard } from '@a2a-js/sdk';
 import type { CipherAdapter } from '../infrastructure/secret-store';
 import type { SubjectRef } from '../collaboration/schema';
 import { CommIdentityStore } from '../subject-comm/identity-store';
@@ -19,9 +19,19 @@ import { parseRemoteEndpointRef, remoteEndpointRef } from '../subject-comm/endpo
 import type { AttachedSubject, SubjectCollabDeliveryResult, SubjectCollabNetwork } from './network';
 import type { CollaborationRequest, CollaborationResponse, PublicSubjectCard } from './types';
 import { bodyDigest } from './exchange-store';
-import { isPersonalContextContract } from './personal-context-contract';
 import { readPeerCard, readPublicCard, sanitizePublicCard, writePeerCard } from './public-card';
 import { signPublicSubjectCard, verifySignedPublicSubjectCard } from './signed-public-card';
+import {
+  DIGITALME_A2A_RELAY_BINDING,
+  collaborationRequestFromA2AMessage,
+  collaborationRequestToA2AMessage,
+  collaborationResponseFromA2ATask,
+  collaborationResponseToA2ATask,
+  createSignedA2AAgentCard,
+  readPeerA2AAgentCard,
+  verifyA2AAgentCard,
+  writePeerA2AAgentCard,
+} from './a2a-subject-mapping';
 
 const UNREACHABLE = '对方当前不可达。';
 
@@ -30,6 +40,7 @@ export const RELAY_COLLAB_UNREACHABLE = UNREACHABLE;
 export interface RelaySubjectNetwork extends SubjectCollabNetwork {
   deliverWithReceipt(request: CollaborationRequest): Promise<SubjectCollabDeliveryResult>;
   publishPublicCard(): Promise<void>;
+  listA2AAgentCards(exceptSubjectId?: string): Promise<A2AAgentCard[]>;
   drainInbox(): Promise<number>;
   beginIdentityTransition(input?: {
     endpointId?: string;
@@ -45,57 +56,6 @@ export interface RelaySubjectNetwork extends SubjectCollabNetwork {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parseRequest(raw: unknown): CollaborationRequest | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const exchangeId = String(o.exchangeId || '').trim();
-  const fromSubjectId = String(o.fromSubjectId || '').trim();
-  const toSubjectId = String(o.toSubjectId || '').trim();
-  if (!exchangeId || !fromSubjectId || !toSubjectId) return null;
-  return {
-    exchangeId,
-    fromSubjectId,
-    toSubjectId,
-    at: String(o.at || ''),
-    goal: String(o.goal || ''),
-    hopedContribution: String(o.hopedContribution || ''),
-    disclosure: String(o.disclosure || ''),
-    ...(isPersonalContextContract(o.contextContract)
-      ? { contextContract: o.contextContract }
-      : {}),
-    threadId: String(o.threadId || ''),
-  };
-}
-
-function parseResponse(raw: unknown, exchangeId: string): CollaborationResponse | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  const decision = o.decision;
-  if (
-    decision !== 'accept' &&
-    decision !== 'decline' &&
-    decision !== 'clarify' &&
-    decision !== 'alternative'
-  ) {
-    return null;
-  }
-  return {
-    exchangeId: String(o.exchangeId || exchangeId),
-    fromSubjectId: String(o.fromSubjectId || ''),
-    toSubjectId: String(o.toSubjectId || ''),
-    at: String(o.at || nowIso()),
-    decision,
-    reply: String(o.reply || ''),
-    ...(typeof o.contribution === 'string' && o.contribution
-      ? { contribution: o.contribution }
-      : {}),
-    ...(o.usedOwnCapability ? { usedOwnCapability: true } : {}),
-    ...(typeof o.evidenceDigest === 'string' && o.evidenceDigest
-      ? { evidenceDigest: o.evidenceDigest }
-      : {}),
-  };
 }
 
 function unreachableResponse(request: CollaborationRequest): CollaborationResponse {
@@ -214,6 +174,7 @@ export function createRelaySubjectNetwork(input: {
       reachable: true,
     };
     const signedCard = await signPublicSubjectCard({ card, identity });
+    const a2aCard = await createSignedA2AAgentCard({ card, identity });
     const peers = await identity.listPeers();
     for (const peer of peers) {
       await sendPayload(
@@ -222,7 +183,13 @@ export function createRelaySubjectNetwork(input: {
           displayName: peer.displayName,
           endpointRef: remoteEndpointRef(peer.endpointId),
         },
-        { wire: 'public_card', card: { ...signedCard } },
+        {
+          wire: 'public_card',
+          card: {
+            legacySignedCard: signedCard,
+            a2aAgentCard: AgentCard.toJSON(a2aCard),
+          },
+        },
       );
     }
   };
@@ -280,13 +247,33 @@ export function createRelaySubjectNetwork(input: {
               item.subjectId === env.from.subjectId && item.endpointId === fromEndpointId,
           );
           if (peer) {
+            const cardEnvelope = payload.card || {};
+            const legacySignedCard =
+              cardEnvelope.legacySignedCard && typeof cardEnvelope.legacySignedCard === 'object'
+                ? cardEnvelope.legacySignedCard
+                : null;
+            const a2aAgentCard = cardEnvelope.a2aAgentCard;
             const verified = verifySignedPublicSubjectCard({
-              signedCard: payload.card,
+              signedCard: legacySignedCard,
               expectedPeer: peer,
               revokedKeyIds: await identity.listRevokedPeerKeyIds(peer.subjectId),
             });
-            if (verified.ok && verified.card) {
-              await writePeerCard(input.packageRoot, verified.card);
+            const a2aVerified = await verifyA2AAgentCard({
+              card: a2aAgentCard,
+              expectedPeer: peer,
+              revokedKeyIds: await identity.listRevokedPeerKeyIds(peer.subjectId),
+              expectedProtocolBinding: DIGITALME_A2A_RELAY_BINDING,
+            });
+            if (
+              verified.ok &&
+              verified.card &&
+              a2aVerified.ok &&
+              a2aVerified.card &&
+              a2aVerified.publicCard &&
+              JSON.stringify(verified.card) === JSON.stringify(a2aVerified.publicCard)
+            ) {
+              await writePeerCard(input.packageRoot, a2aVerified.publicCard);
+              await writePeerA2AAgentCard(input.packageRoot, peer.subjectId, a2aVerified.card);
             }
           }
           await relay.acknowledge(env.envelopeId);
@@ -295,14 +282,23 @@ export function createRelaySubjectNetwork(input: {
         }
         if (payload.wire === 'collab_response') {
           const exchangeId = String(payload.exchangeId || env.correlationId || '');
-          const parsed = parseResponse(payload.response, exchangeId);
+          const parsed = collaborationResponseFromA2ATask({
+            task: payload.response,
+            expectedExchangeId: exchangeId,
+            expectedFromSubjectId: env.from.subjectId,
+            expectedToSubjectId: env.to.subjectId,
+          });
           if (parsed && exchangeId) pending.set(exchangeId, parsed);
           await relay.acknowledge(env.envelopeId);
           processed += 1;
           continue;
         }
         if (payload.wire === 'collab_request') {
-          const request = parseRequest(payload.request);
+          const request = collaborationRequestFromA2AMessage({
+            message: payload.request,
+            expectedFromSubjectId: env.from.subjectId,
+            expectedToSubjectId: env.to.subjectId,
+          });
           if (!request || !local) {
             await relay.acknowledge(env.envelopeId);
             processed += 1;
@@ -317,7 +313,7 @@ export function createRelaySubjectNetwork(input: {
             {
               wire: 'collab_response',
               exchangeId: request.exchangeId,
-              response: { ...response },
+              response: Task.toJSON(collaborationResponseToA2ATask(response, request.threadId)) as Record<string, unknown>,
             },
             request.exchangeId,
           );
@@ -361,6 +357,24 @@ export function createRelaySubjectNetwork(input: {
       };
     },
     resumeIdentityTransition,
+    async listA2AAgentCards(exceptSubjectId) {
+      await drainInbox().catch(() => 0);
+      const peers = await identity.listPeers();
+      const cards: A2AAgentCard[] = [];
+      for (const peer of peers) {
+        if (peer.subjectId === exceptSubjectId) continue;
+        const card = await readPeerA2AAgentCard(input.packageRoot, peer.subjectId);
+        if (!card) continue;
+        const verified = await verifyA2AAgentCard({
+          card: AgentCard.toJSON(card),
+          expectedPeer: peer,
+          revokedKeyIds: await identity.listRevokedPeerKeyIds(peer.subjectId),
+          expectedProtocolBinding: DIGITALME_A2A_RELAY_BINDING,
+        });
+        if (verified.ok && verified.card) cards.push(verified.card);
+      }
+      return cards;
+    },
     async listCards(exceptSubjectId) {
       await drainInbox().catch(() => 0);
       const profile = await identity.getLocalProfile();
@@ -393,7 +407,9 @@ export function createRelaySubjectNetwork(input: {
       return cards;
     },
     async deliverWithReceipt(request): Promise<SubjectCollabDeliveryResult> {
-      const actualBody = JSON.stringify(request);
+      const message = collaborationRequestToA2AMessage(request);
+      const wireRequest = Message.toJSON(message) as Record<string, unknown>;
+      const actualBody = JSON.stringify(wireRequest);
       const baseReceipt = {
         delivered: false,
         recipientEndpointRef: '',
@@ -420,7 +436,7 @@ export function createRelaySubjectNetwork(input: {
         {
           wire: 'collab_request',
           exchangeId: request.exchangeId,
-          request: { ...request },
+          request: wireRequest,
         },
         request.exchangeId,
       );

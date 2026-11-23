@@ -119,6 +119,9 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - A2A Task 是协议对象，不是面向用户的新任务中心或永久工作流；用户仍在 Talk 中看到自然语言进展与结果。
 - A2A 的认证方案必须映射到 Slice 2/3 的真实安全事实，不接受“有 token 就可信”的降级。
 - 先在现有 Relay/E2EE 上做最小绑定；只有标准互操作确有缺口时才增加适配层，不新建 network runtime。
+- **Slice 4 标准对象映射（本轮已实现）：** 复用官方 `@a2a-js/sdk 1.0.1`，把既有签名 Public Subject Card 投影为带 Subject/Endpoint/有效期/通信 key/Relay 安全事实 required extension 的标准签名 Agent Card；真实 Relay 请求改用 A2A Message，响应改用 A2A Task + Artifact。接收方要求既有签名卡与标准签名 Card 分别验签且还原为同一公开主体事实；Card、Message 和缓存会按当前对端 key、撤销和过期状态重新核验。
+- **Slice 4 互操作门（开发者已通过）：** Digital Me 以官方 client 发现并调用一个不导入 Digital Me 代码的独立官方 A2A server 进程，完成 Agent Card、Message、Task、Artifact 基本互操作；探针显式清空模型 key，只验证协议对象，不产生外部费用，也不把普通 Agent 升格为可信 Subject。
+- **Slice 4 的诚实边界：** 当前真实 Subject 协作仍绑定既有私有 Relay/E2EE，不是公网 A2A HTTP endpoint；独立进程是官方 SDK 协议实现，不是另一组织运营的外部服务，也不是第二位 Owner 控制的 Subject。Card 声明支持 Slice 3A 的 Owner VP 格式，但本轮低风险 Message 实际携带 Slice 1C Personal Context Contract 与 Grant 引用，尚未完成 A2A 远端 Owner VP challenge/撤销验证。未接机构信任注册、跨 Relay、公网 HTTPS 或真实银行/电信租户。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-4-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-4-DEVELOPER-VALIDATION.md)。
 
 ### Slice 5 — 两 Owner 真实机构试验
 
@@ -176,12 +179,14 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 2A OIDC 授权码 + PKCE 身份联邦、稳定 Owner identity、脱敏联系提示、显式 Subject 绑定与撤销已实现；
 - Slice 2B 已连接公开外部 OIDC 开发源；Owner 控制的零费用 Auth0 Native client 门，以及本机 client 撤销、配置替换和跨租户绑定负向门均已通过；
 - Slice 3A 已实现 Owner→Subject 的 VC 2.0 + JOSE 委托核心、最小披露、短时挑战绑定出示，以及撤销/过期/Owner 停用/双侧 key 轮换负向门；
+- Slice 4 已实现官方 A2A v1 Agent Card、Message、Task、Artifact 标准对象映射；现有 Relay/E2EE 已真实承载这些对象，签名 Card 双投影一致性与 token-only 降级拒绝通过；
+- 独立官方 A2A server 进程的 Agent Card discovery、Message、Task + Artifact 零费用离线互操作通过；它不是外部组织服务或第二位 Owner 的真实 Subject；
 - TypeScript 构建、身份专项测试 6/6、真实本机 OIDC 浏览器闭环与 Owner 控制 Auth0 浏览器闭环通过；
 - 真实外部 OIDC 浏览器闭环通过，账号创建、真实身份、付款方式和费用均为 false；
 - 物化前按需挂载既有 work runtime，已关闭 initiator 本地物化和远端 pull 共用的 artifact committer 回归；原始失败套件 7/7 通过；
 - 生产依赖已最小升级，npm 官方 `--omit=dev` 审计为 0；HTTP/XML/Relay/A2A 定向路径 55/55、A2A adapter 独立 3/3 通过；包含开发/打包工具的完整审计仍有 28 项，留给独立工具链升级批次；
 - 尚未 Owner 验收，尚未合并主干、推送、打包、发布或部署；
-- 尚未完成 Personal Context Contract 独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、标准 A2A Agent Card、外部真实机构租户、FAPI 2.0 高保障通道、OpenID4VCI/OpenID4VP 独立实现互操作或公网凭证状态服务。
+- 尚未完成 Personal Context Contract 独立签名与远程撤销同步、跨 Relay 迁移、同时双向轮换、公网 A2A Subject endpoint、两 Owner 真实协作、外部真实机构租户、FAPI 2.0 高保障通道、OpenID4VCI/OpenID4VP 独立实现互操作或公网凭证状态服务。
 
 ### 下一执行批次
 
@@ -190,6 +195,7 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 3. Slice 2C-1 只在具备免费、真实 HTTPS、同时支持 PAR、`private_key_jwt`、DPoP nonce 和受保护资源调用的测试提供方后实施。密钥进入既有 SecretStore，事务只绑定 `kid` 与配置指纹，不保存 token；必须通过 audience、scope、重放、client/key 撤销、密钥轮换和 token 泄露负向门；
 4. 在 2C-1 全部真实端到端门通过前，`fapi2` 配置继续机械拒绝，普通 Auth0 Native client、本机普通 OIDC 或只有 PAR 的局部演示均不得写成 FAPI 2.0 已实现；
 5. Slice 3B 只在具备独立、零费用 OpenID4VCI/VP 测试 issuer/wallet/verifier 后实施互操作门；优先复用 Final 规范实现，不自研二维码、DCQL、`vp_token` 或 `direct_post` 协议栈。没有独立对端时不得用本机回环冒充互操作；
-6. 若 3B 外部条件暂不成熟，下一实现进入 Slice 4 的 A2A 标准对象映射，并继续使用 Slice 3A 的真实授权事实，不增加协作中心或第二套 runtime；
-7. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
-8. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。
+6. Slice 4 的 A2A 标准对象映射和独立进程协议门已完成；在 Slice 5 前不新增协作中心、Task Store、第二套 runtime 或公网服务；
+7. 下一推荐实现为 Slice 5 两 Owner 真实机构试验，但必须先确认两位独立 Owner、两个独立 Subject/运行端点和至少一侧合法可用的真实机构身份源；没有这些外部条件时不得用单机自动回放冒充；
+8. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
+9. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。

@@ -240,6 +240,12 @@ test('签名公开卡：真实 Relay 只接收已配对端点签发的卡', asyn
       );
       assert.equal(received?.endpointRef, remoteEndpointRef(a.profile.endpointId));
       assert.equal(received?.publicSkills[0]?.name, '材料核验');
+      const a2aCards = await networkB.listA2AAgentCards();
+      const a2a = a2aCards.find((card) => card.name === a.profile.displayName);
+      assert.equal(a2a?.supportedInterfaces[0]?.protocolBinding, '2DIGIME-RELAY');
+      assert.equal(a2a?.supportedInterfaces[0]?.protocolVersion, '1.0');
+      assert.equal(a2a?.skills[0]?.name, '材料核验');
+      assert.equal(a2a?.signatures.length, 1);
     } finally {
       detach();
       networkA.stopPoll();

@@ -3409,7 +3409,7 @@ export class DigitalMeRuntime {
         hopedContribution: request.hopedContribution,
         disclosure: request.disclosure,
       }),
-      protocolRef: contract!.id,
+      protocolRef: `a2a:message:${request.exchangeId}`,
       disclosureAudit: {
         contractId: contract!.id,
         contentDigest: contract!.contentDigest,
@@ -3484,10 +3484,11 @@ export class DigitalMeRuntime {
         decision: response.decision,
         reply: response.reply,
         contribution: response.contribution || '',
+        evidenceDigest: response.evidenceDigest || '',
       }),
       peerDecision: response.decision,
       ...(response.usedOwnCapability ? { usedOwnCapability: true } : {}),
-      ...(response.evidenceDigest ? { protocolRef: response.evidenceDigest } : {}),
+      protocolRef: `a2a:task:${request.exchangeId}`,
     });
     return response;
   }

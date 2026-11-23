@@ -176,7 +176,11 @@ export async function consultSubject(input: {
       threadId: input.threadId,
       summary: `向 ${card.displayName} 发出合作请求`,
       body: delivered.receipt.actualBodyDigest === bodyDigest(fallbackBody) ? fallbackBody : '',
-      protocolRef: issued.contract.id,
+      // Relay transports the standard A2A Message rather than the legacy
+      // CollaborationRequest JSON. Preserve the digest of the bytes that were
+      // actually sent even when the semantic event body is deliberately blank.
+      bodyDigest: delivered.receipt.actualBodyDigest,
+      protocolRef: `a2a:message:${exchangeId}`,
       disclosureAudit: {
         contractId: issued.contract.id,
         contentDigest: issued.contract.contentDigest,
@@ -220,10 +224,11 @@ export async function consultSubject(input: {
       decision: response.decision,
       reply: response.reply,
       contribution: response.contribution || '',
+      evidenceDigest: response.evidenceDigest || '',
     }),
     peerDecision: response.decision,
     ...(response.usedOwnCapability ? { usedOwnCapability: true } : {}),
-    ...(response.evidenceDigest ? { protocolRef: response.evidenceDigest } : {}),
+    protocolRef: `a2a:task:${exchangeId}`,
   });
 
   return {

@@ -46,3 +46,20 @@ export type { RelaySubjectNetwork } from './relay-network';
 export { consultSubject } from './consult';
 export { decideIncomingRequest } from './decide';
 export { runOwnContribution } from './contribute';
+export {
+  DIGITALME_A2A_SUBJECT_EXTENSION_URI,
+  DIGITALME_A2A_RELAY_BINDING,
+  DIGITALME_A2A_REQUEST_KIND,
+  DIGITALME_A2A_TASK_KIND,
+  projectPublicSubjectCardToA2A,
+  createSignedA2AAgentCard,
+  verifyA2AAgentCard,
+  publicSubjectCardFromA2A,
+  collaborationRequestToA2AMessage,
+  collaborationRequestFromA2AMessage,
+  collaborationResponseToA2ATask,
+  collaborationResponseFromA2ATask,
+  writePeerA2AAgentCard,
+  readPeerA2AAgentCard,
+} from './a2a-subject-mapping';
+export type { A2AAgentCardVerification } from './a2a-subject-mapping';

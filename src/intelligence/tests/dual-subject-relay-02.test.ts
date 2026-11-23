@@ -324,6 +324,10 @@ test('A 经配对目录 + Relay/E2EE 自主选择 B，网络层无完整 Digital
       assert.equal(sentAudit!.contractId, receivedAudit!.contractId);
       assert.equal(sentAudit!.contentDigest, receivedAudit!.contentDigest);
       assert.equal(sentAudit!.actualBodyDigest, receivedAudit!.actualBodyDigest);
+      assert.equal(
+        aEx.find((item) => item.kind === 'request_sent')?.bodyDigest,
+        sentAudit!.actualBodyDigest,
+      );
       assert.equal(sentAudit!.actualBytes, receivedAudit!.actualBytes);
       assert.ok(sentAudit!.recipientEndpointRef);
       assert.ok(aEx.some((item) => item.kind === 'response_received' && item.peerDecision === 'accept'));
