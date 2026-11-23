@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { atomicWriteFile, readFileWithRecovery } from '../infrastructure/fs-atomic';
 import type {
+  InstitutionAuthorityScope,
   OwnerIdentityRecord,
   SubjectOwnerBinding,
   VerifiedFederatedIdentity,
@@ -130,6 +131,7 @@ export class OwnerIdentityStore {
   async bindToSubject(input: {
     ownerIdentityId: string;
     subjectId: string;
+    targetAuthority?: InstitutionAuthorityScope;
     confirmationRef: string;
     confirmed: boolean;
     at: string;
@@ -139,6 +141,19 @@ export class OwnerIdentityStore {
     const file = await this.load();
     const identity = file.identities[input.ownerIdentityId];
     if (!identity || identity.revokedAt) throw new Error('Owner identity 不可用');
+    const identityScoped = Boolean(identity.organizationId || identity.tenantId);
+    const targetScoped = Boolean(
+      input.targetAuthority?.organizationId || input.targetAuthority?.tenantId,
+    );
+    if (identityScoped !== targetScoped) {
+      throw new Error('机构身份与 Digital Subject 的租户范围不完整');
+    }
+    if (
+      identity.organizationId !== input.targetAuthority?.organizationId ||
+      identity.tenantId !== input.targetAuthority?.tenantId
+    ) {
+      throw new Error('机构身份与 Digital Subject 的租户范围不匹配');
+    }
     const id = stableId('osb', input.ownerIdentityId, input.subjectId);
     const existing = file.bindings[id];
     if (existing && !existing.revokedAt) return existing;

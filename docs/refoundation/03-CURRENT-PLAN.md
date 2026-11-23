@@ -12,7 +12,7 @@
 
 **任务名：** `INSTITUTIONAL-SUBJECT-COLLABORATION-01`
 
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_PENDING / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / FAPI_IMPLEMENTATION_PENDING / NOT_OWNER_ACCEPTED`
 
 **详细计划：** [`../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md`](../plans/INSTITUTIONAL-SUBJECT-COLLABORATION-01.md)
 
@@ -44,6 +44,10 @@
 同日 Slice 2B 外部公开门通过：复用现有适配器连接 Duende 官方公开 demo，以预配置 `interactive.public` client 真实完成 HTTPS discovery、独立浏览器授权码 + PKCE S256、动态 loopback 回调、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定。没有创建账号、接受新条款、使用真实身份、录入付款方式或产生费用；临时身份包已删除。此结果只证明外部协议互通，不是 Owner 控制的 client 注册，不是银行/电信真实租户、实名、KYC 或 FAPI 2.0。当前尚未接产品 UI、Owner 验收、合并、推送、打包、发布或部署。下一小门若需创建外部账号、接受第三方条款或使用组织租户，仍须 Owner 另行明确授权。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2B-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2B-DEVELOPER-VALIDATION.md)。
 
 Owner 随后明确授权零费用开发租户与独立 client 门，并亲自完成 Auth0 注册、Native client 创建、回调白名单保存及合成账号密码输入。2digime 使用 Owner 控制的 client 再次真实完成 HTTPS discovery、授权码 + PKCE S256、固定 `127.0.0.1` loopback 回调、state/nonce/ID Token/UserInfo 校验、跨新服务实例事务恢复和显式 Subject 绑定；没有读取或保存 client secret、token、密码或真实联系方式，没有录入付款方式或产生费用。至此 Slice 2B 的 Owner 控制外部 client 开发门通过，但它仍是 Auth0 开发租户与合成身份，不是银行/电信真实租户、实名、KYC、FAPI 2.0、产品 UI、Owner 产品验收或生产发布。证据仍收束在同一 Slice 2B 审计文件。
+
+Slice 2B 随后补齐本机负向安全门：加密登录事务绑定 issuer、client、redirect URI、scopes、client authentication 与 security profile 指纹，配置替换会在 token 调用前拒绝；机构身份若携带 organization/tenant 范围，Subject 绑定必须提供完整且相同的目标范围。标准本机 OIDC provider 真实签发授权码后撤销动态 client，token 交换被拒绝且没有新增身份；跨租户绑定拒绝、同租户绑定通过。为避免破坏 Owner 的外部开发环境，本轮没有删除 Auth0 client；因此只证明 2digime 正确服从身份源撤销，不宣称完成 Auth0 管理台 client 删除恢复流程。
+
+Slice 2C 已完成进入条件评估，不等于协议实现。仓库实际安装的 `openid-client 6.9.1` 已提供 PAR、`private_key_jwt` 与 DPoP 能力，并处于 OpenID Foundation 公布的 FAPI 2.0 RP 认证版本范围；因此继续集成成熟库，不自研协议。桌面端第一实现路线定为 `private_key_jwt + PAR + DPoP`，但只有在免费真实 HTTPS 提供方同时支持强客户端认证、DPoP nonce 和受保护资源后才进入 2C-1。完整真实端到端门通过前，`fapi2` 配置继续机械拒绝，不把普通 OIDC 或局部协议演示写成 FAPI 2.0 已实现。进入评估见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2C-ENTRY-ASSESSMENT.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2C-ENTRY-ASSESSMENT.md)。
 
 ### Discover 收束结论
 

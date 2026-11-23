@@ -21,6 +21,7 @@ export interface InstitutionIdentityProvider {
 
 export interface OidcAuthorizationTransaction {
   providerId: string;
+  providerFingerprint: string;
   state: string;
   nonce: string;
   codeVerifier: string;
@@ -77,4 +78,9 @@ export interface SubjectOwnerBinding {
   createdAt: string;
   confirmationRef: string;
   revokedAt?: string;
+}
+
+export interface InstitutionAuthorityScope {
+  organizationId?: string;
+  tenantId?: string;
 }

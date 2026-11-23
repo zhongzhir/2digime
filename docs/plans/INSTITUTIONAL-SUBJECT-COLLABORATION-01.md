@@ -1,7 +1,7 @@
 # INSTITUTIONAL-SUBJECT-COLLABORATION-01 — 机构级主体协作与做事能力
 
 **日期：** 2026-11-23
-**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_IMPLEMENTED / REAL_LOCAL_OIDC_DEVELOPER_VALIDATED / EXTERNAL_PROVIDER_AND_FAPI_PENDING / NOT_OWNER_ACCEPTED`
+**状态：** `SLICE_0_COMPLETE / SLICE_1A_1B_1C_IMPLEMENTED / SLICE_2A_2B_IMPLEMENTED / OWNER_CONTROLLED_EXTERNAL_OIDC_DEVELOPER_VALIDATED / FAPI_2C_ENTRY_ASSESSED / FAPI_IMPLEMENTATION_PENDING / NOT_OWNER_ACCEPTED`
 **前序地基：** `04-COLLABORATION-FOUNDATION`、`INSTITUTION-DISTRIBUTION-V01` 已接受  
 **目标：** 在不破坏 Owner 主权和单一 Talk 入口的前提下，让 2digime 能以可验证的 Digital Subject 身份接入银行、电信、大型机构和大用户平台，并通过标准 A2A 协议安全协作、完成事情。
 
@@ -100,7 +100,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - **Slice 2A 的诚实边界：** 这是标准协议的本机开发者门，不是真实银行、电信租户，不证明法定实名或机构合规；没有外部账号、第三方条款、真实身份数据或费用。`fapi2` 配置当前机械拒绝，避免把普通 OIDC 冒充 FAPI 2.0；PAR、`private_key_jwt`、DPoP/mTLS、外部 provider 注册、产品 UI、Owner 恢复流程和生产密钥管理仍待后续切片。
 - **Slice 2B 外部公开门（本轮已实现）：** 复用同一适配器连接 Duende 官方公开 demo，以预配置 `interactive.public` client 真实完成 HTTPS discovery、独立浏览器授权码 + PKCE S256、动态 loopback 回调、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定。外部 issuer 必须 HTTPS；原生应用 HTTP loopback 回调必须地址受限且显式允许。
 - **Slice 2B Owner 控制 client 门（本轮已实现）：** Owner 明确授权并亲自创建零费用 Auth0 开发租户、Native client 与合成测试账号，保存固定 `127.0.0.1:43120` 回调白名单。2digime 只读取公开 issuer/client ID，以 public client 的 `none` 认证方式真实完成授权码 + PKCE S256、state、nonce、ID Token/UserInfo、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定；不读取 client secret，不接触密码，不保存 token。
-- **Slice 2B 的诚实边界：** Auth0 开发租户和合成账号证明 Owner 控制的外部 client 可以完成普通 OIDC 协议闭环与 redirect URI 管理；它不是银行、电信或政府真实租户，不证明法定实名、KYC、组织归属或 FAPI 2.0。未录入付款方式、未产生费用、未使用真实身份数据；client 撤销、跨租户隔离负向门、产品 UI 和 Owner 产品验收仍待后续切片。
+- **Slice 2B 负向安全门（本轮已实现）：** 登录事务加密绑定完整安全相关 client 配置；issuer/client/scopes/auth/profile 被替换时拒绝。携带 organization/tenant 声明的机构身份只能绑定同范围 Subject。本机标准 OIDC provider 在授权码签发后撤销动态 client，token 交换真实失败且没有新增身份；跨租户绑定拒绝、同租户绑定通过。
+- **Slice 2B 的诚实边界：** Auth0 开发租户和合成账号证明 Owner 控制的外部 client 可以完成普通 OIDC 协议闭环与 redirect URI 管理；本机撤销门证明 2digime 会服从 provider 的 client 撤销，但没有破坏性删除外部 Auth0 client。它不是银行、电信或政府真实租户，不证明法定实名、KYC、组织归属或 FAPI 2.0。未录入付款方式、未产生费用、未使用真实身份数据；外部 client 删除/恢复管理流程、产品 UI 和 Owner 产品验收仍待后续切片。
 
 ### Slice 3 — Owner → Subject 委托凭证
 
@@ -170,8 +171,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 1B 原子密钥 bundle、双签交接证明、四步 Relay 交接、撤销同步和重启恢复已实现；
 - Slice 1C 一次任务 Personal Context Contract、短期 Grant、接收方核验和双侧实际披露审计已实现；
 - Slice 2A OIDC 授权码 + PKCE 身份联邦、稳定 Owner identity、脱敏联系提示、显式 Subject 绑定与撤销已实现；
-- Slice 2B 已连接公开外部 OIDC 开发源，真实外部门通过；Owner 控制的 client 注册仍待单独授权；
-- TypeScript 构建、新增身份专项测试 3/3 与真实本机 OIDC 浏览器闭环通过；
+- Slice 2B 已连接公开外部 OIDC 开发源；Owner 控制的零费用 Auth0 Native client 门，以及本机 client 撤销、配置替换和跨租户绑定负向门均已通过；
+- TypeScript 构建、身份专项测试 6/6、真实本机 OIDC 浏览器闭环与 Owner 控制 Auth0 浏览器闭环通过；
 - 真实外部 OIDC 浏览器闭环通过，账号创建、真实身份、付款方式和费用均为 false；
 - 物化前按需挂载既有 work runtime，已关闭 initiator 本地物化和远端 pull 共用的 artifact committer 回归；原始失败套件 7/7 通过；
 - 生产依赖已最小升级，npm 官方 `--omit=dev` 审计为 0；HTTP/XML/Relay/A2A 定向路径 55/55、A2A adapter 独立 3/3 通过；包含开发/打包工具的完整审计仍有 28 项，留给独立工具链升级批次；
@@ -180,8 +181,9 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 
 ### 下一执行批次
 
-1. 由 Owner 决定是否对 Slice 1A–1C、Slice 2A 与 Slice 2B 外部公开门做当前边界内验收；未验收前不得写成产品完成；
-2. 如继续 Slice 2B 独立 client 门，选择零费用且不含真实身份数据的开发租户，注册 Owner 控制的 client 并验证 client 撤销、redirect URI 管理和租户隔离；创建账号、接受第三方条款或提供组织租户必须另行确认；
-3. Slice 2C 在支持条件成熟时接 FAPI 2.0：PAR、`private_key_jwt`、DPoP 或 mTLS，并为 audience、scope、重放、密钥轮换和 token 泄露建立负向门；不自研替代协议；
-4. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
-5. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。
+1. 由 Owner 决定是否对 Slice 1A–1C、Slice 2A 与 Slice 2B 做当前边界内验收；未验收前不得写成产品完成；
+2. Slice 2C-0 已完成进入评估：继续复用已安装且具有 FAPI 2.0 RP 认证覆盖的 `openid-client 6.9.1`，不自研协议；桌面端优先组合为 `private_key_jwt + PAR + DPoP`，mTLS 作为机构要求时的替代 sender constraint；
+3. Slice 2C-1 只在具备免费、真实 HTTPS、同时支持 PAR、`private_key_jwt`、DPoP nonce 和受保护资源调用的测试提供方后实施。密钥进入既有 SecretStore，事务只绑定 `kid` 与配置指纹，不保存 token；必须通过 audience、scope、重放、client/key 撤销、密钥轮换和 token 泄露负向门；
+4. 在 2C-1 全部真实端到端门通过前，`fapi2` 配置继续机械拒绝，普通 Auth0 Native client、本机普通 OIDC 或只有 PAR 的局部演示均不得写成 FAPI 2.0 已实现；
+5. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
+6. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。

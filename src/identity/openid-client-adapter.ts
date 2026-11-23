@@ -42,6 +42,29 @@ function loopback(url: URL): boolean {
   );
 }
 
+export function institutionProviderFingerprint(
+  provider: InstitutionIdentityProvider,
+): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        issuer: provider.issuer,
+        clientId: provider.clientId,
+        redirectUri: provider.redirectUri,
+        scopes: [...provider.scopes].sort(),
+        clientAuthenticationMethod: provider.clientAuthentication.method,
+        clientSecret:
+          provider.clientAuthentication.method === 'client_secret_basic'
+            ? provider.clientAuthentication.clientSecret
+            : '',
+        securityProfile: provider.securityProfile,
+        allowInsecureLoopback: provider.allowInsecureLoopback === true,
+        allowLoopbackRedirect: provider.allowLoopbackRedirect === true,
+      }),
+    )
+    .digest('hex');
+}
+
 export function validateInstitutionProvider(provider: InstitutionIdentityProvider): void {
   if (!/^[A-Za-z0-9_.-]+$/.test(provider.id)) throw new Error('OIDC provider id 无效');
   const issuer = new URL(provider.issuer);
@@ -73,22 +96,7 @@ export class OpenIdClientAdapter implements InstitutionOidcAdapter {
   >();
 
   private providerFingerprint(provider: InstitutionIdentityProvider): string {
-    return createHash('sha256')
-      .update(
-        JSON.stringify({
-          issuer: provider.issuer,
-          clientId: provider.clientId,
-          redirectUri: provider.redirectUri,
-          clientAuthenticationMethod: provider.clientAuthentication.method,
-          clientSecret:
-            provider.clientAuthentication.method === 'client_secret_basic'
-              ? provider.clientAuthentication.clientSecret
-              : '',
-          allowInsecureLoopback: provider.allowInsecureLoopback === true,
-          allowLoopbackRedirect: provider.allowLoopbackRedirect === true,
-        }),
-      )
-      .digest('hex');
+    return institutionProviderFingerprint(provider);
   }
 
   private async clientAndConfig(
@@ -143,6 +151,7 @@ export class OpenIdClientAdapter implements InstitutionOidcAdapter {
       authorizationUrl: authorizationUrl.href,
       transaction: {
         providerId: provider.id,
+        providerFingerprint: institutionProviderFingerprint(provider),
         state,
         nonce,
         codeVerifier,

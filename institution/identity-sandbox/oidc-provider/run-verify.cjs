@@ -63,7 +63,7 @@ async function startProvider() {
     claims: {
       address: ['address'],
       email: ['email', 'email_verified'],
-      openid: ['sub'],
+      openid: ['sub', 'org_id', 'tid'],
       phone: ['phone_number', 'phone_number_verified'],
       profile: ['name', 'preferred_username'],
     },
@@ -76,6 +76,8 @@ async function startProvider() {
           preferred_username: 'owner@example.test',
           email: 'owner@example.test',
           email_verified: true,
+          org_id: 'bank-group-sandbox',
+          tid: 'bank-tenant-sandbox',
         };
       },
     }),
@@ -87,12 +89,20 @@ async function startProvider() {
       devInteractions: { enabled: true },
     },
   });
+  await provider.Client.adapter.upsert('digitalme-slice2-revocation', {
+    client_id: 'digitalme-slice2-revocation',
+    client_secret: 'slice2-revocation-client-secret-not-for-production',
+    redirect_uris: [CALLBACK],
+    response_types: ['code'],
+    grant_types: ['authorization_code'],
+    token_endpoint_auth_method: 'client_secret_basic',
+  });
   const server = provider.listen(18080, '127.0.0.1');
   await new Promise((resolve, reject) => {
     server.once('listening', resolve);
     server.once('error', reject);
   });
-  return server;
+  return { provider, server };
 }
 
 async function close(server) {
@@ -101,7 +111,7 @@ async function close(server) {
 }
 
 async function main() {
-  const providerServer = await startProvider();
+  const { provider: oidcProvider, server: providerServer } = await startProvider();
   let callbackServer;
   let callbackPromise;
   let browser;
@@ -165,25 +175,87 @@ async function main() {
     assert.equal(identity.contact.emailHint, 'o***@example.test');
     const beforeBinding = await service.ownerIdentityStore().list();
     assert.equal(beforeBinding.bindings.length, 0);
+    await assert.rejects(
+      service.ownerIdentityStore().bindToSubject({
+        ownerIdentityId: identity.id,
+        subjectId: 'subject-slice2-other-tenant',
+        targetAuthority: {
+          organizationId: 'bank-group-sandbox',
+          tenantId: 'bank-tenant-other',
+        },
+        confirmationRef: 'developer-e2e-cross-tenant-negative',
+        confirmed: true,
+        at: new Date().toISOString(),
+      }),
+      /租户范围不匹配/,
+    );
     const binding = await service.ownerIdentityStore().bindToSubject({
       ownerIdentityId: identity.id,
       subjectId: 'subject-slice2-sandbox',
+      targetAuthority: {
+        organizationId: 'bank-group-sandbox',
+        tenantId: 'bank-tenant-sandbox',
+      },
       confirmationRef: 'developer-e2e-explicit-confirmation',
       confirmed: true,
       at: new Date().toISOString(),
     });
     assert.equal(binding.subjectId, 'subject-slice2-sandbox');
+
+    await close(callbackServer);
+    callbackServer = undefined;
+    ({ server: callbackServer, callbackPromise } = await startCallbackServer());
+    const revocationProvider = {
+      ...provider,
+      id: 'oidc-provider-local-revocation-sandbox',
+      clientId: 'digitalme-slice2-revocation',
+      clientAuthentication: {
+        method: 'client_secret_basic',
+        clientSecret: 'slice2-revocation-client-secret-not-for-production',
+      },
+    };
+    const revocationAuthorizationUrl = await service.start(
+      revocationProvider,
+      new Date().toISOString(),
+    );
+    const revocationPage = await browser.newPage();
+    await revocationPage.goto(revocationAuthorizationUrl, { waitUntil: 'domcontentloaded' });
+    await revocationPage.locator('input[name="login"]').fill('owner@example.test');
+    await revocationPage.locator('input[name="password"]').fill('slice2-owner-password');
+    await revocationPage.locator('button[type="submit"]').click();
+    await revocationPage.waitForLoadState('domcontentloaded');
+    const revocationConsentPrompt = revocationPage.locator(
+      'input[name="prompt"][value="consent"]',
+    );
+    if (await revocationConsentPrompt.count()) {
+      await revocationPage.locator('button[type="submit"]').click();
+    }
+    const revokedCallbackUrl = await callbackPromise;
+    await oidcProvider.Client.adapter.destroy('digitalme-slice2-revocation');
+    await assert.rejects(
+      service.complete({
+        provider: revocationProvider,
+        callbackUrl: revokedCallbackUrl,
+        now: new Date().toISOString(),
+      }),
+    );
+    const afterRevocation = await service.ownerIdentityStore().list();
+    assert.equal(afterRevocation.identities.length, 1);
+    assert.equal(afterRevocation.bindings.length, 1);
     const rawFiles = fs
       .readdirSync(path.join(packageRoot, 'identity'))
       .map((name) => fs.readFileSync(path.join(packageRoot, 'identity', name), 'utf8'))
       .join('\n');
-    assert.doesNotMatch(rawFiles, /slice2-local-client-secret|slice2-owner-password/);
+    assert.doesNotMatch(
+      rawFiles,
+      /slice2-local-client-secret|slice2-revocation-client-secret|slice2-owner-password/,
+    );
     assert.doesNotMatch(rawFiles, /access_token|refresh_token|id_token/);
 
     fs.mkdirSync(EVIDENCE, { recursive: true });
     const report = {
       task: 'INSTITUTIONAL-SUBJECT-COLLABORATION-01',
-      slice: '2A',
+      slice: '2A + 2B negative gates',
       result: 'REAL_OIDC_DEVELOPER_GATE_PASS',
       at: new Date().toISOString(),
       provider: {
@@ -198,11 +270,18 @@ async function main() {
         issuer: identity.issuer,
         subjectPresent: Boolean(identity.subject),
         emailVerified: identity.contact.emailVerified,
+        institutionScopePresent: Boolean(identity.organizationId && identity.tenantId),
       },
       binding: {
         initiallyAbsent: beforeBinding.bindings.length === 0,
         explicitConfirmationRequired: true,
+        crossTenantRejected: true,
         bindingId: binding.id,
+      },
+      clientLifecycle: {
+        authorizationCodeIssuedBeforeRevocation: true,
+        tokenExchangeRejectedAfterRevocation: true,
+        identityNotPersistedAfterRevocation: afterRevocation.identities.length === 1,
       },
       limitations: [
         'local standards-conformant development identity provider, not a bank or telecom tenant',

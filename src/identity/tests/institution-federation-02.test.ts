@@ -10,6 +10,7 @@ import type {
   InstitutionOidcAdapter,
 } from '../openid-client-adapter';
 import { validateInstitutionProvider } from '../openid-client-adapter';
+import { institutionProviderFingerprint } from '../openid-client-adapter';
 import { OwnerIdentityStore } from '../owner-identity-store';
 import type {
   InstitutionIdentityProvider,
@@ -43,6 +44,7 @@ class ProtocolFixture implements InstitutionOidcAdapter {
   ): Promise<AuthorizationStart> {
     const transaction: OidcAuthorizationTransaction = {
       providerId: input.id,
+      providerFingerprint: institutionProviderFingerprint(input),
       state: this.state,
       nonce: 'nonce-with-at-least-128-bits-of-test-entropy',
       codeVerifier: 'verifier-with-at-least-128-bits-of-test-entropy',
@@ -125,6 +127,25 @@ test('provider gate requires OIDC code + PKCE profile and secure non-loopback tr
   );
 });
 
+test('provider fingerprint covers security-relevant client configuration only', () => {
+  const baseline = institutionProviderFingerprint(provider);
+  const changedProviders: InstitutionIdentityProvider[] = [
+    { ...provider, issuer: 'http://127.0.0.1:8081/realms/digitalme' },
+    { ...provider, clientId: 'replacement-client' },
+    { ...provider, redirectUri: 'http://127.0.0.1:43120/callback' },
+    { ...provider, scopes: ['openid', 'profile'] },
+    { ...provider, clientAuthentication: { method: 'none' } },
+    { ...provider, securityProfile: 'fapi2' },
+  ];
+  for (const changed of changedProviders) {
+    assert.notEqual(institutionProviderFingerprint(changed), baseline);
+  }
+  assert.equal(
+    institutionProviderFingerprint({ ...provider, displayName: 'Renamed provider' }),
+    baseline,
+  );
+});
+
 test('transaction is encrypted, one-time, and produces Owner identity only', async () => {
   const root = await tempRoot();
   const fixture = new ProtocolFixture();
@@ -156,6 +177,28 @@ test('transaction is encrypted, one-time, and produces Owner identity only', asy
     /已使用、已过期/,
   );
   assert.equal(fixture.completeCalls, 1);
+});
+
+test('in-flight login is bound to issuer, client, scopes, and authentication configuration', async () => {
+  const root = await tempRoot();
+  const fixture = new ProtocolFixture();
+  const service = new InstitutionFederationService(
+    root,
+    createAesGcmCipherAdapter(Buffer.alloc(32, 23)),
+    fixture,
+  );
+  const now = '2026-11-23T02:30:00.000Z';
+  await service.start(provider, now);
+  const callback = `${provider.redirectUri}?code=real-code-shape&state=${fixture.state}`;
+  await assert.rejects(
+    service.complete({
+      provider: { ...provider, clientId: 'replacement-client' },
+      callbackUrl: callback,
+      now,
+    }),
+    /事务绑定不匹配/,
+  );
+  assert.equal(fixture.completeCalls, 0);
 });
 
 test('institution login cannot silently become Subject authority; confirmation and revocation are explicit', async () => {
@@ -218,4 +261,54 @@ test('institution login cannot silently become Subject authority; confirmation a
   );
   const raw = await fs.readFile(path.join(root, 'identity', 'owner-identities.json'), 'utf8');
   assert.doesNotMatch(raw, /person@example\.com/);
+});
+
+test('tenant-scoped institution identity cannot bind across tenant or to an unscoped Subject', async () => {
+  const root = await tempRoot();
+  const store = new OwnerIdentityStore(root);
+  const verifiedAt = '2026-11-23T06:00:00.000Z';
+  const identity = await store.recordVerifiedIdentity({
+    providerId: 'institution-tenant-provider',
+    issuer: 'https://identity.example.test',
+    subject: 'tenant-owner-001',
+    organizationId: 'bank-group-a',
+    tenantId: 'bank-tenant-a',
+    amr: ['pwd', 'otp'],
+    emailVerified: false,
+    phoneNumberVerified: false,
+    grantedScopes: ['openid'],
+    verifiedAt,
+  });
+  await assert.rejects(
+    store.bindToSubject({
+      ownerIdentityId: identity.id,
+      subjectId: 'subject-without-tenant',
+      confirmationRef: 'talk-turn-tenant-1',
+      confirmed: true,
+      at: verifiedAt,
+    }),
+    /租户范围不完整/,
+  );
+  await assert.rejects(
+    store.bindToSubject({
+      ownerIdentityId: identity.id,
+      subjectId: 'subject-tenant-b',
+      targetAuthority: { organizationId: 'bank-group-a', tenantId: 'bank-tenant-b' },
+      confirmationRef: 'talk-turn-tenant-2',
+      confirmed: true,
+      at: verifiedAt,
+    }),
+    /租户范围不匹配/,
+  );
+  const binding = await store.bindToSubject({
+    ownerIdentityId: identity.id,
+    subjectId: 'subject-tenant-a',
+    targetAuthority: { organizationId: 'bank-group-a', tenantId: 'bank-tenant-a' },
+    confirmationRef: 'talk-turn-tenant-3',
+    confirmed: true,
+    at: verifiedAt,
+  });
+  assert.equal(binding.subjectId, 'subject-tenant-a');
+  const listed = await store.list();
+  assert.equal(listed.bindings.length, 1);
 });

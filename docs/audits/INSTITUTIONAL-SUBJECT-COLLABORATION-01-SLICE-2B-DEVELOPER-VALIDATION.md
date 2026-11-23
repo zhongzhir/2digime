@@ -29,28 +29,33 @@
 - 新增 `identity:oidc:auth0:verify`，从环境变量读取公开 issuer/client ID，以固定回调等待 Owner 在浏览器中手动完成合成身份登录；
 - Auth0 验证器在回调后重建服务实例，校验稳定身份、显式绑定和敏感材料不落盘，随后删除临时身份包；
 - Auth0 client 按 Native/public client 使用 `token_endpoint_auth_method=none`，不读取页面显示的 client secret，也不把租户专用配置硬编码进产品运行时。
+- OIDC 登录事务新增安全相关 provider 指纹，覆盖 issuer、client ID、redirect URI、scopes、client authentication、security profile 与 loopback 许可；显示名变化不影响事务，安全配置变化会使事务一次性拒绝；
+- `bindToSubject` 不新增租户 Store，只在机构身份或目标 Subject 声明 organization/tenant 范围时机械要求双方完整且一致。
 
 ## 4. 已验证事实
 
 - `npm run build`：通过；
-- 身份专项测试：3/3 通过，覆盖 HTTPS issuer、显式 loopback、远端 HTTP 回调拒绝、PKCE profile、事务加密/一次性消费、绑定与撤销；
+- 身份专项测试：6/6 通过，覆盖 HTTPS issuer、显式 loopback、远端 HTTP 回调拒绝、PKCE profile、事务加密/一次性消费、provider 配置替换、租户隔离、绑定与撤销；
 - `npm run smoke`：通过；
 - `npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org`：生产依赖 0 漏洞；本机 npm 镜像不实现 audit endpoint，故显式使用官方只读审计端点，没有安装或升级依赖；
 - `npm run identity:oidc:external:verify`：`REAL_EXTERNAL_OIDC_DEVELOPER_GATE_PASS`；
 - `npm run identity:oidc:auth0:verify`：`OWNER_CONTROLLED_AUTH0_OIDC_DEVELOPER_GATE_PASS`；
 - issuer：`https://demo.duendesoftware.com`；client：`interactive.public`；flow：authorization code；PKCE：S256；client authentication：none；
 - Auth0：Owner 控制的开发 tenant 与 Native client；固定 `127.0.0.1:43120` callback；authorization code + PKCE S256；client authentication：none；
+- provider 配置指纹专项与事务替换负向门通过：安全相关字段变化会拒绝，adapter 不进入 token 调用；
+- 本机标准 OIDC provider 真实签发第二个动态 client 的授权码后撤销该 client，token 交换被 provider 拒绝，身份与绑定数量保持不变；
+- 带 organization/tenant 声明的真实本机 OIDC 身份跨租户绑定拒绝，同租户显式绑定通过；
 - 回调前后使用不同 `InstitutionFederationService` 实例，稳定身份成功持久化；
 - 登录后 binding 初始为空，显式确认后才建立；
 - Duende 外部影响：账号创建 false、真实身份 false、付款方式 false、费用 false；Auth0 外部影响：Owner 明确授权创建开发 tenant、Native client 与合成测试账号，真实身份 false、client secret 读取/保存 false、付款方式 false、费用 false。
 
-全仓 `npm test` 本轮没有通过：长跑中身份测试保持 3/3，但既有软件开发交互、真实模型和 Electron 场景出现多组失败，随后一个 Electron 场景长期无新输出，约十分钟后人工停止。新增文件不改 `src/identity` 生产实现，受影响身份专项与真实 Auth0 门均通过；因此本记录不宣称全仓回归通过，也不顺带修改无关历史失败。
+全仓 `npm test` 本轮没有通过：长跑中原身份测试保持 3/3，但既有软件开发交互、真实模型和 Electron 场景出现多组失败，随后一个 Electron 场景长期无新输出，约十分钟后人工停止。此后新增的配置替换与租户隔离专项使身份测试扩展为 6/6，受影响身份专项、本机撤销门与真实 Auth0 门均通过；因此本记录不宣称全仓回归通过，也不顺带修改无关历史失败。
 
 首次页面自动化因 Duende 当前 ASP.NET 字段名不同而未找到输入框；诊断确认协议请求已正确进入官方登录页，随后只补充 `Input.Username`、`Input.Password`、`Input.Button` 页面兼容，最终闭环通过。失败尝试没有完成登录或回调。
 
 ## 5. 明确未完成
 
-- 已验证 Owner 控制 Auth0 client 的创建后使用与 redirect URI 保存，但尚未验证 client 撤销、跨租户隔离负向门或机构管理员流程；
+- 已验证 Owner 控制 Auth0 client 的创建后使用与 redirect URI 保存，以及本机 provider 的真实 client 撤销和跨租户绑定负向门；尚未破坏性删除外部 Auth0 client，也未验证其恢复流程或机构管理员流程；
 - 未接银行、电信、政府或大型平台真实租户，未使用真实身份，不证明实名、KYC、组织归属或机构合规；
 - public client 没有服务端 client secret，本轮也没有验证 `private_key_jwt`；
 - 未实现 FAPI 2.0 的 PAR、JAR、DPoP/mTLS、sender-constrained token、audience 资源绑定或 token 泄露负向门；
@@ -59,4 +64,4 @@
 
 ## 6. 下一门
 
-Slice 2B 的 Owner 控制外部 client 开发门已经关闭。下一步不再重复注册普通 OIDC client；应先补 client 撤销与跨租户隔离负向门，再进入 Slice 2C 的 FAPI 2.0 高保障通道。Slice 2C 仍需支持 PAR、强客户端认证和 sender constraint 的提供方，不能用 Auth0 普通 Native client 或本次 public demo 门冒充。
+Slice 2B 的 Owner 控制外部 client 开发门与本机 client 撤销/跨租户负向门已经关闭。下一步进入 Slice 2C 的 FAPI 2.0 高保障通道评估与最小实现。Slice 2C 仍需支持 PAR、强客户端认证和 sender constraint 的提供方，不能用 Auth0 普通 Native client、本机普通 OIDC 或 public demo 门冒充。

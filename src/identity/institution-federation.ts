@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { FileSecretStore, type CipherAdapter } from '../infrastructure/secret-store';
 import {
+  institutionProviderFingerprint,
   OpenIdClientAdapter,
   type InstitutionOidcAdapter,
 } from './openid-client-adapter';
@@ -57,6 +58,7 @@ export class InstitutionFederationService {
     const transaction = JSON.parse(raw) as OidcAuthorizationTransaction;
     if (
       transaction.providerId !== input.provider.id ||
+      transaction.providerFingerprint !== institutionProviderFingerprint(input.provider) ||
       transaction.redirectUri !== input.provider.redirectUri ||
       transaction.state !== state
     ) {
