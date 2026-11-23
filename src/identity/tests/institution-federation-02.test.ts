@@ -83,9 +83,37 @@ class ProtocolFixture implements InstitutionOidcAdapter {
 
 test('provider gate requires OIDC code + PKCE profile and secure non-loopback transport', () => {
   assert.doesNotThrow(() => validateInstitutionProvider(provider));
+  const externalPublicClient: InstitutionIdentityProvider = {
+    ...provider,
+    id: 'duende-public-demo',
+    issuer: 'https://demo.duendesoftware.com',
+    clientId: 'interactive.public',
+    clientAuthentication: { method: 'none' },
+    allowInsecureLoopback: false,
+    allowLoopbackRedirect: true,
+  };
+  assert.doesNotThrow(() => validateInstitutionProvider(externalPublicClient));
+  assert.doesNotThrow(() =>
+    validateInstitutionProvider({
+      ...externalPublicClient,
+      redirectUri: 'http://[::1]:43119/callback',
+    }),
+  );
+  assert.throws(
+    () => validateInstitutionProvider({ ...externalPublicClient, allowLoopbackRedirect: false }),
+    /loopback HTTP/,
+  );
+  assert.throws(
+    () =>
+      validateInstitutionProvider({
+        ...externalPublicClient,
+        redirectUri: 'http://callback.example.com/oidc',
+      }),
+    /loopback HTTP/,
+  );
   assert.throws(
     () => validateInstitutionProvider({ ...provider, issuer: 'http://idp.example.com' }),
-    /HTTPS/,
+    /身份源必须使用 HTTPS/,
   );
   assert.throws(
     () => validateInstitutionProvider({ ...provider, scopes: ['email'] }),

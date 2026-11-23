@@ -15,6 +15,8 @@ export interface InstitutionIdentityProvider {
   securityProfile: InstitutionSecurityProfile;
   /** 只允许本机开发身份源；不得用于正式机构接入。 */
   allowInsecureLoopback?: boolean;
+  /** 原生桌面应用可显式使用 RFC 8252 loopback HTTP 回调；issuer 仍必须是 HTTPS。 */
+  allowLoopbackRedirect?: boolean;
 }
 
 export interface OidcAuthorizationTransaction {

@@ -35,7 +35,10 @@ const dynamicImport = new Function('specifier', 'return import(specifier)') as (
 function loopback(url: URL): boolean {
   return (
     url.protocol === 'http:' &&
-    (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1')
+    (url.hostname === '127.0.0.1' ||
+      url.hostname === 'localhost' ||
+      url.hostname === '::1' ||
+      url.hostname === '[::1]')
   );
 }
 
@@ -43,12 +46,15 @@ export function validateInstitutionProvider(provider: InstitutionIdentityProvide
   if (!/^[A-Za-z0-9_.-]+$/.test(provider.id)) throw new Error('OIDC provider id 无效');
   const issuer = new URL(provider.issuer);
   const redirect = new URL(provider.redirectUri);
-  const insecure = issuer.protocol !== 'https:' || redirect.protocol !== 'https:';
-  if (
-    insecure &&
-    !(provider.allowInsecureLoopback === true && loopback(issuer) && loopback(redirect))
-  ) {
-    throw new Error('机构身份源和回调必须使用 HTTPS');
+  const insecureLocalIssuer = provider.allowInsecureLoopback === true && loopback(issuer);
+  if (issuer.protocol !== 'https:' && !insecureLocalIssuer) {
+    throw new Error('机构身份源必须使用 HTTPS');
+  }
+  const loopbackRedirectAllowed =
+    loopback(redirect) &&
+    (provider.allowLoopbackRedirect === true || provider.allowInsecureLoopback === true);
+  if (redirect.protocol !== 'https:' && !loopbackRedirectAllowed) {
+    throw new Error('机构身份回调必须使用 HTTPS；原生应用仅可显式启用 loopback HTTP 回调');
   }
   if (!provider.scopes.includes('openid')) throw new Error('OIDC scope 必须包含 openid');
   if (provider.securityProfile === 'fapi2') throw new Error('FAPI2_PROFILE_NOT_IMPLEMENTED');
@@ -79,6 +85,7 @@ export class OpenIdClientAdapter implements InstitutionOidcAdapter {
               ? provider.clientAuthentication.clientSecret
               : '',
           allowInsecureLoopback: provider.allowInsecureLoopback === true,
+          allowLoopbackRedirect: provider.allowLoopbackRedirect === true,
         }),
       )
       .digest('hex');

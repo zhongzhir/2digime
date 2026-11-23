@@ -98,6 +98,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - 机构登录只证明 Owner/组织身份，不直接等于 Subject 授权；必须经过独立绑定与撤销。
 - **Slice 2A（本轮已实现）：** 通过成熟 `openid-client` 集成 OIDC discovery、浏览器授权码、PKCE S256、state、nonce、ID Token 和可选 UserInfo 校验；本地独立 `oidc-provider` 开发身份源完成真实协议闭环。稳定身份键只使用 `issuer + subject`，邮箱/电话只保存脱敏验证提示。登录事务加密、限时、一次性消费；Owner identity 到 Subject 的绑定必须显式确认，可单独撤销，撤销身份会级联撤销绑定，再次登录不会静默恢复被撤销身份。
 - **Slice 2A 的诚实边界：** 这是标准协议的本机开发者门，不是真实银行、电信租户，不证明法定实名或机构合规；没有外部账号、第三方条款、真实身份数据或费用。`fapi2` 配置当前机械拒绝，避免把普通 OIDC 冒充 FAPI 2.0；PAR、`private_key_jwt`、DPoP/mTLS、外部 provider 注册、产品 UI、Owner 恢复流程和生产密钥管理仍待后续切片。
+- **Slice 2B 外部公开门（本轮已实现）：** 复用同一适配器连接 Duende 官方公开 demo，以预配置 `interactive.public` client 真实完成 HTTPS discovery、独立浏览器授权码 + PKCE S256、动态 loopback 回调、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定。外部 issuer 必须 HTTPS；原生应用 HTTP loopback 回调必须地址受限且显式允许。
+- **Slice 2B 的诚实边界：** 使用公开测试身份和服务方预配置 public client；未创建账号、接受新条款、使用真实身份、录入付款方式或产生费用。它证明外部协议互通，不是 2digime/Owner 自有 client 注册，不证明真实租户、实名、KYC、组织归属或 FAPI 2.0。独立 client 注册及其撤销、redirect URI 管理、租户隔离仍需单独授权后验证。
 
 ### Slice 3 — Owner → Subject 委托凭证
 
@@ -167,7 +169,9 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 1B 原子密钥 bundle、双签交接证明、四步 Relay 交接、撤销同步和重启恢复已实现；
 - Slice 1C 一次任务 Personal Context Contract、短期 Grant、接收方核验和双侧实际披露审计已实现；
 - Slice 2A OIDC 授权码 + PKCE 身份联邦、稳定 Owner identity、脱敏联系提示、显式 Subject 绑定与撤销已实现；
+- Slice 2B 已连接公开外部 OIDC 开发源，真实外部门通过；Owner 控制的 client 注册仍待单独授权；
 - TypeScript 构建、新增身份专项测试 3/3 与真实本机 OIDC 浏览器闭环通过；
+- 真实外部 OIDC 浏览器闭环通过，账号创建、真实身份、付款方式和费用均为 false；
 - 物化前按需挂载既有 work runtime，已关闭 initiator 本地物化和远端 pull 共用的 artifact committer 回归；原始失败套件 7/7 通过；
 - 生产依赖已最小升级，npm 官方 `--omit=dev` 审计为 0；HTTP/XML/Relay/A2A 定向路径 55/55、A2A adapter 独立 3/3 通过；包含开发/打包工具的完整审计仍有 28 项，留给独立工具链升级批次；
 - 尚未 Owner 验收，尚未合并主干、推送、打包、发布或部署；
@@ -175,8 +179,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 
 ### 下一执行批次
 
-1. 由 Owner 决定是否对 Slice 1A–1C 与 Slice 2A 做当前边界内验收；未验收前不得写成产品完成；
-2. Slice 2B 选择一个无外部费用、无需真实身份数据的外部开发/沙箱身份源，注册 OIDC client 并接入现有适配器；创建外部账号、接受第三方条款或提供组织租户必须另行确认；
+1. 由 Owner 决定是否对 Slice 1A–1C、Slice 2A 与 Slice 2B 外部公开门做当前边界内验收；未验收前不得写成产品完成；
+2. 如继续 Slice 2B 独立 client 门，选择零费用且不含真实身份数据的开发租户，注册 Owner 控制的 client 并验证 client 撤销、redirect URI 管理和租户隔离；创建账号、接受第三方条款或提供组织租户必须另行确认；
 3. Slice 2C 在支持条件成熟时接 FAPI 2.0：PAR、`private_key_jwt`、DPoP 或 mTLS，并为 audience、scope、重放、密钥轮换和 token 泄露建立负向门；不自研替代协议；
 4. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
 5. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。

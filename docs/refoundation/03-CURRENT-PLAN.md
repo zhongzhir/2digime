@@ -39,7 +39,9 @@
 
 `docs/reference` 的两类探索只作为外部启发，不覆盖产品宪法：HackerTube 类“个人算法”落实为平台/来源只供候选、同一个 Digital Self 与当前模型完成个人选择；Second 类“长期个人上下文”落实为一个本机可拥有、可纠正、可迁移的 Digital Self，外部 Agent/Tool/Subject 只能按目的取得短期最小投影。明确不吸收全时屏幕/键盘/OS 监控、后台 Agent 群、第二份长期记忆或中心画像。
 
-2026-11-23 已完成 Slice 2A 机构身份联邦开发地基：集成成熟 OIDC 客户端，真实走通本机独立开发身份源、浏览器授权码回调、PKCE S256、state、nonce 和 ID Token 校验；以 `issuer + subject` 建立稳定 Owner identity，邮箱/电话只保存脱敏且带验证状态的联系提示；机构登录不会自动获得 Subject 权限，必须另行确认绑定且可撤销。事务材料加密、一次性消费，不保存 token、客户端密钥或原始联系方式。随后最小升级 Express/XML 生产依赖，npm `--omit=dev` 审计为 0；成果物化改为按需挂载既有 work runtime，原始协作失败套件 7/7、受影响 HTTP/XML/Relay/A2A 路径 55/55、A2A adapter 3/3 通过。包含开发和打包工具的完整审计仍有 28 项，未做工具链大版本升级，也不宣称全仓测试或发布安全通过。当前尚未接外部机构租户、真实身份数据或 FAPI 2.0 的 PAR、`private_key_jwt`、DPoP/mTLS，也未接产品 UI、Owner 验收、合并、推送、打包、发布或部署。Slice 2B 如需创建外部账号、接受第三方条款或使用组织租户，仍须 Owner 另行确认。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2A-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2A-DEVELOPER-VALIDATION.md)。
+2026-11-23 已完成 Slice 2A 机构身份联邦开发地基：集成成熟 OIDC 客户端，真实走通本机独立开发身份源、浏览器授权码回调、PKCE S256、state、nonce 和 ID Token 校验；以 `issuer + subject` 建立稳定 Owner identity，邮箱/电话只保存脱敏且带验证状态的联系提示；机构登录不会自动获得 Subject 权限，必须另行确认绑定且可撤销。事务材料加密、一次性消费，不保存 token、客户端密钥或原始联系方式。随后最小升级 Express/XML 生产依赖，npm `--omit=dev` 审计为 0；成果物化改为按需挂载既有 work runtime，原始协作失败套件 7/7、受影响 HTTP/XML/Relay/A2A 路径 55/55、A2A adapter 3/3 通过。包含开发和打包工具的完整审计仍有 28 项，未做工具链大版本升级，也不宣称全仓测试或发布安全通过。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2A-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2A-DEVELOPER-VALIDATION.md)。
+
+同日 Slice 2B 外部公开门通过：复用现有适配器连接 Duende 官方公开 demo，以预配置 `interactive.public` client 真实完成 HTTPS discovery、独立浏览器授权码 + PKCE S256、动态 loopback 回调、跨新服务实例事务恢复、稳定 Owner identity 持久化和显式 Subject 绑定。没有创建账号、接受新条款、使用真实身份、录入付款方式或产生费用；临时身份包已删除。此结果只证明外部协议互通，不是 Owner 控制的 client 注册，不是银行/电信真实租户、实名、KYC 或 FAPI 2.0。当前尚未接产品 UI、Owner 验收、合并、推送、打包、发布或部署。下一小门若需创建外部账号、接受第三方条款或使用组织租户，仍须 Owner 另行明确授权。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2B-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-2B-DEVELOPER-VALIDATION.md)。
 
 ### Discover 收束结论
 
