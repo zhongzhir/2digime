@@ -41,6 +41,12 @@
 
 TypeScript 构建通过；新鲜度、连续 5 页/60 张唯一卡、低水位接队、失败保留和 renderer 合同聚焦回归 39/39 通过。正式 Electron 界面门启动后发生既有 Playwright/Electron 空转挂起，未进入页面断言，已清理本轮测试进程；因此当前仅为开发检查点，尚未通过正式 Electron、真实来源 30 分钟门、Owner 验收、打包、push 或发布。
 
+### Slice 1B 开发检查点（2026-11-24）
+
+Playwright 已升级到支持 Node 24、修复 Windows shell 参数链的 1.65.1；Electron harness 删除旧临时 bootstrap，直接走正式 `electron/main.cjs`。仅在 Codex 受限 Windows 环境启用 `--no-sandbox --disable-gpu`，普通 Windows 不降低默认沙箱。Discover 正式 Electron 门连续两次通过，覆盖真实卡片渲染、同排等高/动作贴底、较早内容标签、宽窄布局、卡内播放、refresh/seek/cancel 终态和零未捕获异常；首次进入页面的异步刷新竞态已在测试中收口。构建通过，Discover/个人流聚焦回归 35 passed / 1 skipped（已有失效开发模型凭据），正式 AppData 隔离保护通过。
+
+另一条既有聊天滚动 Electron 测试现已进入断言并暴露滚轮未推动聊天列表的独立失败，本轮不跨 Slice 修聊天。Slice 1 仍待真实开放来源 30 分钟门、60 个入口抽样和 Owner 验收；尚未打包、push 或发布。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

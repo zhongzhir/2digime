@@ -28,10 +28,24 @@ test('发现页：真实渲染、等高卡片、卡片内播放，且页面链�
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err && err.message ? err.message : err)));
   try {
+    const settled = async (label: string) => {
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        const s = (await page.evaluate(`(() => {
+          const st = document.getElementById('content-discover-status');
+          const cancel = document.getElementById('btn-discover-cancel');
+          return { status: !!st && !st.hidden, cancel: !!cancel && !cancel.hidden };
+        })()`)) as { status: boolean; cancel: boolean };
+        if (!s.status && !s.cancel) return;
+        await page.waitForTimeout(1000);
+      }
+      assert.fail(`${label}：超过 120 秒仍停在加载态`);
+    };
     await skipWelcomeAndEnterShell(page);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('#nav-discover').click();
     await page.locator('#panel-discover').waitFor({ state: 'visible', timeout: 15_000 });
+    await settled('initial refresh');
 
     // 1) 合成视图真实渲染；renderView 内部任何 ReferenceError 都会让 evaluate 抛出
     await page.evaluate(`(() => {
@@ -125,19 +139,6 @@ test('发现页：真实渲染、等高卡片、卡片内播放，且页面链�
     assert.equal(await audioCard.locator('audio').count(), 0);
 
     // 5) 页面自己的 refresh 与搜索，必须落到真实终态
-    const settled = async (label: string) => {
-      const deadline = Date.now() + 120_000;
-      while (Date.now() < deadline) {
-        const s = (await page.evaluate(`(() => {
-          const st = document.getElementById('content-discover-status');
-          const cancel = document.getElementById('btn-discover-cancel');
-          return { status: !!st && !st.hidden, cancel: !!cancel && !cancel.hidden };
-        })()`)) as { status: boolean; cancel: boolean };
-        if (!s.status && !s.cancel) return;
-        await page.waitForTimeout(1000);
-      }
-      assert.fail(`${label}：超过 120 秒仍停在加载态`);
-    };
     // 搜索一开始取消键就必须可见（最长的等待发生在第一批结果之前），点击后落到真实终态
     const cancelVisibleAtStart = await page.evaluate(`(() => {
       void window.ContentDiscoverPage.seek('取消测试查询');

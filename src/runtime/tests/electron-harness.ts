@@ -61,24 +61,11 @@ export async function launchDigitalMeElectron(opts?: {
     throw new Error('require(electron) 未返回可执行路径');
   }
   const realProduct = opts?.realProduct === true;
-  const electronPackageDir = path.dirname(require.resolve('electron/package.json'));
-  const dependencyRoot = path.dirname(electronPackageDir);
-  // Playwright 1.49 launches Electron through a shell on Windows. A repository
-  // path containing spaces is otherwise split before Electron can execute main.cjs.
-  const bootstrap = path.join(
-    os.tmpdir(),
-    `digitalme-electron-main-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.cjs`,
-  );
-  await fs.writeFile(
-    bootstrap,
-    [
-      "process.env.NODE_PATH = " + JSON.stringify(dependencyRoot) + " + require('node:path').delimiter + (process.env.NODE_PATH || '');",
-      "require('node:module').Module._initPaths();",
-      "require(" + JSON.stringify(path.join(REPO_ROOT, 'electron', 'main.cjs')) + ");",
-      '',
-    ].join('\n'),
-    'utf8',
-  );
+  const mainEntry = path.join(REPO_ROOT, 'electron', 'main.cjs');
+  const constrainedWindows =
+    process.platform === 'win32' &&
+    (Boolean(process.env.CODEX_PERMISSION_PROFILE) || process.env.DIGITALME_V2_ELECTRON_NO_SANDBOX === '1');
+  const launchArgs = constrainedWindows ? ['--no-sandbox', '--disable-gpu', mainEntry] : [mainEntry];
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries({
     ...process.env,
@@ -110,19 +97,22 @@ export async function launchDigitalMeElectron(opts?: {
   let app: ElectronApplication;
   try {
     app = await playwright._electron.launch({
-      executablePath: electronPath,
-      args: [bootstrap],
+      // Codex runs Windows child processes in a restricted filesystem sandbox.
+      // Electron's own GPU/renderer sandbox cannot be nested there reliably.
+      args: launchArgs,
       cwd: REPO_ROOT,
-      timeout: 60_000,
+      // On the Owner's Windows machine, first-run bootstrap (isolated userData,
+      // package creation and antivirus scanning) can legitimately take more
+      // than 90 seconds before Electron exposes its debugging endpoint.
+      timeout: 180_000,
       env,
     });
   } catch (err) {
-    await fs.rm(bootstrap, { force: true }).catch(() => {});
     throw err;
   }
   try {
-    const page = await app.firstWindow({ timeout: 90_000 });
-    await page.waitForLoadState('domcontentloaded');
+    const page = await app.firstWindow({ timeout: 180_000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 120_000 });
     return {
       app,
       page,
@@ -133,7 +123,6 @@ export async function launchDigitalMeElectron(opts?: {
         } catch {
           /* ignore */
         }
-        await fs.rm(bootstrap, { force: true }).catch(() => {});
       },
     };
   } catch (err) {
@@ -142,7 +131,6 @@ export async function launchDigitalMeElectron(opts?: {
     } catch {
       /* ignore */
     }
-    await fs.rm(bootstrap, { force: true }).catch(() => {});
     throw err;
   }
 }

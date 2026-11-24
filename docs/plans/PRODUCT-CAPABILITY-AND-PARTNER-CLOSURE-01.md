@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_1A_DEVELOPER_VALIDATED`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_1B_ELECTRON_GATE_PASSED`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -71,7 +71,7 @@
 
 | 顺序 | 结果 | 状态 | 预计工作量* | 关键依赖 |
 |---|---|---|---|---|
-| Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1A developer pass） | 1–2 周 | 真实开放来源与正式 Electron |
+| Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1B Electron gate pass） | 1–2 周 | 真实开放来源与 Owner 验收 |
 | Now-2 | Slice 2：Doing 领先能力集成与基准 | Not Started | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
 | Next-1 | Slice 3：数字之我右侧身份、协作与自动化投影 | Not Started | 1–2 周小批次 | Slice 2 至少两条真实执行主链 |
 | Next-2 | Slice 4：机构伙伴沙箱与合作演示 | Not Started | 2–3 个小批次 | Slice 3、现有 Institution Distribution |
@@ -110,6 +110,15 @@
 - 卡片改为同排等高、摘要限行、动作区贴底；超过 30 天且有可信发布时间的卡片显示“较早内容”；
 - 构建及聚焦回归 39/39 通过，其中既有五页门为 5×12、60 张唯一卡；
 - 正式 Electron/Playwright 门仍在启动阶段空转，未进入页面断言。本检查点不是 Slice 1 完成、真实来源门或 Owner 验收。
+
+### Slice 1B 开发检查点（2026-11-24）
+
+- Playwright 从 1.49.1 升至 1.65.1，测试入口不再使用旧的临时 bootstrap，而是直接启动正式 `electron/main.cjs`；受限 Codex Windows 环境才附加 `--no-sandbox --disable-gpu`，普通 Windows 保持 Electron 默认沙箱；
+- Discover 正式 Electron 门连续两次通过，覆盖真实渲染、同排等高与动作区对齐、“较早内容”标签、宽窄布局、卡内音频展开/收起、页面 refresh/seek/cancel 终态和未捕获异常；
+- 修正首次进入 Discover 的异步刷新覆盖合成验收视图的测试竞态。构建通过；Discover/个人流聚焦回归 35 passed / 1 skipped（跳过项为已有失效开发模型凭据），Electron Discover 2/2 连续通过，harness 正式 AppData 隔离保护通过；
+- 另一条既有 `chat-scroll-electron` 已能进入页面断言，但暴露滚轮事件未推动聊天列表的独立失败；它不是本 Slice 的 Discover 用户主链，本轮不顺手改聊天交互。
+
+Slice 1 仍未完成真实开放来源 30 分钟门、60 个入口可打开率抽样与 Owner 验收；不打包、不 push、不发布。
 
 ## 6. Slice 2 — Doing 领先能力集成
 
