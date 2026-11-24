@@ -2,10 +2,11 @@
  * Talk 机械工具：授权围栏内 list / read / Office 导出。
  * 抽取走 extract.ts，Office 序列化走 export.ts，不做语义判断。
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { constants, existsSync, promises as fs, statSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { TextDecoder } from 'node:util';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
 import {
   extractFile,
@@ -118,6 +119,81 @@ export const MOVE_FILE_TOOL: ChatToolDefinition = {
     },
   },
 };
+
+export const EDIT_FILE_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'edit_file',
+    description:
+      '精确修改本轮已读取、且位于已授权文件夹内的 UTF-8 文本文件。先对原文件完整预检全部替换和出现次数，再保存原文备份并原子写入、回读和核对 SHA-256；不会让后一项替换命中前一项刚生成的文字。多个授权根时必须填写 root。',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '授权根内的文件相对路径，或该文件的绝对路径。' },
+        root: { type: 'string', description: '授权根绝对路径；有多个授权根时必填。' },
+        replacements: {
+          type: 'array',
+          description: '1—20 项区分大小写的精确替换。每项必须声明原文预期出现次数。',
+          items: {
+            type: 'object',
+            properties: {
+              from: { type: 'string', description: '从本轮真实读取内容中逐字复制的原文。' },
+              to: { type: 'string', description: '替换后的文字。' },
+              expectedCount: { type: 'number', description: '原文在修改前文件中的预期出现次数，必须为正整数。' },
+            },
+            required: ['from', 'to', 'expectedCount'],
+          },
+        },
+      },
+      required: ['path', 'replacements'],
+    },
+  },
+};
+
+export const ROLLBACK_FILE_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'rollback_file',
+    description:
+      '撤销本对话最近一次仍可撤销的 edit_file。只有目标文件仍与那次编辑后的 SHA-256 完全一致时才恢复原文；若用户或其他程序后来改过文件则拒绝，避免覆盖新内容。',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '要撤销的授权文本文件相对路径或绝对路径。' },
+        root: { type: 'string', description: '授权根绝对路径；有多个授权根时必填。' },
+      },
+      required: ['path'],
+    },
+  },
+};
+
+export type TextReplacement = { from: string; to: string; expectedCount: number };
+export type EditFileArgs = { path: string; root?: string; replacements: TextReplacement[] };
+
+export function parseEditFileArgs(raw: string): EditFileArgs {
+  try {
+    const parsed = JSON.parse(raw) as {
+      path?: string;
+      relativePath?: string;
+      root?: string;
+      replacements?: Array<{ from?: string; to?: string; expectedCount?: number }>;
+    };
+    const root = String(parsed.root || '').trim();
+    return {
+      path: String(parsed.path || parsed.relativePath || '').trim(),
+      ...(root ? { root } : {}),
+      replacements: Array.isArray(parsed.replacements)
+        ? parsed.replacements.map((item) => ({
+            from: String(item.from || ''),
+            to: String(item.to ?? ''),
+            expectedCount: Number(item.expectedCount),
+          }))
+        : [],
+    };
+  } catch {
+    return { path: '', replacements: [] };
+  }
+}
 
 export type FileTransferArgs = { sourcePath: string; destinationPath: string; root?: string };
 
@@ -467,6 +543,303 @@ export async function resolveAuthorizedFileTransfer(
 
 async function sha256File(filePath: string): Promise<string> {
   return createHash('sha256').update(await fs.readFile(filePath)).digest('hex');
+}
+
+function sha256Bytes(content: Uint8Array | string): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+type PreparedTextEdit = {
+  original: string;
+  updated: string;
+  beforeSha256: string;
+  afterSha256: string;
+  changes: Array<{
+    line: number;
+    column: number;
+    before: string;
+    after: string;
+  }>;
+};
+
+function lineAndColumn(content: string, offset: number): { line: number; column: number } {
+  const before = content.slice(0, offset);
+  const line = before.split('\n').length;
+  const lastBreak = before.lastIndexOf('\n');
+  return { line, column: offset - lastBreak };
+}
+
+function prepareExactTextEdit(original: string, replacements: TextReplacement[]):
+  | { ok: true; prepared: PreparedTextEdit }
+  | { ok: false; reason: string } {
+  if (replacements.length < 1 || replacements.length > 20) {
+    return { ok: false, reason: 'replacements 必须包含 1—20 项精确替换。' };
+  }
+  const matches: Array<{ start: number; end: number; before: string; after: string }> = [];
+  for (const replacement of replacements) {
+    if (!replacement.from) return { ok: false, reason: '替换原文不能为空。' };
+    if (replacement.from === replacement.to) return { ok: false, reason: '替换前后内容相同，未执行写入。' };
+    if (!Number.isInteger(replacement.expectedCount) || replacement.expectedCount < 1) {
+      return { ok: false, reason: '每项 expectedCount 必须是正整数。' };
+    }
+    let cursor = 0;
+    let count = 0;
+    while (cursor <= original.length - replacement.from.length) {
+      const found = original.indexOf(replacement.from, cursor);
+      if (found < 0) break;
+      matches.push({
+        start: found,
+        end: found + replacement.from.length,
+        before: replacement.from,
+        after: replacement.to,
+      });
+      count += 1;
+      cursor = found + replacement.from.length;
+    }
+    if (count !== replacement.expectedCount) {
+      return {
+        ok: false,
+        reason: `原文“${replacement.from.slice(0, 80)}”实际出现 ${count} 次，与 expectedCount=${replacement.expectedCount} 不一致。`,
+      };
+    }
+  }
+  matches.sort((a, b) => a.start - b.start || a.end - b.end);
+  for (let index = 1; index < matches.length; index += 1) {
+    const current = matches[index];
+    const previous = matches[index - 1];
+    if (current && previous && current.start < previous.end) {
+      return { ok: false, reason: '替换项在原文件中的匹配范围互相重叠，已拒绝整批修改。' };
+    }
+  }
+  let updated = '';
+  let cursor = 0;
+  for (const match of matches) {
+    updated += original.slice(cursor, match.start) + match.after;
+    cursor = match.end;
+  }
+  updated += original.slice(cursor);
+  if (updated === original) return { ok: false, reason: '替换没有产生实际差异。' };
+  const changes = matches.map((match) => ({
+    ...lineAndColumn(original, match.start),
+    before: match.before,
+    after: match.after,
+  }));
+  return {
+    ok: true,
+    prepared: {
+      original,
+      updated,
+      beforeSha256: sha256Bytes(Buffer.from(original, 'utf8')),
+      afterSha256: sha256Bytes(Buffer.from(updated, 'utf8')),
+      changes,
+    },
+  };
+}
+
+async function resolveAuthorizedEditableFile(
+  auth: AuthorizedFs,
+  requestedPath: string,
+  requestedRoot?: string,
+): Promise<{ ok: true; root: string; abs: string } | { ok: false; reason: string }> {
+  const roots = uniqAbs(auth.folders);
+  if (!roots.length) return { ok: false, reason: '当前没有已授权的可写文件夹。' };
+  const askedRoot = String(requestedRoot || '').trim();
+  let root: string | undefined;
+  if (askedRoot) {
+    if (isUncOrNetworkPath(askedRoot) || askedRoot.replace(/\\/g, '/').split('/').includes('..')) {
+      return { ok: false, reason: '路径超出授权目录。' };
+    }
+    const canonical = canonicalizeFolderPath(path.resolve(askedRoot));
+    root = roots.find((item) => folderCovers(item, canonical) && folderCovers(canonical, item));
+    if (!root) return { ok: false, reason: `root 不在本次授权目录中。请从下列路径中选一个：${roots.join('、')}` };
+  } else if (roots.length === 1) {
+    root = roots[0];
+  } else {
+    return { ok: false, reason: `有多个已授权目录，请在 root 中填写其中一个绝对路径：${roots.join('、')}` };
+  }
+  if (!root) return { ok: false, reason: '当前没有已授权的可写文件夹。' };
+  const resolved = resolvePathInRoot(root, requestedPath);
+  if (!resolved.ok) return resolved;
+  try {
+    const linked = await firstSymlinkBetween(root, resolved.abs);
+    if (linked) return { ok: false, reason: '目标路径包含符号链接，已拒绝操作。' };
+    const st = await fs.lstat(resolved.abs);
+    if (st.isSymbolicLink() || !st.isFile()) return { ok: false, reason: '目标必须是授权目录内的普通文件。' };
+    if (st.size > MAX_WRITE_BYTES) return { ok: false, reason: `文件超过 ${MAX_WRITE_BYTES} 字节上限。` };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return { ok: false, reason: '目标文件不存在。' };
+    return { ok: false, reason: String(err instanceof Error ? err.message : err) };
+  }
+  return { ok: true, root, abs: resolved.abs };
+}
+
+async function readUtf8Text(filePath: string): Promise<{ text: string; bytes: Buffer; sha256: string }> {
+  const bytes = await fs.readFile(filePath);
+  if (bytes.includes(0)) throw new Error('目标包含二进制零字节，不是可安全编辑的 UTF-8 文本。');
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error('目标不是有效 UTF-8 文本，已拒绝修改。');
+  }
+  return { text, bytes, sha256: sha256Bytes(bytes) };
+}
+
+async function backupAndAtomicReplace(input: {
+  targetPath: string;
+  replacement: string;
+  backupRoot: string;
+  operationId: string;
+}): Promise<{ backupPath: string; backupSha256: string }> {
+  const before = await readUtf8Text(input.targetPath);
+  const backupDir = path.join(input.backupRoot, input.operationId);
+  await fs.mkdir(backupDir, { recursive: true });
+  const backupPath = path.join(backupDir, `${path.basename(input.targetPath)}.original`);
+  await fs.copyFile(input.targetPath, backupPath, constants.COPYFILE_EXCL);
+  const backupSha256 = await sha256File(backupPath);
+  if (backupSha256 !== before.sha256) throw new Error('原文备份 SHA-256 核对失败，未修改目标文件。');
+
+  const dir = path.dirname(input.targetPath);
+  const base = path.basename(input.targetPath);
+  const tempPath = path.join(dir, `.${base}.2digime-${randomUUID()}.tmp`);
+  const swapPath = path.join(dir, `.${base}.2digime-${randomUUID()}.swap`);
+  const originalStat = await fs.stat(input.targetPath);
+  let movedOriginal = false;
+  try {
+    await fs.writeFile(tempPath, input.replacement, { encoding: 'utf8', flag: 'wx', mode: originalStat.mode });
+    const handle = await fs.open(tempPath, 'r+');
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(input.targetPath, swapPath);
+    movedOriginal = true;
+    await fs.rename(tempPath, input.targetPath);
+    movedOriginal = false;
+    try {
+      await fs.unlink(swapPath);
+    } catch {
+      // The replacement and verified application backup are already durable.
+      // A locked swap is only an extra recovery copy, not a failed mutation.
+    }
+    return { backupPath, backupSha256 };
+  } catch (err) {
+    if (movedOriginal) {
+      try {
+        await fs.rename(swapPath, input.targetPath);
+        movedOriginal = false;
+      } catch {
+        // A verified copy remains in backupPath; surface the original failure.
+      }
+    }
+    try { await fs.unlink(tempPath); } catch { /* absent */ }
+    if (movedOriginal) throw new Error(`原子替换失败且原路径恢复失败；已验证原文备份位于 ${backupPath}。${String(err)}`);
+    throw err;
+  }
+}
+
+export type AuthorizedTextEditResult = {
+  ok: boolean;
+  reason?: string;
+  path?: string;
+  beforeSha256?: string;
+  afterSha256?: string;
+  backupPath?: string;
+  backupSha256?: string;
+  changes?: PreparedTextEdit['changes'];
+};
+
+export async function editAuthorizedTextFile(input: {
+  auth: AuthorizedFs;
+  args: EditFileArgs;
+  expectedCurrentSha256: string;
+  backupRoot: string;
+  operationId: string;
+}): Promise<AuthorizedTextEditResult> {
+  const resolved = await resolveAuthorizedEditableFile(input.auth, input.args.path, input.args.root);
+  if (!resolved.ok) return { ok: false, reason: resolved.reason };
+  try {
+    const current = await readUtf8Text(resolved.abs);
+    if (current.sha256 !== input.expectedCurrentSha256) {
+      return { ok: false, reason: '文件在本轮读取后已发生变化；为避免覆盖新内容，请重新读取后再修改。', path: resolved.abs };
+    }
+    const preflight = prepareExactTextEdit(current.text, input.args.replacements);
+    if (!preflight.ok) return { ok: false, reason: preflight.reason, path: resolved.abs };
+    if (Buffer.byteLength(preflight.prepared.updated, 'utf8') > MAX_WRITE_BYTES) {
+      return { ok: false, reason: `修改后文件超过 ${MAX_WRITE_BYTES} 字节上限。`, path: resolved.abs };
+    }
+    const backed = await backupAndAtomicReplace({
+      targetPath: resolved.abs,
+      replacement: preflight.prepared.updated,
+      backupRoot: input.backupRoot,
+      operationId: input.operationId,
+    });
+    const verified = await readUtf8Text(resolved.abs);
+    if (verified.text !== preflight.prepared.updated || verified.sha256 !== preflight.prepared.afterSha256) {
+      return { ok: false, reason: '写入后的磁盘回读或 SHA-256 核对失败。', path: resolved.abs };
+    }
+    return {
+      ok: true,
+      path: resolved.abs,
+      beforeSha256: preflight.prepared.beforeSha256,
+      afterSha256: preflight.prepared.afterSha256,
+      backupPath: backed.backupPath,
+      backupSha256: backed.backupSha256,
+      changes: preflight.prepared.changes,
+    };
+  } catch (err) {
+    return { ok: false, reason: String(err instanceof Error ? err.message : err), path: resolved.abs };
+  }
+}
+
+export async function rollbackAuthorizedTextFile(input: {
+  auth: AuthorizedFs;
+  path: string;
+  root?: string;
+  expectedCurrentSha256: string;
+  backupPath: string;
+  expectedBackupSha256: string;
+  backupRoot: string;
+  operationId: string;
+}): Promise<AuthorizedTextEditResult> {
+  const resolved = await resolveAuthorizedEditableFile(input.auth, input.path, input.root);
+  if (!resolved.ok) return { ok: false, reason: resolved.reason };
+  const canonicalBackupRoot = path.resolve(input.backupRoot);
+  const canonicalBackupPath = path.resolve(input.backupPath);
+  if (!folderCovers(canonicalBackupRoot, canonicalBackupPath) || canonicalBackupPath === canonicalBackupRoot) {
+    return { ok: false, reason: '回滚备份不属于本应用的受控备份区。', path: resolved.abs };
+  }
+  try {
+    const current = await readUtf8Text(resolved.abs);
+    if (current.sha256 !== input.expectedCurrentSha256) {
+      return { ok: false, reason: '文件在原编辑后又发生了变化；为避免覆盖新内容，已拒绝回滚。', path: resolved.abs };
+    }
+    const backup = await readUtf8Text(canonicalBackupPath);
+    if (backup.sha256 !== input.expectedBackupSha256) {
+      return { ok: false, reason: '原文备份 SHA-256 不一致，已拒绝回滚。', path: resolved.abs };
+    }
+    const backed = await backupAndAtomicReplace({
+      targetPath: resolved.abs,
+      replacement: backup.text,
+      backupRoot: input.backupRoot,
+      operationId: input.operationId,
+    });
+    const verified = await readUtf8Text(resolved.abs);
+    if (verified.sha256 !== input.expectedBackupSha256 || verified.text !== backup.text) {
+      return { ok: false, reason: '回滚后的磁盘回读或 SHA-256 核对失败。', path: resolved.abs };
+    }
+    return {
+      ok: true,
+      path: resolved.abs,
+      beforeSha256: current.sha256,
+      afterSha256: verified.sha256,
+      backupPath: backed.backupPath,
+      backupSha256: backed.backupSha256,
+    };
+  } catch (err) {
+    return { ok: false, reason: String(err instanceof Error ? err.message : err), path: resolved.abs };
+  }
 }
 
 export type FileTransferResult = {

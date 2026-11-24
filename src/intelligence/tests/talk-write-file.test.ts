@@ -18,7 +18,6 @@ test('folder grant without attached material exposes exact output readback and r
   const root = await tempDir('grant-readback');
   const folder = path.join(root, 'allowed');
   await fs.mkdir(folder);
-  await fs.writeFile(path.join(folder, 'result.md'), 'actual saved plan');
   await fs.writeFile(path.join(root, 'outside.md'), 'outside');
   const executions: Array<{ capabilityId: string; ok: boolean }> = [];
   let step = 0;

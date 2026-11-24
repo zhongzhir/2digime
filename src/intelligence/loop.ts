@@ -1,26 +1,31 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastructure/model-http';
 import { describeProfessionals } from './professionals';
 import {
   COPY_FILE_TOOL,
+  EDIT_FILE_TOOL,
   EXPORT_FILE_TOOL,
   LIST_DIRECTORY_TOOL,
   MAX_WRITE_BYTES,
   MOVE_FILE_TOOL,
   READ_FILE_TOOL,
   REVISE_DOCX_TOOL,
+  ROLLBACK_FILE_TOOL,
   SEARCH_FILES_TOOL,
   classifyAuthorizedPaths,
   copyAuthorizedFile,
   describeAuthorizedFs,
+  editAuthorizedTextFile,
+  parseEditFileArgs,
   parseExportArgs,
   parseFileTransferArgs,
   parseReviseDocxArgs,
   resolveAuthorizedFile,
   resolveAuthorizedWritePath,
   resolveProposedAccessPath,
+  rollbackAuthorizedTextFile,
   moveAuthorizedFile,
   runListDirectory,
   runReadFile,
@@ -154,7 +159,7 @@ const WRITE_FILE_TOOL: ChatToolDefinition = {
   function: {
     name: 'write_file',
     description:
-      '把完整文件内容写入本次已授权文件夹。relativePath 相对授权根。多个授权根时必须填写 root，且必须是系统列出的某一个绝对路径。只写盘并返回文件是否真实存在。',
+      '在本次已授权文件夹中新建一个文本文件。不会覆盖已有文件；修改现有文本必须先 read_file，再用 edit_file。relativePath 相对授权根。多个授权根时必须填写 root，且必须是系统列出的某一个绝对路径。',
     parameters: {
       type: 'object',
       properties: {
@@ -340,6 +345,59 @@ function parseWriteArgs(raw: string): { relativePath: string; content: string; r
   }
 }
 
+function parseRollbackFileArgs(raw: string): { path: string; root?: string } {
+  try {
+    const parsed = JSON.parse(raw) as { path?: string; relativePath?: string; root?: string };
+    const root = String(parsed.root || '').trim();
+    return {
+      path: String(parsed.path || parsed.relativePath || '').trim(),
+      ...(root ? { root } : {}),
+    };
+  } catch {
+    return { path: '' };
+  }
+}
+
+async function firstSymlinkInExistingPath(root: string, target: string): Promise<string | undefined> {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  if (!rel || rel === '.') return undefined;
+  let current = path.resolve(root);
+  for (const segment of rel.split(path.sep)) {
+    current = path.join(current, segment);
+    try {
+      const st = await fs.lstat(current);
+      if (st.isSymbolicLink()) return current;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return undefined;
+      throw err;
+    }
+  }
+  return undefined;
+}
+
+type TextEditSafeDetail = {
+  kind: 'text_edit_v1';
+  target: string;
+  beforeSha256: string;
+  afterSha256: string;
+  backupPath: string;
+  backupSha256: string;
+};
+
+function parseTextEditSafeDetail(exec: TalkExecution): TextEditSafeDetail | undefined {
+  if (exec.capabilityId !== 'edit_file' || !exec.ok || !exec.safeDetail) return undefined;
+  try {
+    const parsed = JSON.parse(exec.safeDetail) as Partial<TextEditSafeDetail>;
+    if (
+      parsed.kind !== 'text_edit_v1' || !parsed.target || !parsed.beforeSha256 || !parsed.afterSha256 ||
+      !parsed.backupPath || !parsed.backupSha256
+    ) return undefined;
+    return parsed as TextEditSafeDetail;
+  } catch {
+    return undefined;
+  }
+}
+
 function isAbortLike(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const name = (err as { name?: string }).name;
@@ -521,7 +579,7 @@ export async function runTalkTurn(input: {
   // grant is still valid. A write grant does not attach unrelated drafts.
   for (const exec of thread.executions) {
     if (exec.ok && exec.outputPath && (
-      exec.capabilityId === 'write_file' || exec.capabilityId === 'export_file' ||
+      exec.capabilityId === 'write_file' || exec.capabilityId === 'edit_file' || exec.capabilityId === 'rollback_file' || exec.capabilityId === 'export_file' ||
       exec.capabilityId === 'copy_file' || exec.capabilityId === 'move_file'
     ) &&
       resolveAuthorizedFile(writeAuth, exec.outputPath).ok && !readAuth.files.includes(exec.outputPath)) {
@@ -542,7 +600,7 @@ export async function runTalkTurn(input: {
     '【会话边界】此前 user/assistant 消息只作同一 Thread 背景；当前请求换题时，以标有【当前请求】的最后一条为准。',
     '根据当前数字之我和本次能读到的材料理解用户。摘录若标明未读完，不得说成已经读完；需要其余部分时读取原文件。后续回合仍可读取已附上的文件，不要把上一轮摘录当成全文仍在上下文里。',
     '是否搜索、读取、写入或调用外部能力，由你根据用户这次要什么来决定。询问也可以查证；委托也可以只在对话里交付。不要另做用户没要求的事，也不要因为句式而拒绝需要的工具。',
-    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
+    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；修改授权文件夹内现有文本时必须先 read_file，再用 edit_file 精确修改，不得用 write_file 覆盖；主人明确要求撤销最近一次文本修改时用 rollback_file；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
     '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
     '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
     '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
@@ -589,7 +647,7 @@ export async function runTalkTurn(input: {
   } });
   const ensureWriteTools = () => {
     if (writeAuth.folders.length && !tools.some((item) => item.function.name === 'write_file')) {
-      tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, COPY_FILE_TOOL, MOVE_FILE_TOOL);
+      tools.push(WRITE_FILE_TOOL, EDIT_FILE_TOOL, ROLLBACK_FILE_TOOL, EXPORT_FILE_TOOL, COPY_FILE_TOOL, MOVE_FILE_TOOL);
     }
   };
   const ensureReadTools = () => {
@@ -662,7 +720,7 @@ export async function runTalkTurn(input: {
   let lastOk = false;
   let lastEvidenceOnly = false;
   let seq = 0;
-  const reads: Array<{ target: string; content: string; seq: number }> = [];
+  const reads: Array<{ target: string; content: string; sha256: string; seq: number }> = [];
   const mutations: Array<{ target: string; seq: number }> = [];
 
   const recordExec = (rec: TalkExecution) => {
@@ -836,13 +894,18 @@ export async function runTalkTurn(input: {
     } catch {
       existed = false;
     }
+    if (existed) return fail('目标文件已存在；write_file 只创建新文件。请先 read_file，再用 edit_file 精确修改。');
     throwIfAborted(input.signal);
     try {
+      const linkedParent = await firstSymlinkInExistingPath(resolved.root, path.dirname(resolved.abs));
+      if (linkedParent) return fail('目标路径包含符号链接，已拒绝写入。');
       await fs.mkdir(path.dirname(resolved.abs), { recursive: true });
+      const linkedAfterMkdir = await firstSymlinkInExistingPath(resolved.root, path.dirname(resolved.abs));
+      if (linkedAfterMkdir) return fail('目标路径包含符号链接，已拒绝写入。');
       throwIfAborted(input.signal);
       // Submission is the cancellation boundary. An in-flight write cannot be
       // rolled back; finish recording its actual effect even if cancelled.
-      await fs.writeFile(resolved.abs, parsed.content, 'utf8');
+      await fs.writeFile(resolved.abs, parsed.content, { encoding: 'utf8', flag: 'wx' });
       // Record the completed mutation before verification can fail or observe
       // cancellation. Verification failure cannot erase an actual file effect.
       seq += 1;
@@ -879,6 +942,227 @@ export async function runTalkTurn(input: {
       throwIfAborted(input.signal);
       return fail(String(err instanceof Error ? err.message : err));
     }
+  };
+
+  const failTextMutation = (inputFailure: {
+    execId: string;
+    capabilityId: 'edit_file' | 'rollback_file';
+    instruction: string;
+    reason: string;
+  }): string => {
+    lastOk = false;
+    lastEvidenceOnly = false;
+    lastPath = undefined;
+    recordExec({
+      id: inputFailure.execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: inputFailure.capabilityId,
+      instruction: inputFailure.instruction,
+      ok: false,
+      summary: inputFailure.reason,
+      failureReason: inputFailure.reason,
+    });
+    return JSON.stringify({
+      actualSuccess: false,
+      ok: false,
+      capabilityId: inputFailure.capabilityId,
+      evidenceOnly: false,
+      failureReason: inputFailure.reason,
+      producedOutputs: [],
+      summary: inputFailure.reason,
+    });
+  };
+
+  const runEditFile = async (rawArgs: string): Promise<string> => {
+    const parsed = parseEditFileArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    const requested = path.isAbsolute(parsed.path)
+      ? parsed.path
+      : parsed.root
+        ? path.resolve(parsed.root, parsed.path)
+        : parsed.path;
+    const resolvedRead = resolveAuthorizedFile(auth, requested);
+    if (!resolvedRead.ok) {
+      return failTextMutation({ execId, capabilityId: 'edit_file', instruction: parsed.path, reason: resolvedRead.reason });
+    }
+    const priorRead = [...reads].reverse().find((item) => path.resolve(item.target) === path.resolve(resolvedRead.abs));
+    if (!priorRead) {
+      return failTextMutation({
+        execId,
+        capabilityId: 'edit_file',
+        instruction: parsed.path,
+        reason: '修改前必须在本轮先用 read_file 读取目标文件。',
+      });
+    }
+    throwIfAborted(input.signal);
+    const backupRoot = path.join(input.workRoot, 'artifacts', 'talk-backups');
+    const result = await editAuthorizedTextFile({
+      auth,
+      args: parsed,
+      expectedCurrentSha256: priorRead.sha256,
+      backupRoot,
+      operationId: execId,
+    });
+    if (!result.ok || !result.path || !result.beforeSha256 || !result.afterSha256 || !result.backupPath || !result.backupSha256) {
+      return failTextMutation({
+        execId,
+        capabilityId: 'edit_file',
+        instruction: parsed.path,
+        reason: result.reason || '文本修改失败。',
+      });
+    }
+    seq += 1;
+    mutations.push({ target: result.path, seq });
+    const safeDetail: TextEditSafeDetail = {
+      kind: 'text_edit_v1',
+      target: result.path,
+      beforeSha256: result.beforeSha256,
+      afterSha256: result.afterSha256,
+      backupPath: result.backupPath,
+      backupSha256: result.backupSha256,
+    };
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: 'edit_file',
+      instruction: parsed.path,
+      ok: true,
+      summary: `已精确修改 ${result.path}，共 ${result.changes?.length || 0} 处；原文备份和写后 SHA-256 已核对。`,
+      producedOutputs: [result.path],
+      outputPath: result.path,
+      safeDetail: JSON.stringify(safeDetail),
+      observedEffect: { kind: 'content_modified', target: result.path, mutated: true },
+    });
+    const readback = await fs.readFile(result.path, 'utf8');
+    reads.push({ target: result.path, content: readback, sha256: result.afterSha256, seq });
+    lastOk = true;
+    lastEvidenceOnly = false;
+    lastPath = result.path;
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'edit_file',
+      evidenceOnly: false,
+      producedOutputs: [result.path],
+      outputPath: result.path,
+      beforeSha256: result.beforeSha256,
+      afterSha256: result.afterSha256,
+      diff: (result.changes || []).map((change) => ({
+        line: change.line,
+        column: change.column,
+        before: change.before.slice(0, 500),
+        after: change.after.slice(0, 500),
+        truncated: change.before.length > 500 || change.after.length > 500,
+      })),
+      rollbackAvailable: true,
+      summary: `已在写入前核对 ${result.changes?.length || 0} 处精确差异，保存原文备份，并在写入后从磁盘回读核对 SHA-256。`,
+    });
+  };
+
+  const runRollbackFile = async (rawArgs: string): Promise<string> => {
+    const parsed = parseRollbackFileArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    const requested = path.isAbsolute(parsed.path)
+      ? parsed.path
+      : parsed.root
+        ? path.resolve(parsed.root, parsed.path)
+        : parsed.path;
+    const resolved = resolveAuthorizedFile(auth, requested);
+    if (!resolved.ok) {
+      return failTextMutation({ execId, capabilityId: 'rollback_file', instruction: parsed.path, reason: resolved.reason });
+    }
+    const rolledBackIds = new Set<string>();
+    for (const exec of thread.executions) {
+      if (exec.capabilityId !== 'rollback_file' || !exec.ok || !exec.safeDetail) continue;
+      try {
+        const detail = JSON.parse(exec.safeDetail) as { kind?: string; originalEditExecutionId?: string };
+        if (detail.kind === 'text_rollback_v1' && detail.originalEditExecutionId) {
+          rolledBackIds.add(detail.originalEditExecutionId);
+        }
+      } catch {
+        /* ignore unrelated historical detail */
+      }
+    }
+    let sourceExec: TalkExecution | undefined;
+    let sourceDetail: TextEditSafeDetail | undefined;
+    for (let index = thread.executions.length - 1; index >= 0; index -= 1) {
+      const candidate = thread.executions[index];
+      if (!candidate) continue;
+      if (rolledBackIds.has(candidate.id)) continue;
+      const detail = parseTextEditSafeDetail(candidate);
+      if (detail && path.resolve(detail.target) === path.resolve(resolved.abs)) {
+        sourceExec = candidate;
+        sourceDetail = detail;
+        break;
+      }
+    }
+    if (!sourceExec || !sourceDetail) {
+      return failTextMutation({
+        execId,
+        capabilityId: 'rollback_file',
+        instruction: parsed.path,
+        reason: '本对话没有找到该文件仍可撤销的 edit_file 记录。',
+      });
+    }
+    throwIfAborted(input.signal);
+    const backupRoot = path.join(input.workRoot, 'artifacts', 'talk-backups');
+    const result = await rollbackAuthorizedTextFile({
+      auth,
+      path: parsed.path,
+      ...(parsed.root ? { root: parsed.root } : {}),
+      expectedCurrentSha256: sourceDetail.afterSha256,
+      backupPath: sourceDetail.backupPath,
+      expectedBackupSha256: sourceDetail.backupSha256,
+      backupRoot,
+      operationId: execId,
+    });
+    if (!result.ok || !result.path || !result.beforeSha256 || !result.afterSha256 || !result.backupPath || !result.backupSha256) {
+      return failTextMutation({
+        execId,
+        capabilityId: 'rollback_file',
+        instruction: parsed.path,
+        reason: result.reason || '文本回滚失败。',
+      });
+    }
+    seq += 1;
+    mutations.push({ target: result.path, seq });
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: 'rollback_file',
+      instruction: parsed.path,
+      ok: true,
+      summary: `已恢复 ${result.path} 到最近一次 edit_file 前的原文，并核对 SHA-256。`,
+      producedOutputs: [result.path],
+      outputPath: result.path,
+      safeDetail: JSON.stringify({
+        kind: 'text_rollback_v1',
+        originalEditExecutionId: sourceExec.id,
+        target: result.path,
+        beforeSha256: result.beforeSha256,
+        afterSha256: result.afterSha256,
+        backupPath: result.backupPath,
+        backupSha256: result.backupSha256,
+      }),
+      observedEffect: { kind: 'content_modified', target: result.path, mutated: true },
+    });
+    lastOk = true;
+    lastEvidenceOnly = false;
+    lastPath = result.path;
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'rollback_file',
+      evidenceOnly: false,
+      producedOutputs: [result.path],
+      outputPath: result.path,
+      beforeSha256: result.beforeSha256,
+      afterSha256: result.afterSha256,
+      summary: '目标文件未被后续改动，已从受控备份恢复原文并从磁盘回读核对 SHA-256。',
+    });
   };
 
   const runFileTransfer = async (kind: 'copy_file' | 'move_file', rawArgs: string): Promise<string> => {
@@ -1361,6 +1645,8 @@ export async function runTalkTurn(input: {
     if (call.name === 'write_artifact') return runWriteArtifact(call.arguments);
     if (call.name === 'request_folder_access') return runRequestFolderAccess(call.arguments);
     if (call.name === 'write_file') return runWriteFile(call.arguments);
+    if (call.name === 'edit_file') return runEditFile(call.arguments);
+    if (call.name === 'rollback_file') return runRollbackFile(call.arguments);
     if (call.name === 'copy_file') return runFileTransfer('copy_file', call.arguments);
     if (call.name === 'move_file') return runFileTransfer('move_file', call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
@@ -1423,12 +1709,15 @@ export async function runTalkTurn(input: {
       if (parsed.actualSuccess === true && parsed.path) {
         seq += 1;
         let content = String(parsed.content || '');
+        let sha256 = createHash('sha256').update(Buffer.from(content, 'utf8')).digest('hex');
         try {
-          content = await fs.readFile(parsed.path, 'utf8');
+          const bytes = await fs.readFile(parsed.path);
+          content = bytes.toString('utf8');
+          sha256 = createHash('sha256').update(bytes).digest('hex');
         } catch {
           /* 验证用正文读盘失败时退回工具返回 */
         }
-        reads.push({ target: parsed.path, content, seq });
+        reads.push({ target: parsed.path, content, sha256, seq });
       }
       recordExec({
         id: `run_${randomUUID()}`,
@@ -1751,6 +2040,8 @@ export async function runTalkTurn(input: {
   const failedWrite = (execs: typeof thread.executions) =>
     execs.filter((item) => !item.ok && (
       item.capabilityId === 'write_file' ||
+      item.capabilityId === 'edit_file' ||
+      item.capabilityId === 'rollback_file' ||
       item.capabilityId === 'copy_file' ||
       item.capabilityId === 'move_file' ||
       item.capabilityId === 'export_file' ||
