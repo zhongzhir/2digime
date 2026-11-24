@@ -4,18 +4,23 @@ import * as path from 'node:path';
 import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastructure/model-http';
 import { describeProfessionals } from './professionals';
 import {
+  COPY_FILE_TOOL,
   EXPORT_FILE_TOOL,
   LIST_DIRECTORY_TOOL,
   MAX_WRITE_BYTES,
+  MOVE_FILE_TOOL,
   READ_FILE_TOOL,
   REVISE_DOCX_TOOL,
   classifyAuthorizedPaths,
+  copyAuthorizedFile,
   describeAuthorizedFs,
   parseExportArgs,
+  parseFileTransferArgs,
   parseReviseDocxArgs,
   resolveAuthorizedFile,
   resolveAuthorizedWritePath,
   resolveProposedAccessPath,
+  moveAuthorizedFile,
   runListDirectory,
   runReadFile,
   writeExportedOffice,
@@ -513,7 +518,10 @@ export async function runTalkTurn(input: {
   // Restore exact files produced by this conversation, only while the folder
   // grant is still valid. A write grant does not attach unrelated drafts.
   for (const exec of thread.executions) {
-    if (exec.ok && exec.outputPath && (exec.capabilityId === 'write_file' || exec.capabilityId === 'export_file') &&
+    if (exec.ok && exec.outputPath && (
+      exec.capabilityId === 'write_file' || exec.capabilityId === 'export_file' ||
+      exec.capabilityId === 'copy_file' || exec.capabilityId === 'move_file'
+    ) &&
       resolveAuthorizedFile(writeAuth, exec.outputPath).ok && !readAuth.files.includes(exec.outputPath)) {
       readAuth.files.push(exec.outputPath);
     }
@@ -579,7 +587,7 @@ export async function runTalkTurn(input: {
   } });
   const ensureWriteTools = () => {
     if (writeAuth.folders.length && !tools.some((item) => item.function.name === 'write_file')) {
-      tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL);
+      tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, COPY_FILE_TOOL, MOVE_FILE_TOOL);
     }
   };
   const ensureReadTools = () => {
@@ -866,6 +874,79 @@ export async function runTalkTurn(input: {
       throwIfAborted(input.signal);
       return fail(String(err instanceof Error ? err.message : err));
     }
+  };
+
+  const runFileTransfer = async (kind: 'copy_file' | 'move_file', rawArgs: string): Promise<string> => {
+    const parsed = parseFileTransferArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    throwIfAborted(input.signal);
+    const result = kind === 'copy_file'
+      ? await copyAuthorizedFile(auth, parsed)
+      : await moveAuthorizedFile(auth, parsed);
+    if (!result.ok) {
+      const reason = result.failureReason || `${kind === 'copy_file' ? '复制' : '移动'}失败。`;
+      lastOk = false;
+      lastEvidenceOnly = false;
+      lastPath = undefined;
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: kind,
+        instruction: `${parsed.sourcePath} -> ${parsed.destinationPath}`,
+        ok: false,
+        summary: reason,
+        failureReason: reason,
+      });
+      return JSON.stringify({
+        actualSuccess: false,
+        ok: false,
+        capabilityId: kind,
+        failureReason: reason,
+        producedOutputs: [],
+        summary: reason,
+      });
+    }
+    seq += 1;
+    mutations.push({ target: result.destinationPath, seq });
+    lastOk = true;
+    lastEvidenceOnly = false;
+    lastPath = result.destinationPath;
+    if (kind === 'move_file') {
+      readAuth.files = readAuth.files.filter((item) => path.resolve(item) !== path.resolve(result.sourcePath));
+    }
+    if (!readAuth.files.includes(result.destinationPath)) readAuth.files.push(result.destinationPath);
+    ensureReadTools();
+    const verb = kind === 'copy_file' ? '复制' : '移动或重命名';
+    const summary = `已${verb}到 ${result.destinationPath}，并核对 SHA-256 ${result.sha256}。`;
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: kind,
+      instruction: `${result.sourcePath} -> ${result.destinationPath}`,
+      ok: true,
+      summary,
+      producedOutputs: [result.destinationPath],
+      outputPath: result.destinationPath,
+      safeDetail: JSON.stringify({ sourcePath: result.sourcePath, destinationPath: result.destinationPath, sha256: result.sha256 }),
+      observedEffect: {
+        kind: kind === 'copy_file' ? 'file_created' : 'file_moved',
+        target: result.destinationPath,
+        mutated: true,
+      },
+    });
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: kind,
+      sourcePath: result.sourcePath,
+      destinationPath: result.destinationPath,
+      sha256: result.sha256,
+      producedOutputs: [result.destinationPath],
+      outputPath: result.destinationPath,
+      summary,
+    });
   };
 
   const runWriteArtifact = async (rawArgs: string): Promise<string> => {
@@ -1275,6 +1356,8 @@ export async function runTalkTurn(input: {
     if (call.name === 'write_artifact') return runWriteArtifact(call.arguments);
     if (call.name === 'request_folder_access') return runRequestFolderAccess(call.arguments);
     if (call.name === 'write_file') return runWriteFile(call.arguments);
+    if (call.name === 'copy_file') return runFileTransfer('copy_file', call.arguments);
+    if (call.name === 'move_file') return runFileTransfer('move_file', call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
     if (call.name === 'revise_docx') return runReviseDocx(call.arguments);
     if (call.name === 'list_directory') {
@@ -1640,6 +1723,8 @@ export async function runTalkTurn(input: {
   const failedWrite = (execs: typeof thread.executions) =>
     execs.filter((item) => !item.ok && (
       item.capabilityId === 'write_file' ||
+      item.capabilityId === 'copy_file' ||
+      item.capabilityId === 'move_file' ||
       item.capabilityId === 'export_file' ||
       item.capabilityId === 'write_artifact' ||
       item.capabilityId === 'revise_docx'

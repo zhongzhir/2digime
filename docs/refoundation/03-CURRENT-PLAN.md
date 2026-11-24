@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_DEVELOPER_CLOSED_OWNER_PENDING`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_DEVELOPER_CLOSED_OWNER_PENDING / SLICE_2B_IN_PROGRESS`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -84,6 +84,14 @@ PptxGenJS 首次带入的 `image-size <=2.0.2` 高危 DoS 已通过 npm 官方�
 在不扩大作业边界、不新增任务的前提下，DOCX 修改器完成最后一次可靠性收口：全部替换先在同一原始副本上预检，再执行修改；保存后关闭文档并从磁盘重新打开核对，避免把内存状态当作落盘事实；后一项原文若只是由前一项替换产生，整批拒绝且不留下成果，防止静默级联。LibreOffice 真实正向、预期次数拒绝、级联拒绝 3/3，通过；Talk 暴露边界 2/2、正式 Electron 主链 1/1 再次通过；TypeScript 构建通过。
 
 Slice 2A 的开发范围据此收口为：同一 Talk 中创建和打开 DOCX/PPTX/PDF，三种格式完成固定任务生成、结构回读和逐页渲染门；已授权既有 DOCX 支持保留原件的少量精确文字修改与另存。任意复杂重排、图表/公式/批注编辑以及既有 PPTX/PDF 原格式修改不纳入本次已关闭边界，不再以“继续完善 Slice 2A”为由扩建。该结果不等于市场领先能力 95%，也不等于 Owner 验收、打包、push、发布或部署。状态改为 `SLICE_2A_DEVELOPER_CLOSED / OWNER_ACCEPTANCE_PENDING`。
+
+### Slice 2B-1 开发检查点（2026-11-24）
+
+授权文件工作区的第一批可感知动作已接入同一 Talk：当本轮存在已授权文件夹时，模型可以在同一授权根内复制普通文件，或移动/重命名普通文件。系统不覆盖已存在目标；移动通过同卷排他硬链接建立并核验新路径后才移除旧路径，不在跨卷失败时退化成“复制后删除”。复制必须同时保留源文件和同哈希目标，移动/重命名必须确认源路径消失且目标哈希不变。授权单文件不会获得目录级复制或移动能力。
+
+路径围栏同时拒绝 `..` 越界、UNC/网络路径、源文件或目标父目录中的符号链接，以及多个授权根下未明确选择根目录的调用。TypeScript 构建通过；复制、移动/重命名、覆盖拒绝、越界拒绝、符号链接逃逸拒绝、多根歧义/跨根拒绝、Talk 工具暴露与既有授权文件回归共 27/27 通过。
+
+本检查点仍是 Slice 2B 的第一批，不宣称整个授权文件工作区完成。目录内搜索、编辑前差异/备份/回滚和经动作时确认的删除尚未实现；20 项授权文件退出门、正式 Electron 界面门和 Owner 验收仍待后续小批次。没有新增文件管理器、一级入口、任务类型路由或第二事实源；尚未打包、push、发布或部署。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

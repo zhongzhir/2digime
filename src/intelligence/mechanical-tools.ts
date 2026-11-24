@@ -2,7 +2,8 @@
  * Talk 机械工具：授权围栏内 list / read / Office 导出。
  * 抽取走 extract.ts，Office 序列化走 export.ts，不做语义判断。
  */
-import { existsSync, promises as fs, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { constants, existsSync, promises as fs, statSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
@@ -55,6 +56,64 @@ export const READ_FILE_TOOL: ChatToolDefinition = {
     },
   },
 };
+
+export const COPY_FILE_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'copy_file',
+    description:
+      '在同一个已授权文件夹根内复制一个现有普通文件。不会覆盖已有目标；操作后核对源文件、目标文件和 SHA-256。多个授权根时必须填写 root。',
+    parameters: {
+      type: 'object',
+      properties: {
+        sourcePath: { type: 'string', description: '授权根内的源文件相对路径，或该文件的绝对路径。' },
+        destinationPath: { type: 'string', description: '同一授权根内的目标相对路径，或目标绝对路径。目标不得已存在。' },
+        root: { type: 'string', description: '授权根绝对路径；有多个授权根时必填。' },
+      },
+      required: ['sourcePath', 'destinationPath'],
+    },
+  },
+};
+
+export const MOVE_FILE_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'move_file',
+    description:
+      '在同一个已授权文件夹根内移动或重命名一个现有普通文件。不会覆盖已有目标；操作后核对源路径消失、目标文件存在且 SHA-256 不变。多个授权根时必须填写 root。',
+    parameters: {
+      type: 'object',
+      properties: {
+        sourcePath: { type: 'string', description: '授权根内的源文件相对路径，或该文件的绝对路径。' },
+        destinationPath: { type: 'string', description: '同一授权根内的新相对路径或绝对路径。目标不得已存在。' },
+        root: { type: 'string', description: '授权根绝对路径；有多个授权根时必填。' },
+      },
+      required: ['sourcePath', 'destinationPath'],
+    },
+  },
+};
+
+export type FileTransferArgs = { sourcePath: string; destinationPath: string; root?: string };
+
+export function parseFileTransferArgs(raw: string): FileTransferArgs {
+  try {
+    const parsed = JSON.parse(raw) as {
+      sourcePath?: string;
+      destinationPath?: string;
+      source?: string;
+      destination?: string;
+      root?: string;
+    };
+    const root = String(parsed.root || '').trim();
+    return {
+      sourcePath: String(parsed.sourcePath || parsed.source || '').trim(),
+      destinationPath: String(parsed.destinationPath || parsed.destination || '').trim(),
+      ...(root ? { root } : {}),
+    };
+  } catch {
+    return { sourcePath: '', destinationPath: '' };
+  }
+}
 
 export const EXPORT_FILE_TOOL: ChatToolDefinition = {
   type: 'function',
@@ -285,6 +344,186 @@ export function resolveAuthorizedWritePath(
   const resolved = resolveWritePath(root, relativePath);
   if (!resolved.ok) return resolved;
   return { ok: true, abs: resolved.abs, root };
+}
+
+export type AuthorizedFileTransfer = {
+  root: string;
+  source: string;
+  destination: string;
+};
+
+function resolvePathInRoot(
+  root: string,
+  raw: string,
+): { ok: true; abs: string } | { ok: false; reason: string } {
+  const requested = String(raw || '').trim();
+  if (!requested) return { ok: false, reason: '源路径和目标路径都不能为空。' };
+  if (isUncOrNetworkPath(requested) || requested.replace(/\\/g, '/').split('/').includes('..')) {
+    return { ok: false, reason: '路径超出授权目录。' };
+  }
+  const abs = path.isAbsolute(requested) ? path.resolve(requested) : path.resolve(root, requested);
+  if (!folderCovers(root, abs)) return { ok: false, reason: '路径超出授权目录。' };
+  return { ok: true, abs };
+}
+
+async function firstSymlinkBetween(root: string, target: string): Promise<string | undefined> {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  if (!rel || rel === '.') return undefined;
+  let current = path.resolve(root);
+  for (const segment of rel.split(path.sep)) {
+    current = path.join(current, segment);
+    try {
+      const st = await fs.lstat(current);
+      if (st.isSymbolicLink()) return current;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOENT') return undefined;
+      throw err;
+    }
+  }
+  return undefined;
+}
+
+export async function resolveAuthorizedFileTransfer(
+  auth: AuthorizedFs,
+  args: FileTransferArgs,
+): Promise<{ ok: true; transfer: AuthorizedFileTransfer } | { ok: false; reason: string }> {
+  const roots = uniqAbs(auth.folders);
+  if (!roots.length) return { ok: false, reason: '当前没有已授权的可写文件夹。' };
+  const askedRoot = String(args.root || '').trim();
+  let root: string | undefined;
+  if (askedRoot) {
+    if (isUncOrNetworkPath(askedRoot) || askedRoot.replace(/\\/g, '/').split('/').includes('..')) {
+      return { ok: false, reason: '路径超出授权目录。' };
+    }
+    const canonical = canonicalizeFolderPath(path.resolve(askedRoot));
+    root = roots.find((item) => folderCovers(item, canonical) && folderCovers(canonical, item));
+    if (!root) return { ok: false, reason: `root 不在本次授权目录中。请从下列路径中选一个：${roots.join('、')}` };
+  } else if (roots.length === 1) {
+    root = roots[0];
+  } else {
+    return { ok: false, reason: `有多个已授权目录，请在 root 中填写其中一个绝对路径：${roots.join('、')}` };
+  }
+  if (!root) return { ok: false, reason: '当前没有已授权的可写文件夹。' };
+  const source = resolvePathInRoot(root, args.sourcePath);
+  if (!source.ok) return source;
+  const destination = resolvePathInRoot(root, args.destinationPath);
+  if (!destination.ok) return destination;
+  if (path.resolve(source.abs) === path.resolve(destination.abs)) {
+    return { ok: false, reason: '源路径和目标路径不能相同。' };
+  }
+  try {
+    const sourceLink = await firstSymlinkBetween(root, source.abs);
+    if (sourceLink) return { ok: false, reason: '源路径包含符号链接，已拒绝操作。' };
+    const sourceStat = await fs.lstat(source.abs);
+    if (sourceStat.isSymbolicLink() || !sourceStat.isFile()) {
+      return { ok: false, reason: '源路径必须是授权目录内的普通文件。' };
+    }
+    const parent = path.dirname(destination.abs);
+    const parentLink = await firstSymlinkBetween(root, parent);
+    if (parentLink) return { ok: false, reason: '目标路径包含符号链接，已拒绝操作。' };
+    const parentStat = await fs.lstat(parent);
+    if (!parentStat.isDirectory()) return { ok: false, reason: '目标文件夹不存在。' };
+    try {
+      await fs.lstat(destination.abs);
+      return { ok: false, reason: '目标路径已存在；为避免覆盖，操作已停止。' };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err;
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return { ok: false, reason: '源文件或目标文件夹不存在。' };
+    }
+    return { ok: false, reason: String(err instanceof Error ? err.message : err) };
+  }
+  return { ok: true, transfer: { root, source: source.abs, destination: destination.abs } };
+}
+
+async function sha256File(filePath: string): Promise<string> {
+  return createHash('sha256').update(await fs.readFile(filePath)).digest('hex');
+}
+
+export type FileTransferResult = {
+  ok: boolean;
+  sourcePath: string;
+  destinationPath: string;
+  sha256?: string;
+  failureReason?: string;
+};
+
+export async function copyAuthorizedFile(
+  auth: AuthorizedFs,
+  args: FileTransferArgs,
+): Promise<FileTransferResult> {
+  const resolved = await resolveAuthorizedFileTransfer(auth, args);
+  if (!resolved.ok) return { ok: false, sourcePath: args.sourcePath, destinationPath: args.destinationPath, failureReason: resolved.reason };
+  const { source, destination } = resolved.transfer;
+  try {
+    const beforeHash = await sha256File(source);
+    await fs.copyFile(source, destination, constants.COPYFILE_EXCL);
+    const [sourceStat, destinationStat, sourceHash, destinationHash] = await Promise.all([
+      fs.lstat(source),
+      fs.lstat(destination),
+      sha256File(source),
+      sha256File(destination),
+    ]);
+    if (!sourceStat.isFile() || !destinationStat.isFile() || sourceStat.isSymbolicLink() || destinationStat.isSymbolicLink()) {
+      return { ok: false, sourcePath: source, destinationPath: destination, failureReason: '复制后文件类型核验失败。' };
+    }
+    if (beforeHash !== sourceHash || beforeHash !== destinationHash) {
+      return { ok: false, sourcePath: source, destinationPath: destination, failureReason: '复制后 SHA-256 核验不一致。' };
+    }
+    return { ok: true, sourcePath: source, destinationPath: destination, sha256: destinationHash };
+  } catch (err) {
+    return { ok: false, sourcePath: source, destinationPath: destination, failureReason: String(err instanceof Error ? err.message : err) };
+  }
+}
+
+export async function moveAuthorizedFile(
+  auth: AuthorizedFs,
+  args: FileTransferArgs,
+): Promise<FileTransferResult> {
+  const resolved = await resolveAuthorizedFileTransfer(auth, args);
+  if (!resolved.ok) return { ok: false, sourcePath: args.sourcePath, destinationPath: args.destinationPath, failureReason: resolved.reason };
+  const { source, destination } = resolved.transfer;
+  let destinationLinked = false;
+  try {
+    const beforeHash = await sha256File(source);
+    // link() is same-volume and refuses an existing destination. It avoids the
+    // platform-dependent overwrite behavior of rename(), then unlink() removes
+    // the old name only after the new name has been verified.
+    await fs.link(source, destination);
+    destinationLinked = true;
+    const linkedHash = await sha256File(destination);
+    if (beforeHash !== linkedHash) throw new Error('移动前目标 SHA-256 核验不一致。');
+    await fs.unlink(source);
+    let sourceStillExists = true;
+    try {
+      await fs.lstat(source);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') sourceStillExists = false;
+      else throw err;
+    }
+    const destinationStat = await fs.lstat(destination);
+    const destinationHash = await sha256File(destination);
+    if (sourceStillExists || !destinationStat.isFile() || destinationStat.isSymbolicLink() || beforeHash !== destinationHash) {
+      return { ok: false, sourcePath: source, destinationPath: destination, failureReason: '移动后路径或 SHA-256 核验失败。' };
+    }
+    return { ok: true, sourcePath: source, destinationPath: destination, sha256: destinationHash };
+  } catch (err) {
+    if (destinationLinked) {
+      try {
+        if (existsSync(source)) await fs.unlink(destination);
+      } catch {
+        /* 保留实际文件状态供上层如实报告，不覆盖原错误。 */
+      }
+    }
+    const code = (err as NodeJS.ErrnoException)?.code;
+    const reason = code === 'EXDEV'
+      ? '源文件与目标位置不在同一卷；为避免隐式复制后删除，操作已停止。'
+      : String(err instanceof Error ? err.message : err);
+    return { ok: false, sourcePath: source, destinationPath: destination, failureReason: reason };
+  }
 }
 
 function inside(root: string, abs: string): boolean {
