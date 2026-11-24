@@ -7,7 +7,7 @@ import {
   skipWelcomeAndEnterShell,
 } from '../../runtime/tests/electron-harness';
 
-test('Electron Slice 2A：Talk 连续生成真实 Word/PDF 成果并显示打开卡片', { timeout: 240_000 }, async () => {
+test('Electron Slice 2A：Talk 连续生成真实 Word/PDF/PPT 成果并显示打开卡片', { timeout: 300_000 }, async () => {
   const harness = await launchDigitalMeElectron({
     extraEnv: {
       DIGITALME_V2_DIGITAL_SELF_STUB: '1',
@@ -51,6 +51,22 @@ test('Electron Slice 2A：Talk 连续生成真实 Word/PDF 成果并显示打开
     assert.equal(pdfExtracted.status, 'ok');
     assert.match(pdfExtracted.text || '', /PDF成果验证/);
     assert.match(pdfExtracted.text || '', /成熟渲染能力/);
+
+    await harness.page.locator('#chat-input').fill('请生成 PPT成熟成果验证，保存到应用成果区。');
+    await harness.page.locator('#btn-chat-send').click();
+    await harness.page.locator('.talk-result-card').nth(2).waitFor({ state: 'visible', timeout: 30_000 });
+    const pptCard = harness.page.locator('.talk-result-card').last();
+    assert.match(await pptCard.innerText(), /PPT成熟成果验证\.pptx/);
+    assert.equal((await pptCard.locator('.talk-result-open').innerText()).trim(), '打开');
+    const afterPpt = (await harness.page.evaluate(`(async () => window.digitalMe.invoke('talk', {}))()`)) as {
+      view?: { turns?: Array<{ result?: { path?: string } }> };
+    };
+    const pptPath = [...(afterPpt.view?.turns || [])].reverse().find((turn) => turn.result?.path)?.result?.path;
+    assert.ok(pptPath?.endsWith('.pptx'));
+    const pptExtracted = await extractFile(pptPath!);
+    assert.equal(pptExtracted.status, 'ok');
+    assert.match(pptExtracted.text || '', /PPT成熟成果验证/);
+    assert.match(pptExtracted.text || '', /成熟生成能力/);
   } finally {
     await harness.close();
   }

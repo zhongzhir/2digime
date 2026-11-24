@@ -22,10 +22,12 @@
     "identity:oidc:auth0:verify": "node institution/identity-sandbox/auth0/run-verify.cjs",
     "smoke:packaged": "node scripts/run-packaged-trial-smoke.cjs",
     "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
+    "benchmark:office": "npm run build && node scripts/run-office-benchmark.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
   },
   "dependencies": {
     "@a2a-js/sdk": "^1.0.1",
+    "docx": "9.7.1",
     "express": "^5.3.0",
     "fast-xml-parser": "^5.12.1",
     "jose": "^6.2.18",
@@ -33,6 +35,7 @@
     "openid-client": "^6.9.1",
     "pdf-parse": "^1.1.1",
     "pdfkit": "0.20.2",
+    "pptxgenjs": "4.0.1",
     "robots-parser": "^3.0.1"
   },
   "devDependencies": {
@@ -45,5 +48,8 @@
     "playwright": "^1.65.1",
     "rcedit": "^5.0.1",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
   }
 }

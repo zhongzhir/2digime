@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_IN_PROGRESS`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_3_DEVELOPER_GATE_PASS / SLICE_2A_IN_PROGRESS`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -64,6 +64,14 @@ TypeScript 构建通过；Talk/文件围栏/协作回退聚焦回归 14/14，Off
 PDF 已通过成熟 PDFKit `0.20.2` 接入同一 Talk/Execution/结果卡主链，不手写 PDF 二进制，不增加第二运行时。应用成果区和授权外部目录均可生成 `.pdf`；中文只使用可嵌入的单字体 TTF/OTF，缺少字体时明确失败。生成后经既有安全读取与 PDF 抽取链真实回读。TypeScript 构建通过；基础 DOCX/PPTX/PDF 导出与中文 PDF 回读 6/6，正式 Electron 同一 Thread 连续生成 Word、PDF 并分别显示“打开”卡片 1/1 通过；新增依赖后的 npm 生产依赖审计为 0 vulnerabilities。
 
 本检查点只证明 PDF 基础生成与交付成立；复杂表格、图片、页眉页脚、PDF 逐页视觉 QA、DOCX/PPTX 成熟引擎升级、各格式 10 项固定任务及 Owner 验收仍未完成，不得写成专业 Office、Slice 2A 或 95% 通过。尚未打包、push 或发布。
+
+### Slice 2A-3 开发检查点（2026-11-24）
+
+正式 DOCX/PPTX 导出已分别切换到成熟 `docx 9.7.1` 与 PptxGenJS `4.0.1`，旧同步 OOXML builder 仅保留为历史 fixture/结构兼容，不再是 Talk 生产路径；PDF 继续使用 PDFKit。三种格式统一支持表格、已进入成果内容的 data URI 图片、中文字体及页眉页脚/页码，不借图片引用扩大文件授权。
+
+新增可重复 30 项固定门（每格式 10 项）：报告、会议纪要、表格、图片、双语、清单、比较、时间线、机构备忘、长文。每项均真实生成、结构检查、正文回读；DOCX/PPTX 经 LibreOffice 转 PDF，三种格式均经 Poppler 逐页 PNG，形成三张逐格式蒙太奇并完成目视复核。首轮发现长文 PPT 机械拆成 37 张低密度页，已在成熟导出层按长度合并相邻短章节，复验为 7 张，未增加关键词语义路由。固定门 30/30 通过；构建通过；既有 Office/布局/Talk 16/16、授权文件与能力暴露 17/17；正式 Electron 同一 Thread 连续 Word/PDF/PPT 结果卡与真实回读 1/1 通过。
+
+PptxGenJS 首次带入的 `image-size <=2.0.2` 高危 DoS 已通过 npm 官方修复版 `image-size 2.0.4` 精确 override 清除；完整图片任务复验通过，生产依赖审计为 0 vulnerabilities。该门只证明生成、回读和逐页渲染基线，不等于市场 95 分位：既有复杂文件修改、模板保真、复杂图表/公式/批注、领先产品同输入对照评分和 Owner 界面验收仍待后续小批次。Slice 2A 保持 IN PROGRESS；尚未打包、push 或发布。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

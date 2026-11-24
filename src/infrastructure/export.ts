@@ -2,9 +2,16 @@ import { existsSync, promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import PDFDocument = require('pdfkit');
 import { writeZip, readZipEntries } from './zip';
+import {
+  buildMatureDocxFromMarkdown,
+  buildMaturePptxFromDrafts,
+  extractOfficeRichContent,
+} from './mature-office';
 
 /**
- * 导出器:Markdown → .md / .docx / .pptx（真实 OOXML，Word/WPS、PowerPoint/WPS 可打开）。
+ * 导出器:Markdown → .md / .docx / .pptx / .pdf。
+ * 正式 DOCX/PPTX 导出使用成熟库；下方同步 OOXML builder 仅保留给既有
+ * fixture、结构检查与布局兼容测试，不再是 Talk 的生产导出路径。
  * 导出是只读投影:不回写、不改变 Artifact 权威内容。
  */
 const CJK_FONT = 'Microsoft YaHei';
@@ -35,7 +42,7 @@ export async function exportDocx(markdown: string, targetPath: string, signal?: 
   const finalPath = ensureExtension(targetPath, '.docx');
   signal?.throwIfAborted();
   await fs.mkdir(path.dirname(finalPath), { recursive: true });
-  const bytes = buildDocxFromMarkdown(markdown);
+  const bytes = await buildMatureDocxFromMarkdown(markdown);
   signal?.throwIfAborted();
   await fs.writeFile(finalPath, bytes);
   return { path: finalPath };
@@ -45,7 +52,8 @@ export async function exportPptx(markdown: string, targetPath: string, signal?: 
   const finalPath = ensureExtension(targetPath, '.pptx');
   signal?.throwIfAborted();
   await fs.mkdir(path.dirname(finalPath), { recursive: true });
-  const bytes = buildPptxFromMarkdown(markdown);
+  const rich = extractOfficeRichContent(markdown);
+  const bytes = await buildMaturePptxFromDrafts(splitMarkdownIntoSlides(rich.markdown), rich);
   signal?.throwIfAborted();
   await fs.writeFile(finalPath, bytes);
   return { path: finalPath };
@@ -62,7 +70,8 @@ export async function exportPdf(markdown: string, targetPath: string, signal?: A
 }
 
 export async function buildPdfFromMarkdown(markdown: string, signal?: AbortSignal): Promise<Buffer> {
-  const paragraphs = markdownToParagraphs(markdown);
+  const rich = extractOfficeRichContent(markdown);
+  const paragraphs = markdownToParagraphs(rich.markdown);
   const needsCjk = /[\u3400-\u9fff\uf900-\ufaff]/.test(markdown);
   const cjkFont = resolveCjkFontPath();
   if (needsCjk && !cjkFont) {
@@ -106,6 +115,53 @@ export async function buildPdfFromMarkdown(markdown: string, signal?: AbortSigna
     } else {
       doc.fillColor('#1B2430').fontSize(11).text(paragraph.text, options);
     }
+  }
+  for (const table of rich.tables) {
+    signal?.throwIfAborted();
+    doc.moveDown(0.8);
+    const font = cjkFont ? { src: cjkFont, size: 9 } : { family: 'Helvetica', size: 9 };
+    const header: PDFKit.Mixins.CellOptions[] = table.headers.map((text) => ({
+      text,
+      type: 'TH' as const,
+      backgroundColor: '#0F6A5A',
+      textColor: '#FFFFFF',
+      padding: 6,
+      font,
+    }));
+    const rows: PDFKit.Mixins.CellOptions[][] = table.rows.map((row) => row.map((text) => ({
+      text,
+      padding: 6,
+      textColor: '#1B2430',
+      font,
+    })));
+    const tableOptions: PDFKit.Mixins.TableOptionsWithData = {
+      data: [header, ...rows],
+      maxWidth: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      defaultStyle: { borderColor: '#C9D4D0', border: 0.5 },
+    };
+    doc.table(tableOptions);
+  }
+  for (const image of rich.images) {
+    signal?.throwIfAborted();
+    if (doc.y > doc.page.height - doc.page.margins.bottom - 300) doc.addPage();
+    doc.moveDown(0.8);
+    doc.image(image.data, { fit: [440, 260], align: 'center' });
+    doc.fillColor('#5C6773').fontSize(9).text(image.alt, { align: 'center', paragraphGap: 10 });
+  }
+  const range = doc.bufferedPageRange();
+  const title = firstHeading(paragraphs) || '兔机米成果';
+  for (let page = range.start; page < range.start + range.count; page += 1) {
+    doc.switchToPage(page);
+    doc.fillColor('#5C6773').fontSize(8).text(title, doc.page.margins.left, 28, {
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      align: 'right',
+      lineBreak: false,
+    });
+    doc.text(`兔机米 · ${page - range.start + 1} / ${range.count}`, doc.page.margins.left, doc.page.height - 38, {
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      align: 'center',
+      lineBreak: false,
+    });
   }
   doc.end();
   return completed;

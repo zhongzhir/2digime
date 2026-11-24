@@ -250,6 +250,21 @@ async function chat({ messages, tools }) {
       ],
     };
   }
+  if (hasArtifact && /PPT成熟成果验证/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [
+        {
+          id: 'call_ppt_artifact_1',
+          name: 'write_artifact',
+          arguments: JSON.stringify({
+            fileName: 'PPT成熟成果验证.pptx',
+            content: '# PPT成熟成果验证\n\n## 结论\n\n- PowerPoint 已由成熟生成能力创建\n- 文件已经真实回读',
+          }),
+        },
+      ],
+    };
+  }
   if (hasArtifact && /无付费成果打开验证/.test(text)) {
     return {
       text: '',

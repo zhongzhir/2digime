@@ -129,3 +129,38 @@ test('PDFKit 生成可提取中文正文的多页 PDF', async () => {
   assert.match(extracted.text || '', /第 28 节/);
   assert.match(extracted.text || '', /自动换页/);
 });
+
+test('成熟 Office 导出器保留表格、图片、页眉页脚并可真实回读', async () => {
+  const icon = await fs.readFile(path.resolve('brands/demo-telecom/icon.png'));
+  const markdown = [
+    '# 成熟成果验证',
+    '',
+    '| 指标 | 结果 |',
+    '|---|---|',
+    '| 结构 | 通过 |',
+    '| 回读 | 通过 |',
+    '',
+    `![验证图标](data:image/png;base64,${icon.toString('base64')})`,
+  ].join('\n');
+  const dir = await makeTempDir('mature-office');
+  const docx = await exportDocx(markdown, path.join(dir, '成熟成果验证.docx'));
+  const pptx = await exportPptx(markdown, path.join(dir, '成熟成果验证.pptx'));
+  const pdf = await exportPdf(markdown, path.join(dir, '成熟成果验证.pdf'));
+
+  const docxEntries = readZipEntries(await fs.readFile(docx.path));
+  assert.ok([...docxEntries.keys()].some((name) => /^word\/header\d+\.xml$/.test(name)));
+  assert.ok([...docxEntries.keys()].some((name) => /^word\/footer\d+\.xml$/.test(name)));
+  assert.ok([...docxEntries.keys()].some((name) => /^word\/media\//.test(name)));
+  assert.match((docxEntries.get('word/document.xml') as Buffer).toString('utf8'), /<w:tbl>/);
+
+  const pptxEntries = readZipEntries(await fs.readFile(pptx.path));
+  assert.ok([...pptxEntries.keys()].some((name) => /^ppt\/media\//.test(name)));
+  assert.ok([...pptxEntries.values()].some((value) => value.toString('utf8').includes('<a:tbl>')));
+
+  for (const output of [docx.path, pptx.path, pdf.path]) {
+    const extracted = await extractFile(output);
+    assert.equal(extracted.status, 'ok');
+    assert.match(extracted.text || '', /成熟成果验证/);
+    assert.match(extracted.text || '', /结构/);
+  }
+});
