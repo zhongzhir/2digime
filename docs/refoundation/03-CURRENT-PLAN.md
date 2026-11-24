@@ -1,10 +1,39 @@
 # 03 — CURRENT PLAN
 
 **状态：** `current_authority / only_execution_plan`
-**日期：** 2026-11-23
+**日期：** 2026-11-24
 **性质：** 当前唯一执行计划。旧 roadmap、execution index、context 文首指针、01A baseline 附录中的「下一步」均不得再当 current plan。
 
 开始任何实现前读 AGENTS.md 所列四份文件。本文件只回答：现在做什么、按什么顺序、什么不准做、还有哪些未决冲突。
+
+---
+
+## 0. 当前覆盖指针（2026-11-24）
+
+**任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
+
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_DRAFTED / OWNER_REVIEW_PENDING / IMPLEMENTATION_NOT_STARTED`
+
+**详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
+
+**本地主干基线：** `348226a`。`INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6 已从功能分支快进合并到本地 `main`；构建通过，身份/委托 11/11、Slice 6 主链 3/3、A2A 4/4 聚焦回归通过。尚未 push、打包、发布或部署。
+
+### 2026-11-24 Owner 产品裁决
+
+1. Discover 当前首屏新鲜度、连续供给、卡片布局和内容可用性不合格；不以此前技术门替代当前真实体验。
+2. 允许建立“协作与自动化”一级入口，作为同一 Goal/Execution/Artifact/Grant/Subject 事实的能力管理投影；不得建立第二 Talk、第二 runtime 或协议状态中心。
+3. Phase A 重新成为当前施工面：以成熟 Office、授权本地文件、Coding Agent 和第三方 Connector/Skill 接入缩小与 Codex/Claude Code 类产品的差距；95% 必须按固定真实任务集对照，不按功能数量宣称。
+4. 已有 Institution Distribution、机构身份、委托和 A2A 地基转为伙伴就绪路线：个人客户端展示机构连接与授权，机构侧使用独立沙箱/控制台；不得让机构读取 Digital Self、私人 Talk、文件和记忆。
+
+### 当前唯一动作顺序
+
+1. Slice 1：恢复 Discover 新鲜度、连续 5 页、卡片视觉和文字可用性；不增加搜索供应商或站点特例；
+2. Slice 2：集成成熟 DOCX/PPTX/PDF、授权文件工作区、Codex 级 Coding Agent 和三类第三方系统；
+3. Slice 3：开放“协作与自动化”入口，先有真实能力再有管理表面；
+4. Slice 4：机构伙伴沙箱、演示控制台、接口/安全/试点资料；
+5. Slice 5：统一产品基准、Electron 自动化修复、干净机安装与 Owner 验收。
+
+以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
 
