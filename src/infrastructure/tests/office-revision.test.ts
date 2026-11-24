@@ -95,3 +95,27 @@ test('LibreOffice 原生修改器在预期次数不符时不生成副本', {
   );
   assert.equal(await fs.stat(output).then(() => true, () => false), false);
 });
+
+test('LibreOffice 原生修改器先预检全部替换，拒绝由前项产生的级联匹配', {
+  skip: process.platform !== 'win32' || process.env.DIGITALME_TEST_OFFICE_REVISION !== '1',
+  timeout: 120_000,
+}, async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), '2digime-office-revision-cascade-'));
+  const source = path.join(root, 'source.docx');
+  const output = path.join(root, 'should-not-exist.docx');
+  await fs.writeFile(source, await Packer.toBuffer(new Document({
+    sections: [{ children: [new Paragraph('甲')] }],
+  })));
+  await assert.rejects(
+    reviseDocxWithInstalledOffice({
+      sourcePath: source,
+      outputPath: output,
+      replacements: [
+        { from: '甲', to: '乙', expectedCount: 1 },
+        { from: '乙', to: '丙', expectedCount: 1 },
+      ],
+    }),
+    /没有找到要替换的原文：乙/,
+  );
+  assert.equal(await fs.stat(output).then(() => true, () => false), false);
+});

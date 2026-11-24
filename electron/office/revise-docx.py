@@ -78,7 +78,7 @@ def main():
         if document is None:
             raise RuntimeError("LibreOffice 无法打开 DOCX 副本。")
 
-        results = []
+        prepared = []
         for replacement in request["replacements"]:
             source = str(replacement["from"])
             target = str(replacement["to"])
@@ -91,24 +91,62 @@ def main():
                 raise RuntimeError(
                     f"原文出现次数不符合预期：{source}，预期 {expected} 次，实际 {before} 次。"
                 )
+            prepared.append(
+                {
+                    "from": source,
+                    "to": target,
+                    "count": before,
+                    "matchCase": match_case,
+                }
+            )
+
+        # 全部原文先在同一原始副本上通过预检，再开始修改，避免前一项替换
+        # 改变后一项的匹配数量而形成静默级联。
+        for replacement in prepared:
+            source = replacement["from"]
+            target = replacement["to"]
+            match_case = replacement["matchCase"]
             descriptor = document.createReplaceDescriptor()
             descriptor.SearchString = source
             descriptor.ReplaceString = target
             descriptor.SearchCaseSensitive = match_case
             replaced = int(document.replaceAll(descriptor))
-            if replaced != before:
+            if replaced != replacement["count"]:
                 raise RuntimeError(
-                    f"替换数量核对失败：{source}，找到 {before} 次，替换 {replaced} 次。"
+                    f"替换数量核对失败：{source}，预检 {replacement['count']} 次，替换 {replaced} 次。"
                 )
-            verified = count_matches(document, target, match_case) if target else 0
-            if target and verified < replaced:
+        document.store()
+        document.close(True)
+        document = None
+
+        # 保存不是完成事实。重新从磁盘打开副本，在保存后的文档上核对新文本。
+        document = desktop.loadComponentFromURL(
+            uno.systemPathToFileUrl(str(output_path)),
+            "_blank",
+            0,
+            (prop("Hidden", True), prop("ReadOnly", True)),
+        )
+        if document is None:
+            raise RuntimeError("LibreOffice 无法重新打开保存后的 DOCX 副本。")
+        results = []
+        for replacement in prepared:
+            verified = (
+                count_matches(document, replacement["to"], replacement["matchCase"])
+                if replacement["to"]
+                else 0
+            )
+            if replacement["to"] and verified < replacement["count"]:
                 raise RuntimeError(
-                    f"替换后核对失败：{target}，至少应出现 {replaced} 次，实际 {verified} 次。"
+                    f"保存后核对失败：{replacement['to']}，至少应出现 {replacement['count']} 次，实际 {verified} 次。"
                 )
             results.append(
-                {"from": source, "to": target, "count": replaced, "verifiedCount": verified}
+                {
+                    "from": replacement["from"],
+                    "to": replacement["to"],
+                    "count": replacement["count"],
+                    "verifiedCount": verified,
+                }
             )
-        document.store()
         document.close(True)
         document = None
         print(json.dumps({"ok": True, "replacements": results}, ensure_ascii=False))

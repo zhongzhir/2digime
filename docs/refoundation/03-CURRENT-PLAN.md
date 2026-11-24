@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_3_DEVELOPER_GATE_PASS / SLICE_2A_IN_PROGRESS`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_DEVELOPER_CLOSED_OWNER_PENDING`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -77,7 +77,13 @@ PptxGenJS 首次带入的 `image-size <=2.0.2` 高危 DoS 已通过 npm 官方�
 
 现有复杂 DOCX 的第一条保真修改主链已接入同一 Talk：用户附上或授权一个 DOCX，并给出可核对的原文和修改内容；模型自主调用 `revise_docx`，系统逐字节复制源文件，使用本机已安装的 LibreOffice 原生文档 API 在副本中精确替换并保存到本轮应用成果区，随后回读正文、记录源/副本 SHA-256 和实际替换次数，并以可打开成果卡返回。源文件不交给 Office 引擎写入；目标已存在、原文不存在、出现次数与预期不符或保存/回读失败时不交付副本。该能力只在本轮存在已授权 DOCX 时提供，不新增一级入口、任务类型路由、永久状态或第二事实源。
 
-实现过程按 Yellow/Red 规则淘汰了在 Word 2007 COM 保存现代复杂 DOCX 时反复 RPC 崩溃的路线，没有把不稳定 fallback 留进产品。LibreOffice 真实文件门 2/2 通过，Talk 工具暴露边界 2/2 通过，正式 Electron `Talk → 已授权 DOCX → 原格式修改 → 新成果卡 → 回读` 1/1 通过；源/副本页面分别渲染为 PDF/PNG 目视对照，页眉页脚与原有文字样式保留，目标文字按原位置替换，未见重排、截断或重叠。当前范围仍只是少量精确文字替换；任意段落重写、复杂图表/公式/批注修改、PPTX/PDF 既有文件修改、无 LibreOffice 环境的能力获取、领先产品同输入评分及 Owner 界面验收仍待后续小批次。Slice 2A 保持 IN PROGRESS；尚未打包、push 或发布。
+实现过程按 Yellow/Red 规则淘汰了在 Word 2007 COM 保存现代复杂 DOCX 时反复 RPC 崩溃的路线，没有把不稳定 fallback 留进产品。LibreOffice 真实文件门、Talk 工具暴露边界和正式 Electron `Talk → 已授权 DOCX → 原格式修改 → 新成果卡 → 回读` 均通过；源/副本页面分别渲染为 PDF/PNG 目视对照，页眉页脚与原有文字样式保留，目标文字按原位置替换，未见重排、截断或重叠。
+
+### Slice 2A 最终收口（2026-11-24）
+
+在不扩大作业边界、不新增任务的前提下，DOCX 修改器完成最后一次可靠性收口：全部替换先在同一原始副本上预检，再执行修改；保存后关闭文档并从磁盘重新打开核对，避免把内存状态当作落盘事实；后一项原文若只是由前一项替换产生，整批拒绝且不留下成果，防止静默级联。LibreOffice 真实正向、预期次数拒绝、级联拒绝 3/3，通过；Talk 暴露边界 2/2、正式 Electron 主链 1/1 再次通过；TypeScript 构建通过。
+
+Slice 2A 的开发范围据此收口为：同一 Talk 中创建和打开 DOCX/PPTX/PDF，三种格式完成固定任务生成、结构回读和逐页渲染门；已授权既有 DOCX 支持保留原件的少量精确文字修改与另存。任意复杂重排、图表/公式/批注编辑以及既有 PPTX/PDF 原格式修改不纳入本次已关闭边界，不再以“继续完善 Slice 2A”为由扩建。该结果不等于市场领先能力 95%，也不等于 Owner 验收、打包、push、发布或部署。状态改为 `SLICE_2A_DEVELOPER_CLOSED / OWNER_ACCEPTANCE_PENDING`。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

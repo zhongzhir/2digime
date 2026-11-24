@@ -102,7 +102,7 @@ export async function reviseDocxWithInstalledOffice(input: {
   if (path.resolve(input.sourcePath) === path.resolve(input.outputPath)) throw new Error('不能覆盖源 DOCX；请另存新文件。');
   if (await fs.stat(input.outputPath).then(() => true, () => false)) throw new Error('输出文件已存在；为避免覆盖，请换一个新文件名。');
   const scriptPath = locateOfficeRevisionBridge();
-  if (!scriptPath) throw new Error('没有找到本机 Word 修改桥接组件。');
+  if (!scriptPath) throw new Error('没有找到本机 DOCX 修改桥接组件。');
 
   const sourceBefore = await fs.readFile(input.sourcePath);
   const sourceSha256 = sha256(sourceBefore);
@@ -124,19 +124,19 @@ export async function reviseDocxWithInstalledOffice(input: {
       error?: string;
       replacements?: Array<{ from: string; to: string; count: number; verifiedCount: number }>;
     };
-    if (!parsed.ok) throw new Error(parsed.error || 'Word 没有完成修改。');
+    if (!parsed.ok) throw new Error(parsed.error || 'LibreOffice 没有完成修改。');
     input.signal?.throwIfAborted();
     const sourceAfter = await fs.readFile(input.sourcePath);
     if (sha256(sourceAfter) !== sourceSha256) throw new Error('源 DOCX 发生了变化，已拒绝交付副本。');
     const candidate = await fs.readFile(tempOutput);
-    if (!candidate.length) throw new Error('Word 生成的副本为空。');
+    if (!candidate.length) throw new Error('LibreOffice 生成的副本为空。');
     await fs.rename(tempOutput, input.outputPath);
     const extraction = await extractFile(input.outputPath);
     const extractedText = String(extraction.text || '');
     if (extraction.status !== 'ok' || !extractedText.trim()) throw new Error('修改后的 DOCX 无法回读正文。');
     const verified = parsed.replacements || [];
     if (verified.length !== input.replacements.length || verified.some((item) => item.to && item.verifiedCount < item.count)) {
-      throw new Error('修改后的 DOCX 没有通过 Word 完整文档范围核对。');
+      throw new Error('修改后的 DOCX 没有通过保存后核对。');
     }
     const output = await fs.readFile(input.outputPath);
     return {

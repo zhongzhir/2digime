@@ -72,7 +72,7 @@
 | 顺序 | 结果 | 状态 | 预计工作量* | 关键依赖 |
 |---|---|---|---|---|
 | Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1C 技术门 pass） | 1–2 周 | Owner 界面验收 |
-| Now-2 | Slice 2：Doing 领先能力集成与基准 | In Progress（2A-1 Word/PPT Talk 主链） | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
+| Now-2 | Slice 2：Doing 领先能力集成与基准 | In Progress（2A 开发收口，Owner 验收待定） | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
 | Next-1 | Slice 3：数字之我右侧身份、协作与自动化投影 | Not Started | 1–2 周小批次 | Slice 2 至少两条真实执行主链 |
 | Next-2 | Slice 4：机构伙伴沙箱与合作演示 | Not Started | 2–3 个小批次 | Slice 3、现有 Institution Distribution |
 | Later | Slice 5：统一产品验收、签名试用包与伙伴材料 | Not Started | 1–2 周 | Slice 1–4 全部门通过 |
@@ -168,6 +168,15 @@ Slice 1 的开发者技术门已完成，仍待 Owner 界面验收；不打包�
 - 构建通过；既有 Office/布局/Talk 聚焦回归 16/16、授权文件与能力暴露回归 17/17；正式 Electron 同一 Thread 连续生成 Word、PDF、PPT，三次均返回独立“打开”卡片并真实回读，1/1 通过；固定任务开发门 30/30（100%）通过。
 
 本检查点关闭“生产导出仍依赖手写 OOXML、没有固定任务和逐页渲染门”的欠账，但不把 30 项开发夹具等同市场 95 分位。对既有复杂 DOCX/PPTX/PDF 的修改迭代、模板保真、复杂图表/公式/批注、与选定领先产品同输入对照评分以及 Owner 界面验收仍未完成；Slice 2A 继续为 IN PROGRESS。不 push、不打包、不发布。
+
+#### Slice 2A-4 与最终收口（2026-11-24）
+
+- 同一 Talk 在存在已授权 DOCX 时提供原格式精确修改工具：系统逐字节复制源文件，LibreOffice 原生文档 API 只修改副本，成果进入本轮应用成果区并以“打开”卡片返回；源文件 SHA-256 必须保持不变；
+- 全部替换先在原始副本上完成存在性与次数预检，再修改、保存、关闭并从磁盘重开核对；原文不存在、次数不符、保存后核对失败或替换项形成静默级联时，整批拒绝且不留下成果；
+- Word 2007 COM 保存现代复杂 DOCX 时反复 RPC 崩溃，已按 Yellow/Red 规则淘汰，不保留不稳定 fallback；未增加 Office 自研内核、任务类型路由、入口、永久状态或第二事实源；
+- LibreOffice 真实文件门 3/3、Talk 工具暴露边界 2/2、正式 Electron `Talk → DOCX → 修改副本 → 成果卡 → 回读` 1/1、TypeScript 构建通过；源/副本均完成 PDF/PNG 视觉对照。
+
+Slice 2A 的开发范围据此关闭为：创建并打开 DOCX/PPTX/PDF，三种格式固定生成任务的结构/回读/逐页渲染，以及既有 DOCX 的少量精确文字修改与另存。任意复杂重排、图表/公式/批注编辑和既有 PPTX/PDF 原格式修改不纳入本次边界；不再继续扩建 Slice 2A。该结果不宣称市场 95%，仍待 Owner 界面验收；不 push、不打包、不发布。
 
 ### 2B. 授权本地文件与工作区
 
