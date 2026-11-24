@@ -112,6 +112,7 @@ export interface PersonalFeedResult {
 const MIN_FEED = 6;
 const MAX_FEED = 12;
 const STALE_MS = 24 * 60 * 60 * 1000;
+export const PERSONAL_FEED_LOW_WATER_MARK = MAX_FEED;
 const LEAD = '看文章、图片、音频和视频。';
 
 export function personalFeedCachePath(packageRoot: string): string {
@@ -126,8 +127,8 @@ export async function personalFeedRemainingCount(packageRoot: string): Promise<n
 }
 
 /**
- * 只在原队列已经耗尽时，把后台个人选择结果接到同一份缓存后面。
- * 调整上下文变化、当前不是个人流、或已有未交付队列时都拒绝提交。
+ * 在原队列进入最后一页时，把后台个人选择结果接到同一份缓存后面。
+ * 调整上下文变化、当前不是个人流、或原队列仍高于低水位时都拒绝提交。
  */
 export async function commitPersonalFeedPrefetch(
   packageRoot: string,
@@ -139,12 +140,15 @@ export async function commitPersonalFeedPrefetch(
   const deliveredIds = cache.lastView.itemIds.filter(Boolean);
   const delivered = new Set(deliveredIds);
   const remaining = (cache.rankedIds || []).filter((id) => id && !delivered.has(id));
-  if (remaining.length) return 0;
+  if (remaining.length > PERSONAL_FEED_LOW_WATER_MARK) return 0;
   const queued = [...new Set(prefetch.rankedIds.filter((id) => id && !delivered.has(id)))];
-  if (!queued.length) return 0;
-  cache.rankedIds = [...deliveredIds, ...queued];
+  const existing = [...new Set((cache.rankedIds || []).filter(Boolean))];
+  const existingSet = new Set(existing);
+  const additions = queued.filter((id) => !existingSet.has(id));
+  if (!additions.length) return 0;
+  cache.rankedIds = [...existing, ...additions];
   await writeCache(packageRoot, cache);
-  return queued.length;
+  return additions.length;
 }
 
 function emptyCache(): FeedCacheFile {
@@ -984,7 +988,11 @@ export async function ensurePersonalFeed(input: {
   if (input.mode === 'open') {
     mark('OPEN_DISCOVER');
     mark('LOCAL_FEED_READ', cachedCards.length);
-    const localFromCache = cachedCards.length ? applyExplicitFeedback(cachedCards, prefs).slice(0, MAX_FEED) : [];
+    const personalCacheFresh = cacheFresh(cache.personal, nowMs);
+    const localFromCache =
+      personalCacheFresh && cachedCards.length
+        ? applyExplicitFeedback(cachedCards, prefs).slice(0, MAX_FEED)
+        : [];
     // 缓存太少（少于一屏的最低数量）时，用目录里的候选补足；不让两三张旧卡片单独充当"今天的推荐"。
     const cachedIds = new Set(localFromCache.map((card) => card.itemId));
     const topUpNeeded = localFromCache.length < MIN_FEED;
@@ -1005,6 +1013,31 @@ export async function ensurePersonalFeed(input: {
     mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
     let localCards = [...localFromCache, ...localFromDirectory].slice(0, MAX_FEED);
     let catalogFilled = false;
+    if (!localCards.length && cachedCards.length && !personalCacheFresh) {
+      const olderCards = applyExplicitFeedback(cachedCards, prefs).slice(0, MAX_FEED);
+      const fetchingUpdates = canReplenishSupply({ ...input, networking });
+      cache.lastView = {
+        itemIds: olderCards.map((card) => card.itemId),
+        generatedAt: cache.personal?.generatedAt || now,
+        mode: 'personal',
+      };
+      await persistCache(cache);
+      mark('FIRST_CARD_VISIBLE', olderCards.length);
+      return finish(
+        viewOf({
+          cards: olderCards,
+          preferences: input.preferences,
+          notice: fetchingUpdates
+            ? '正在获取更新内容；以下是较早内容，发布时间已标明。'
+            : '暂时没有取到更新内容；以下是较早内容，发布时间已标明。',
+          reasonCode: 'CACHED_FEED',
+          feedMode: 'personal',
+          networking,
+          ...(fetchingUpdates ? { replenishing: true } : {}),
+        }),
+        'CACHED_FEED',
+      );
+    }
     if (!localCards.length && canFetchOpenCatalog({ ...input, networking })) {
       mark('CATALOG_START');
       const feedsFilled = await ingestCatalogFeeds({ ...input, networking, now });
@@ -1029,7 +1062,7 @@ export async function ensurePersonalFeed(input: {
         mode: 'personal',
       };
       cache.lastView = snapshot;
-      if (!cache.personal) cache.personal = snapshot;
+      if (!cache.personal || !personalCacheFresh) cache.personal = snapshot;
       await persistCache(cache);
       mark('FIRST_CARD_VISIBLE', localCards.length);
       return finish(

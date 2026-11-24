@@ -112,6 +112,13 @@
     return decodeEntities(bits.join(' · '));
   }
 
+  function contentAgeLabel(card) {
+    const published = Date.parse(String((card && card.publishedAt) || ''));
+    if (!Number.isFinite(published)) return '';
+    const ageMs = Date.now() - published;
+    return ageMs > 30 * 24 * 60 * 60 * 1000 ? '较早内容' : '';
+  }
+
   function typeLabel(card) {
     const map = { article: '文章', image: '图片', audio: '音频', video: '视频' };
     return map[card.contentType] || (!card.mediaUrl && !card.embedUrl && card.url ? '文章' : '');
@@ -308,27 +315,8 @@
     return '';
   }
 
-  // 瀑布流：列表是自动多列的网格（宽屏多列、窄屏单列），每张卡片按自己的高度占若干行，
-  // 追加新卡片时已有卡片的位置不变。高度变化（图片加载、播放器展开、窗口缩放）由 ResizeObserver 重新计算。
-  const WATERFALL_ROW_PX = 8;
-  const WATERFALL_GAP_PX = 16;
-  function placeWaterfallCard(el) {
-    if (!el || !el.isConnected) return;
-    el.style.gridRowEnd = 'auto';
-    const height = el.offsetHeight;
-    if (!height) return;
-    el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((height + WATERFALL_GAP_PX) / WATERFALL_ROW_PX));
-  }
-  const waterfallObserver =
-    typeof ResizeObserver === 'function'
-      ? new ResizeObserver((entries) => {
-          for (const entry of entries) placeWaterfallCard(entry.target);
-        })
-      : null;
-
   function renderCard(card, opts) {
     const li = document.createElement('li');
-    if (waterfallObserver) waterfallObserver.observe(li);
     const type = String(card.contentType || 'article');
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
     if (card.itemId) li.setAttribute('data-item-id', card.itemId);
@@ -383,12 +371,14 @@
     const body = document.createElement('div');
     body.className = 'content-discover-body';
     if (card.excerpt) li.setAttribute('data-excerpt', '1');
+    const ageLabel = contentAgeLabel(card);
     const kind =
       typeLabel(card) +
       (card.objectKind && card.objectKind !== type ? ' · ' + card.objectKind : '') +
       (card.excerpt ? ' · 片段，不是完整节目' : '') +
       (playable ? ' · 可在这里播放' : type === 'video' || type === 'audio' ? ' · 去原站' : '') +
-      (card.entrancePurpose ? ' · ' + card.entrancePurpose : '');
+      (card.entrancePurpose ? ' · ' + card.entrancePurpose : '') +
+      (ageLabel ? ' · ' + ageLabel : '');
     if (kind) {
       const badge = document.createElement('p');
       badge.className = 'content-discover-kind muted tiny';

@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { launchDigitalMeElectron, skipWelcomeAndEnterShell } from '../../runtime/tests/electron-harness';
 
 const CARDS = [
-  { itemId: 'c1', title: '一篇文章', url: 'https://example.invalid/a', source: 'example.invalid', contentType: 'article', reason: '依据：测试', text: '摘要一' },
+  { itemId: 'c1', title: '一篇较早的文章', url: 'https://example.invalid/a', source: 'example.invalid', contentType: 'article', reason: '依据：测试', text: '摘要一', publishedAt: '2026-10-01T08:00:00.000Z' },
   { itemId: 'c2', title: '一档播客', url: 'https://example.invalid/p', source: 'example.invalid', contentType: 'audio', mediaUrl: 'https://example.invalid/ep.mp3', mimeType: 'audio/mpeg', text: '摘要二' },
   { itemId: 'c3', title: '一个视频', url: 'https://example.invalid/v', source: 'example.invalid', contentType: 'video', mediaUrl: 'https://example.invalid/v.mp4', mimeType: 'video/mp4', text: '摘要三' },
   { itemId: 'c4', title: '只有节目页', url: 'https://example.invalid/show', source: 'example.invalid', contentType: 'video', text: '摘要四：没有媒体直链也是有效推荐' },
@@ -22,7 +22,7 @@ const CARDS = [
   { itemId: 'c6', title: '再一篇文章', url: 'https://example.invalid/c', source: 'example.invalid', contentType: 'article', text: '摘要六' },
 ];
 
-test('发现页：真实渲染、卡片内播放、多列瀑布流，且页面链路不抛未捕获异常', { timeout: 300_000 }, async () => {
+test('发现页：真实渲染、等高卡片、卡片内播放，且页面链路不抛未捕获异常', { timeout: 300_000 }, async () => {
   const harness = await launchDigitalMeElectron({ extraEnv: { DIGITALME_V2_TALK_STUB: '1' } });
   const { page } = harness;
   const pageErrors: string[] = [];
@@ -48,6 +48,7 @@ test('发现页：真实渲染、卡片内播放、多列瀑布流，且页面�
     assert.match(texts, /视频 · 去原站/);
     assert.match(texts, /去原站观看/);
     assert.match(texts, /没有媒体直链也是有效推荐/, '没有直链的节目页仍然是一张有效卡片');
+    assert.match(texts, /较早内容/, '超过 30 天的内容必须明确标为较早内容');
 
     // 3) 宽屏多列，无重叠；窄屏单列
     const layout = async () =>
@@ -65,6 +66,27 @@ test('发现页：真实渲染、卡片内播放、多列瀑布流，且页面�
     const wide = await layout();
     assert.ok(wide.columns >= 2, `宽屏应为多列，实际 ${wide.columns}`);
     assert.equal(wide.overlaps, 0);
+    const rowAlignment = (await page.evaluate(`(() => {
+      const cards = Array.from(document.querySelectorAll('#content-discover-list > li'));
+      const rows = new Map();
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        const key = Math.round(rect.top / 4) * 4;
+        const action = card.querySelector('.content-discover-actions');
+        const values = rows.get(key) || [];
+        values.push({ height: rect.height, actionBottom: action ? action.getBoundingClientRect().bottom : 0 });
+        rows.set(key, values);
+      }
+      return Array.from(rows.values()).filter((row) => row.length > 1).map((row) => ({
+        heightSpread: Math.max(...row.map((item) => item.height)) - Math.min(...row.map((item) => item.height)),
+        actionBottomSpread: Math.max(...row.map((item) => item.actionBottom)) - Math.min(...row.map((item) => item.actionBottom)),
+      }));
+    })()`)) as Array<{ heightSpread: number; actionBottomSpread: number }>;
+    assert.ok(rowAlignment.length >= 1, '宽屏至少应形成一行多卡片');
+    for (const row of rowAlignment) {
+      assert.ok(row.heightSpread <= 2, `同一行卡片应等高，实际相差 ${row.heightSpread}px`);
+      assert.ok(row.actionBottomSpread <= 2, `同一行动作区应贴底对齐，实际相差 ${row.actionBottomSpread}px`);
+    }
     const rhythm = (await page.evaluate(`(() => {
       const cards = Array.from(document.querySelectorAll('#content-discover-list > li'));
       const excerpts = cards.map((n) => {

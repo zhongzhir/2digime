@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / IMPLEMENTATION_NOT_STARTED`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_IN_PROGRESS`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -34,6 +34,12 @@
 5. Slice 5：统一产品基准、Electron 自动化修复、干净机安装与 Owner 验收。
 
 实施保持小步快跑：不大拆大建，不迁移已成立的 Talk/Digital Self/Capability/Relay/A2A/Identity/Institution Distribution；每批只做一条可感知主链，优先现有功能优化、欠账落地和必要功能接入，原则上可独立构建、回归和回退。
+
+### Slice 1A 开发检查点（2026-11-24）
+
+已完成首批局部修复：过期超过一天的整屏缓存不再压住更新目录；没有更新内容时仍保留旧页，但明确标为“较早内容”并异步补量；后台个人选择在剩余最后一页时提前并入唯一队列，不再等队列归零；Discover 卡片由不等高瀑布流改为同排等高、动作区贴底。未增加来源、站点特例、关键词规则或新状态源。
+
+TypeScript 构建通过；新鲜度、连续 5 页/60 张唯一卡、低水位接队、失败保留和 renderer 合同聚焦回归 39/39 通过。正式 Electron 界面门启动后发生既有 Playwright/Electron 空转挂起，未进入页面断言，已清理本轮测试进程；因此当前仅为开发检查点，尚未通过正式 Electron、真实来源 30 分钟门、Owner 验收、打包、push 或发布。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

@@ -141,3 +141,15 @@ test('Discover renderer bounds first response and does not recursively drain pag
   const personalFeed = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/personal-feed.ts'), 'utf8');
   assert.match(personalFeed, /input\.mode === 'prefetch' \? MAX_FEED :/);
 });
+
+test('Discover renderer labels older content and uses an aligned card grid', async () => {
+  const renderer = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
+  const css = await fs.readFile(path.join(process.cwd(), 'electron/renderer/public-trial.css'), 'utf8');
+
+  assert.match(renderer, /function contentAgeLabel\(card\)/);
+  assert.match(renderer, /较早内容/);
+  assert.doesNotMatch(renderer, /WATERFALL_ROW_PX|placeWaterfallCard|waterfallObserver/);
+  assert.match(css, /\.content-discover-list[^}]*align-items:\s*stretch/);
+  assert.match(css, /\.content-discover-card[^}]*height:\s*100%[^}]*display:\s*flex/);
+  assert.match(css, /\.content-discover-actions[^}]*margin-top:\s*auto/);
+});

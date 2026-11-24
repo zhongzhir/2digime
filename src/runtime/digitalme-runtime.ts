@@ -813,11 +813,13 @@ export class DigitalMeRuntime {
 
     if (action === 'more') {
       let remaining = await personalFeedRemainingCount(pkg.rootDir);
-      if (remaining === 0 && this.readyPersonalSupply) {
+      if (this.readyPersonalSupply) {
         const ready = this.readyPersonalSupply;
-        this.readyPersonalSupply = null;
-        await commitPersonalFeedPrefetch(pkg.rootDir, ready);
-        remaining = await personalFeedRemainingCount(pkg.rootDir);
+        const joined = await commitPersonalFeedPrefetch(pkg.rootDir, ready);
+        if (joined > 0) {
+          this.readyPersonalSupply = null;
+          remaining = await personalFeedRemainingCount(pkg.rootDir);
+        }
       }
       if (remaining === 0) {
         await this.schedulePersonalSupplyPrefetch(

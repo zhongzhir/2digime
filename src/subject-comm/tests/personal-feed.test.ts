@@ -131,6 +131,75 @@ test('open Discover replays a fresh local feed without searching', async () => {
   );
 });
 
+test('open Discover replaces a stale full-screen cache with newer directory content', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-stale-first-screen-'));
+  const makeDated = (itemId: string, publishedAt: string) => {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId,
+      publisherSubjectId: `pub_${itemId}`,
+      publisherDisplayName: `来源 ${itemId}`,
+      kind: 'content',
+      createdAt: publishedAt,
+      visibility: 'public',
+      content: {
+        title: `内容 ${itemId}`,
+        text: `这是 ${itemId} 的正文摘要。`,
+        url: `https://www.ithome.com/${itemId}.htm`,
+        contentType: 'article',
+        publishedAt,
+      },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: publishedAt, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    return checked.item;
+  };
+  const old = Array.from({ length: 6 }, (_, index) =>
+    makeDated(`ni_old_${index + 1}`, `2026-10-${String(index + 5).padStart(2, '0')}T08:00:00.000Z`),
+  );
+  const current = Array.from({ length: 6 }, (_, index) =>
+    makeDated(`ni_current_${index + 1}`, `2026-11-${String(index + 18).padStart(2, '0')}T08:00:00.000Z`),
+  );
+  await fs.mkdir(path.dirname(personalFeedCachePath(root)), { recursive: true });
+  await fs.writeFile(
+    personalFeedCachePath(root),
+    `${JSON.stringify({
+      version: 1,
+      personal: {
+        itemIds: old.map((item) => item.itemId),
+        generatedAt: '2026-10-10T08:00:00.000Z',
+        mode: 'personal',
+      },
+      lastView: {
+        itemIds: old.map((item) => item.itemId),
+        generatedAt: '2026-10-10T08:00:00.000Z',
+        mode: 'personal',
+      },
+    }, null, 2)}\n`,
+  );
+
+  const opened = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_stale_first_screen'),
+    items: [...old, ...current],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    mode: 'open',
+    now: '2026-11-24T08:00:00.000Z',
+  });
+
+  assert.equal(opened.view.cards.length, 6);
+  assert.equal(opened.view.cards.every((card) => card.itemId.startsWith('ni_current_')), true);
+  assert.equal(opened.view.cards.some((card) => card.itemId.startsWith('ni_old_')), false);
+  assert.equal(opened.reasonCode, 'LOCAL_DIRECTORY');
+  const refreshedCache = JSON.parse(await fs.readFile(personalFeedCachePath(root), 'utf8')) as {
+    personal: { itemIds: string[]; generatedAt: string };
+  };
+  assert.equal(refreshedCache.personal.itemIds.every((itemId) => itemId.startsWith('ni_current_')), true);
+  assert.equal(refreshedCache.personal.generatedAt, '2026-11-24T08:00:00.000Z');
+});
+
 test('non-consumable directory still replenishes; search failure keeps the previous feed', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-keep-'));
   const local = FEED_01_SEED_ITEMS.slice(0, 6);
@@ -173,6 +242,7 @@ test('non-consumable directory still replenishes; search failure keeps the previ
   assert.equal(opened.view.cards.length, seeded.view.cards.length);
   assert.equal(opened.reasonCode, 'CACHED_FEED');
   assert.equal(opened.view.replenishing, true);
+  assert.match(opened.view.notice, /正在获取更新内容.*较早内容/);
   assert.equal(searched, 0);
 
   const failed = await ensurePersonalFeed({

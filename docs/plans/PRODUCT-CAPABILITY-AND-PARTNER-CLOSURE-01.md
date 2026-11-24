@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_NOT_STARTED`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_1A_DEVELOPER_VALIDATED`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -71,7 +71,7 @@
 
 | 顺序 | 结果 | 状态 | 预计工作量* | 关键依赖 |
 |---|---|---|---|---|
-| Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | Not Started | 1–2 周 | 真实开放来源与正式 Electron |
+| Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1A developer pass） | 1–2 周 | 真实开放来源与正式 Electron |
 | Now-2 | Slice 2：Doing 领先能力集成与基准 | Not Started | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
 | Next-1 | Slice 3：数字之我右侧身份、协作与自动化投影 | Not Started | 1–2 周小批次 | Slice 2 至少两条真实执行主链 |
 | Next-2 | Slice 4：机构伙伴沙箱与合作演示 | Not Started | 2–3 个小批次 | Slice 3、现有 Institution Distribution |
@@ -102,6 +102,14 @@
 - 60 个原文入口抽样可打开率 ≥95%，失效入口不继续推荐；
 - 三种窗口宽度和三种缩放下没有重叠、动作错位或不可读卡片；
 - 开发者正式 Electron 门通过后，才交 Owner 一次验收。
+
+### Slice 1A 开发检查点（2026-11-24）
+
+- 过期整屏缓存不再优先于更新目录；无更新内容时保留旧页并明确显示“较早内容”，不把旧页冒充最新；
+- 后台候选在当前队列进入最后一页时提前接入，不再等完全归零后才开始衔接；
+- 卡片改为同排等高、摘要限行、动作区贴底；超过 30 天且有可信发布时间的卡片显示“较早内容”；
+- 构建及聚焦回归 39/39 通过，其中既有五页门为 5×12、60 张唯一卡；
+- 正式 Electron/Playwright 门仍在启动阶段空转，未进入页面断言。本检查点不是 Slice 1 完成、真实来源门或 Owner 验收。
 
 ## 6. Slice 2 — Doing 领先能力集成
 
