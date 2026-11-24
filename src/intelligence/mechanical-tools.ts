@@ -7,7 +7,12 @@ import { constants, existsSync, promises as fs, statSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
-import { extractFile, MAX_EXTRACT_CHARS } from '../infrastructure/extract';
+import {
+  extractFile,
+  MAX_EXTRACT_CHARS,
+  SKIP_DIR_NAMES,
+  SUPPORTED_EXTENSIONS,
+} from '../infrastructure/extract';
 import { exportDocx, exportPdf, exportPptx } from '../infrastructure/export';
 import {
   canonicalizeFolderPath,
@@ -18,6 +23,10 @@ import {
 export const MAX_LIST_ENTRIES = 500;
 export const MAX_WRITE_BYTES = 2_000_000;
 export const MAX_READ_BYTES = 1_000_000;
+export const MAX_SEARCH_ENTRIES = 1_000;
+export const MAX_SEARCH_RESULTS = 50;
+export const MAX_SEARCH_TOTAL_BYTES = 20_000_000;
+export const MAX_SEARCH_FILE_BYTES = 5_000_000;
 
 export type AuthorizedFs = {
   folders: string[];
@@ -35,6 +44,23 @@ export const LIST_DIRECTORY_TOOL: ChatToolDefinition = {
       properties: {
         path: { type: 'string', description: '授权根目录内的相对路径，或授权文件夹的绝对路径。可为空。' },
       },
+    },
+  },
+};
+
+export const SEARCH_FILES_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'search_files',
+    description:
+      '在本次已授权文件夹内递归搜索文件名和可读正文。query 是不区分大小写的原样文字，不做语义猜测或相关性排序；返回真实相对路径和命中片段。搜索有条目、结果和读取字节上限，不跟随符号链接。多个授权文件夹时必须用 path 指定一个授权根或其子目录。',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '要原样匹配的文件名或正文文字。' },
+        path: { type: 'string', description: '授权根或其子目录的相对/绝对路径；只有一个授权根时可省略。' },
+      },
+      required: ['query'],
     },
   },
 };
@@ -283,7 +309,7 @@ export function describeAuthorizedFs(writeAuth: AuthorizedFs, readAuth: Authoriz
     }
   }
   if (readAuth.folders.length) {
-    lines.push('可列出的文件夹（list_directory）：');
+    lines.push('可列出和搜索的文件夹（list_directory / search_files）：');
     for (const folder of readAuth.folders) lines.push(`- ${folder}`);
   }
   if (readAuth.files.length) {
@@ -695,6 +721,209 @@ export async function runListDirectory(auth: AuthorizedFs, rawArgs: string): Pro
       capabilityId: 'list_directory',
       failureReason: String(err instanceof Error ? err.message : err),
       entries: [],
+    });
+  }
+}
+
+const SEARCH_TEXT_EXTENSIONS = new Set([
+  '', '.txt', '.md', '.markdown', '.csv', '.html', '.htm', '.json', '.jsonl',
+  '.js', '.jsx', '.ts', '.tsx', '.css', '.scss', '.less', '.xml', '.yaml',
+  '.yml', '.toml', '.ini', '.cfg', '.log', '.sql', '.py', '.java', '.c',
+  '.cc', '.cpp', '.h', '.hpp', '.go', '.rs', '.sh', '.ps1', '.bat', '.cmd',
+]);
+
+function parseSearchArgs(rawArgs: string): { query: string; path: string } {
+  try {
+    const parsed = JSON.parse(rawArgs) as { query?: string; path?: string; root?: string };
+    return {
+      query: String(parsed.query || '').trim(),
+      path: String(parsed.path || parsed.root || '').trim(),
+    };
+  } catch {
+    return { query: '', path: '' };
+  }
+}
+
+function searchSnippet(text: string, matchAt: number, queryLength: number): string {
+  const start = Math.max(0, matchAt - 100);
+  const end = Math.min(text.length, matchAt + queryLength + 140);
+  return `${start > 0 ? '…' : ''}${text.slice(start, end).replace(/\s+/g, ' ').trim()}${end < text.length ? '…' : ''}`;
+}
+
+async function searchableText(filePath: string, size: number): Promise<string | undefined> {
+  if (size > MAX_SEARCH_FILE_BYTES) return undefined;
+  const ext = path.extname(filePath).toLowerCase();
+  if ((SUPPORTED_EXTENSIONS as readonly string[]).includes(ext)) {
+    const extracted = await extractFile(filePath);
+    return extracted.status === 'ok' ? extracted.text : undefined;
+  }
+  if (!SEARCH_TEXT_EXTENSIONS.has(ext)) return undefined;
+  const bytes = await fs.readFile(filePath);
+  if (bytes.includes(0)) return undefined;
+  return bytes.toString('utf8').slice(0, MAX_EXTRACT_CHARS);
+}
+
+export async function runSearchFiles(
+  auth: AuthorizedFs,
+  rawArgs: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const args = parseSearchArgs(rawArgs);
+  if (!args.query) {
+    return JSON.stringify({
+      actualSuccess: false,
+      ok: false,
+      capabilityId: 'search_files',
+      failureReason: '搜索文字不能为空。',
+      matches: [],
+    });
+  }
+  const resolved = resolveAuthorizedDirectory(auth, args.path);
+  if (!resolved.ok) {
+    return JSON.stringify({
+      actualSuccess: false,
+      ok: false,
+      capabilityId: 'search_files',
+      failureReason: resolved.reason,
+      matches: [],
+    });
+  }
+  type SearchMatch = {
+    path: string;
+    name: string;
+    matchedIn: 'name' | 'content';
+    snippet?: string;
+    size: number;
+    mtime: string;
+  };
+  const queryKey = args.query.toLocaleLowerCase();
+  const matches: SearchMatch[] = [];
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: resolved.abs, depth: 0 }];
+  let searchedEntries = 0;
+  let searchedFiles = 0;
+  let contentBytesRead = 0;
+  let skipped = 0;
+  let truncated = false;
+  try {
+    while (queue.length && matches.length < MAX_SEARCH_RESULTS && searchedEntries < MAX_SEARCH_ENTRIES) {
+      if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error('aborted');
+      const current = queue.shift();
+      if (!current) break;
+      const currentReal = canonicalizeFolderPath(current.dir);
+      if (!folderCovers(resolved.root, currentReal)) {
+        skipped += 1;
+        continue;
+      }
+      const currentStat = await fs.lstat(current.dir);
+      if (!currentStat.isDirectory() || currentStat.isSymbolicLink()) {
+        skipped += 1;
+        continue;
+      }
+      const entries = (await fs.readdir(current.dir, { withFileTypes: true }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        if (matches.length >= MAX_SEARCH_RESULTS || searchedEntries >= MAX_SEARCH_ENTRIES) {
+          truncated = true;
+          break;
+        }
+        searchedEntries += 1;
+        if (entry.isSymbolicLink()) {
+          skipped += 1;
+          continue;
+        }
+        const abs = path.join(current.dir, entry.name);
+        if (!folderCovers(resolved.root, abs)) {
+          skipped += 1;
+          continue;
+        }
+        if (entry.isDirectory()) {
+          if (entry.name.startsWith('.') || SKIP_DIR_NAMES.has(entry.name.toLowerCase()) || current.depth >= 20) {
+            skipped += 1;
+            continue;
+          }
+          queue.push({ dir: abs, depth: current.depth + 1 });
+          continue;
+        }
+        if (!entry.isFile() || entry.name.startsWith('.')) {
+          skipped += 1;
+          continue;
+        }
+        searchedFiles += 1;
+        const st = await fs.lstat(abs);
+        if (!st.isFile() || st.isSymbolicLink()) {
+          skipped += 1;
+          continue;
+        }
+        const base = {
+          path: posixRel(resolved.root, abs),
+          name: entry.name,
+          size: st.size,
+          mtime: st.mtime.toISOString(),
+        };
+        if (entry.name.toLocaleLowerCase().includes(queryKey)) {
+          matches.push({ ...base, matchedIn: 'name' });
+          continue;
+        }
+        if (contentBytesRead + st.size > MAX_SEARCH_TOTAL_BYTES) {
+          truncated = true;
+          skipped += 1;
+          continue;
+        }
+        let text: string | undefined;
+        try {
+          text = await searchableText(abs, st.size);
+        } catch {
+          skipped += 1;
+          continue;
+        }
+        if (text === undefined) {
+          skipped += 1;
+          continue;
+        }
+        contentBytesRead += st.size;
+        const at = text.toLocaleLowerCase().indexOf(queryKey);
+        if (at >= 0) {
+          matches.push({
+            ...base,
+            matchedIn: 'content',
+            snippet: searchSnippet(text, at, args.query.length),
+          });
+        }
+      }
+    }
+    if (queue.length || searchedEntries >= MAX_SEARCH_ENTRIES || matches.length >= MAX_SEARCH_RESULTS) truncated = true;
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'search_files',
+      root: resolved.root,
+      path: posixRel(resolved.root, resolved.abs) || '.',
+      query: args.query,
+      matches,
+      searchedEntries,
+      searchedFiles,
+      contentBytesRead,
+      skipped,
+      truncated,
+      limits: {
+        entries: MAX_SEARCH_ENTRIES,
+        results: MAX_SEARCH_RESULTS,
+        totalBytes: MAX_SEARCH_TOTAL_BYTES,
+        fileBytes: MAX_SEARCH_FILE_BYTES,
+      },
+    });
+  } catch (err) {
+    if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : err;
+    return JSON.stringify({
+      actualSuccess: false,
+      ok: false,
+      capabilityId: 'search_files',
+      failureReason: String(err instanceof Error ? err.message : err),
+      matches,
+      searchedEntries,
+      searchedFiles,
+      contentBytesRead,
+      skipped,
     });
   }
 }

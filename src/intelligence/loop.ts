@@ -11,6 +11,7 @@ import {
   MOVE_FILE_TOOL,
   READ_FILE_TOOL,
   REVISE_DOCX_TOOL,
+  SEARCH_FILES_TOOL,
   classifyAuthorizedPaths,
   copyAuthorizedFile,
   describeAuthorizedFs,
@@ -23,6 +24,7 @@ import {
   moveAuthorizedFile,
   runListDirectory,
   runReadFile,
+  runSearchFiles,
   writeExportedOffice,
 } from './mechanical-tools';
 import { reviseDocxWithInstalledOffice } from '../infrastructure/office-revision';
@@ -593,6 +595,9 @@ export async function runTalkTurn(input: {
   const ensureReadTools = () => {
     if (readAuth.folders.length && !tools.some((item) => item.function.name === 'list_directory')) {
       tools.push(LIST_DIRECTORY_TOOL);
+    }
+    if (readAuth.folders.length && !tools.some((item) => item.function.name === 'search_files')) {
+      tools.push(SEARCH_FILES_TOOL);
     }
     if (
       (readAuth.folders.length || readAuth.files.length || input.writeFolders?.length) &&
@@ -1360,6 +1365,29 @@ export async function runTalkTurn(input: {
     if (call.name === 'move_file') return runFileTransfer('move_file', call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
     if (call.name === 'revise_docx') return runReviseDocx(call.arguments);
+    if (call.name === 'search_files') {
+      const payload = await runSearchFiles(readAuth, call.arguments, input.signal);
+      let parsed: { actualSuccess?: boolean; failureReason?: string; matches?: unknown[]; query?: string } = {};
+      try {
+        parsed = JSON.parse(payload) as typeof parsed;
+      } catch {
+        parsed = {};
+      }
+      recordExec({
+        id: `run_${randomUUID()}`,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'search_files',
+        instruction: parsed.query || call.arguments,
+        ok: parsed.actualSuccess === true,
+        summary: parsed.actualSuccess === true
+          ? `搜索到 ${Array.isArray(parsed.matches) ? parsed.matches.length : 0} 个匹配文件`
+          : parsed.failureReason || '文件搜索失败',
+        ...(parsed.failureReason ? { failureReason: parsed.failureReason } : {}),
+        ...(parsed.actualSuccess === true ? { observedEffect: { kind: 'files_searched', mutated: false } } : {}),
+      });
+      return payload;
+    }
     if (call.name === 'list_directory') {
       const payload = await runListDirectory(readAuth, call.arguments);
       let parsed: { actualSuccess?: boolean; failureReason?: string; entries?: unknown[] } = {};
