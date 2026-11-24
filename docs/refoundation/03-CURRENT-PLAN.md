@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_DRAFTED / OWNER_REVIEW_PENDING / IMPLEMENTATION_NOT_STARTED`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / IMPLEMENTATION_NOT_STARTED`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -21,7 +21,7 @@
 ### 2026-11-24 Owner 产品裁决
 
 1. Discover 当前首屏新鲜度、连续供给、卡片布局和内容可用性不合格；不以此前技术门替代当前真实体验。
-2. 允许建立“协作与自动化”一级入口，作为同一 Goal/Execution/Artifact/Grant/Subject 事实的能力管理投影；不得建立第二 Talk、第二 runtime 或协议状态中心。
+2. 不增加“协作与自动化”一级入口。保留现有导航，在“数字之我”内采用左右双栏：左侧是系统对用户的认知、证据与纠正，右侧是协作、自动化、个人身份认证、机构连接、授权与权限管理入口。两侧同属一个 Digital Self，右侧只投影既有 Goal/Execution/Artifact/Grant/Subject/Identity 事实。
 3. Phase A 重新成为当前施工面：以成熟 Office、授权本地文件、Coding Agent 和第三方 Connector/Skill 接入缩小与 Codex/Claude Code 类产品的差距；95% 必须按固定真实任务集对照，不按功能数量宣称。
 4. 已有 Institution Distribution、机构身份、委托和 A2A 地基转为伙伴就绪路线：个人客户端展示机构连接与授权，机构侧使用独立沙箱/控制台；不得让机构读取 Digital Self、私人 Talk、文件和记忆。
 
@@ -29,9 +29,11 @@
 
 1. Slice 1：恢复 Discover 新鲜度、连续 5 页、卡片视觉和文字可用性；不增加搜索供应商或站点特例；
 2. Slice 2：集成成熟 DOCX/PPTX/PDF、授权文件工作区、Codex 级 Coding Agent 和三类第三方系统；
-3. Slice 3：开放“协作与自动化”入口，先有真实能力再有管理表面；
+3. Slice 3：小批次扩展“数字之我”右侧，先身份与授权摘要，再接真实协作关系，最后接已经成立的自动化管理；不建立新一级入口；
 4. Slice 4：机构伙伴沙箱、演示控制台、接口/安全/试点资料；
 5. Slice 5：统一产品基准、Electron 自动化修复、干净机安装与 Owner 验收。
+
+实施保持小步快跑：不大拆大建，不迁移已成立的 Talk/Digital Self/Capability/Relay/A2A/Identity/Institution Distribution；每批只做一条可感知主链，优先现有功能优化、欠账落地和必要功能接入，原则上可独立构建、回归和回退。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
