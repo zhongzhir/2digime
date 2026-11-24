@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
 import { extractFile, MAX_EXTRACT_CHARS } from '../infrastructure/extract';
-import { exportDocx, exportPptx } from '../infrastructure/export';
+import { exportDocx, exportPdf, exportPptx } from '../infrastructure/export';
 import {
   canonicalizeFolderPath,
   folderCovers,
@@ -61,11 +61,11 @@ export const EXPORT_FILE_TOOL: ChatToolDefinition = {
   function: {
     name: 'export_file',
     description:
-      '把你已经组织好的文稿写成真实 Office 文件。format 为 docx 或 pptx。你负责内容；本工具只序列化并写盘。不要输出 HTML 让用户自己转换。',
+      '把你已经组织好的文稿写成真实 Word、PowerPoint 或 PDF 文件。format 为 docx、pptx 或 pdf。你负责内容；本工具只序列化并写盘。不要输出 HTML 让用户自己转换。',
     parameters: {
       type: 'object',
       properties: {
-        format: { type: 'string', description: 'docx 或 pptx。' },
+        format: { type: 'string', description: 'docx、pptx 或 pdf。' },
         relativePath: { type: 'string', description: '相对文件名，例如 outline.docx。' },
         content: { type: 'string', description: '完整文稿（Markdown 即可）。' },
       },
@@ -561,8 +561,8 @@ export async function writeExportedOffice(input: {
   content: string;
   signal?: AbortSignal;
 }): Promise<{ ok: true; abs: string } | { ok: false; reason: string }> {
-  if (input.format !== 'docx' && input.format !== 'pptx') {
-    return { ok: false, reason: 'format 只支持 docx 或 pptx。' };
+  if (input.format !== 'docx' && input.format !== 'pptx' && input.format !== 'pdf') {
+    return { ok: false, reason: 'format 只支持 docx、pptx 或 pdf。' };
   }
   if (Buffer.byteLength(input.content, 'utf8') > MAX_WRITE_BYTES) {
     return { ok: false, reason: `内容超过 ${MAX_WRITE_BYTES} 字节上限。` };
@@ -570,10 +570,11 @@ export async function writeExportedOffice(input: {
   const resolved = resolveWritePath(input.writeRoot, input.relativePath);
   if (!resolved.ok) return resolved;
   try {
-    const exported =
-      input.format === 'docx'
-        ? await exportDocx(input.content, resolved.abs, input.signal)
-        : await exportPptx(input.content, resolved.abs, input.signal);
+    const exported = input.format === 'docx'
+      ? await exportDocx(input.content, resolved.abs, input.signal)
+      : input.format === 'pptx'
+        ? await exportPptx(input.content, resolved.abs, input.signal)
+        : await exportPdf(input.content, resolved.abs, input.signal);
     const st = await fs.stat(exported.path);
     if (!st.isFile() || st.size <= 0) return { ok: false, reason: '导出后文件不存在或为空。' };
     return { ok: true, abs: exported.path };

@@ -1,5 +1,6 @@
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import PDFDocument = require('pdfkit');
 import { writeZip, readZipEntries } from './zip';
 
 /**
@@ -48,6 +49,84 @@ export async function exportPptx(markdown: string, targetPath: string, signal?: 
   signal?.throwIfAborted();
   await fs.writeFile(finalPath, bytes);
   return { path: finalPath };
+}
+
+export async function exportPdf(markdown: string, targetPath: string, signal?: AbortSignal): Promise<{ path: string }> {
+  const finalPath = ensureExtension(targetPath, '.pdf');
+  signal?.throwIfAborted();
+  await fs.mkdir(path.dirname(finalPath), { recursive: true });
+  const bytes = await buildPdfFromMarkdown(markdown, signal);
+  signal?.throwIfAborted();
+  await fs.writeFile(finalPath, bytes);
+  return { path: finalPath };
+}
+
+export async function buildPdfFromMarkdown(markdown: string, signal?: AbortSignal): Promise<Buffer> {
+  const paragraphs = markdownToParagraphs(markdown);
+  const needsCjk = /[\u3400-\u9fff\uf900-\ufaff]/.test(markdown);
+  const cjkFont = resolveCjkFontPath();
+  if (needsCjk && !cjkFont) {
+    throw new Error('当前系统没有可用的中文字体，无法可靠生成中文 PDF。');
+  }
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 64, right: 64, bottom: 64, left: 64 },
+    info: { Title: firstHeading(paragraphs) || '兔机米成果', Creator: '兔机米' },
+    autoFirstPage: true,
+    bufferPages: true,
+  });
+  const chunks: Buffer[] = [];
+  const completed = new Promise<Buffer>((resolve, reject) => {
+    doc.on('data', (chunk: Buffer | Uint8Array) => chunks.push(Buffer.from(chunk)));
+    doc.once('end', () => resolve(Buffer.concat(chunks)));
+    doc.once('error', reject);
+  });
+  if (cjkFont) doc.font(cjkFont);
+  else doc.font('Helvetica');
+
+  for (const paragraph of paragraphs) {
+    signal?.throwIfAborted();
+    const options: PDFKit.Mixins.TextOptions = {
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+      lineGap: paragraph.style === 'Normal' ? 5 : 3,
+      paragraphGap: paragraph.style === 'Normal' ? 8 : 10,
+    };
+    if (paragraph.style === 'Heading1') {
+      doc.fillColor('#1B2430').fontSize(22).text(paragraph.text, options);
+    } else if (paragraph.style === 'Heading2') {
+      doc.fillColor('#0F6A5A').fontSize(17).text(paragraph.text, options);
+    } else if (paragraph.style === 'Heading3') {
+      doc.fillColor('#1B2430').fontSize(14).text(paragraph.text, options);
+    } else if (paragraph.list) {
+      doc.fillColor('#1B2430').fontSize(11).text(`• ${paragraph.text}`, {
+        ...options,
+        indent: 14,
+        bulletIndent: 4,
+      });
+    } else {
+      doc.fillColor('#1B2430').fontSize(11).text(paragraph.text, options);
+    }
+  }
+  doc.end();
+  return completed;
+}
+
+function firstHeading(paragraphs: readonly DocParagraph[]): string | undefined {
+  return paragraphs.find((paragraph) => paragraph.style === 'Heading1')?.text;
+}
+
+function resolveCjkFontPath(): string | undefined {
+  const windowsDir = String(process.env.WINDIR || 'C:\\Windows');
+  const candidates = [
+    String(process.env.DIGITALME_V2_CJK_FONT || '').trim(),
+    path.join(windowsDir, 'Fonts', 'simhei.ttf'),
+    path.join(windowsDir, 'Fonts', 'Deng.ttf'),
+    '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttf',
+    '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttf',
+  ];
+  // PDFKit/fontkit cannot subset a font collection (.ttc) without a named
+  // member. Prefer a concrete TTF/OTF and fail honestly when none is present.
+  return candidates.find((candidate) => candidate && /\.(ttf|otf)$/i.test(candidate) && existsSync(candidate));
 }
 
 /** 幻灯片可见正文（含项目符号）。用于断言列表只规范化一次。 */

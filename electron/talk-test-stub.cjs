@@ -235,6 +235,21 @@ async function chat({ messages, tools }) {
       ],
     };
   }
+  if (hasArtifact && /PDF成果验证/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [
+        {
+          id: 'call_pdf_artifact_1',
+          name: 'write_artifact',
+          arguments: JSON.stringify({
+            fileName: 'PDF成果验证.pdf',
+            content: '# PDF成果验证\n\n## 结论\n\nPDF 已由成熟渲染能力生成并真实回读。',
+          }),
+        },
+      ],
+    };
+  }
   if (hasArtifact && /无付费成果打开验证/.test(text)) {
     return {
       text: '',

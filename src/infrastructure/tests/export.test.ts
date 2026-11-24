@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import { buildDocxFromMarkdown, buildPptxFromMarkdown, exportDocx, exportMarkdown, exportPptx, splitMarkdownIntoSlides, collectPptxVisibleTexts } from '../export';
+import { buildDocxFromMarkdown, buildPptxFromMarkdown, exportDocx, exportMarkdown, exportPdf, exportPptx, splitMarkdownIntoSlides, collectPptxVisibleTexts } from '../export';
+import { extractFile } from '../extract';
 import { readZipEntries } from '../zip';
 import { makeTempDir } from './helpers';
 
@@ -107,4 +108,24 @@ test('中文长文导出为真实 DOCX 与 PPTX 文件', async () => {
   const pptxEntries = readZipEntries(pptxBytes);
   const slideCount = [...pptxEntries.keys()].filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).length;
   assert.ok(slideCount >= 3, `pptx should split slides, got ${slideCount}`);
+});
+
+test('PDFKit 生成可提取中文正文的多页 PDF', async () => {
+  const sections = Array.from({ length: 28 }, (_, index) => [
+    `## 第 ${index + 1} 节`,
+    '',
+    `这是第 ${index + 1} 节的中文正文，用于验证自动换页、字体嵌入和真实回读。`,
+  ].join('\n'));
+  const markdown = ['# PDF 验收报告', '', ...sections].join('\n');
+  const dir = await makeTempDir('export-pdf');
+  const output = await exportPdf(markdown, path.join(dir, 'PDF验收报告'));
+  assert.ok(output.path.endsWith('.pdf'));
+  const bytes = await fs.readFile(output.path);
+  assert.equal(bytes.subarray(0, 5).toString('ascii'), '%PDF-');
+  assert.ok(bytes.length > 5000);
+  const extracted = await extractFile(output.path);
+  assert.equal(extracted.status, 'ok');
+  assert.match(extracted.text || '', /PDF 验收报告/);
+  assert.match(extracted.text || '', /第 28 节/);
+  assert.match(extracted.text || '', /自动换页/);
 });

@@ -57,7 +57,13 @@ Slice 1 的开发者技术门已完成，仍待 Owner 界面验收；尚未打�
 
 现有 Word/PPT 序列化、Talk Execution 与结果卡已经接成普通用户主链：用户可在同一 Talk 直接委托生成 `.docx` 或 `.pptx` 应用成果，不需要外部文件夹授权；文件写入后由现有抽取链真实回读，结果以文件名和“打开”卡片返回；后续 Talk 只恢复该 Thread 实际生成的精确文件读取权，不开放整个成果目录。每个回复仍只投影一个成果，连续要求另一格式时在下一回复生成，不新增多成果状态或第二事实源。
 
-TypeScript 构建通过；Talk/文件围栏/协作回退聚焦回归 14/14，Office 结构、抽取及布局相关 21/21，正式 Electron Talk → DOCX → 回读 → 结果卡 1/1 通过。该检查点只关闭已有能力未接入普通 Talk 的欠账；PDF、成熟 Office 生成/渲染能力、DOCX/PPTX/PDF 各 10 项固定任务、逐页视觉 QA、修改迭代基准和 Owner 验收仍未完成，不得写成 Slice 2A 或 95% 通过。尚未打包、push 或发布。
+TypeScript 构建通过；Talk/文件围栏/协作回退聚焦回归 14/14，Office 结构、抽取及布局相关 21/21，正式 Electron Talk → DOCX → 回读 → 结果卡 1/1 通过。该检查点只关闭已有能力未接入普通 Talk 的欠账；在该检查点完成时，PDF、成熟 Office 生成/渲染能力、DOCX/PPTX/PDF 各 10 项固定任务、逐页视觉 QA、修改迭代基准和 Owner 验收仍未完成，不得写成 Slice 2A 或 95% 通过。尚未打包、push 或发布。
+
+### Slice 2A-2 开发检查点（2026-11-24）
+
+PDF 已通过成熟 PDFKit `0.20.2` 接入同一 Talk/Execution/结果卡主链，不手写 PDF 二进制，不增加第二运行时。应用成果区和授权外部目录均可生成 `.pdf`；中文只使用可嵌入的单字体 TTF/OTF，缺少字体时明确失败。生成后经既有安全读取与 PDF 抽取链真实回读。TypeScript 构建通过；基础 DOCX/PPTX/PDF 导出与中文 PDF 回读 6/6，正式 Electron 同一 Thread 连续生成 Word、PDF 并分别显示“打开”卡片 1/1 通过；新增依赖后的 npm 生产依赖审计为 0 vulnerabilities。
+
+本检查点只证明 PDF 基础生成与交付成立；复杂表格、图片、页眉页脚、PDF 逐页视觉 QA、DOCX/PPTX 成熟引擎升级、各格式 10 项固定任务及 Owner 验收仍未完成，不得写成专业 Office、Slice 2A 或 95% 通过。尚未打包、push 或发布。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
