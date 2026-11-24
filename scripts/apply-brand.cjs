@@ -82,6 +82,7 @@ function main() {
     ],
     asar: true,
     extraFiles: [{ from: 'trial/试用说明.txt', to: '试用说明.txt' }],
+    extraResources: [{ from: 'electron/office', to: 'office' }],
     extraMetadata: { main: 'electron/main.cjs' },
     win: {
       signAndEditExecutable: false,

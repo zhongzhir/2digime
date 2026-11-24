@@ -74,6 +74,66 @@ export const EXPORT_FILE_TOOL: ChatToolDefinition = {
   },
 };
 
+export const REVISE_DOCX_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'revise_docx',
+    description:
+      '在本次已授权的现有 DOCX 中精确替换少量文字，保留原文档版式并另存为应用成果区的新 DOCX。源文件不会被覆盖。只用于用户明确要求修改已有 Word；不要用于新建文档、整篇重写或无法给出准确原文的修改。',
+    parameters: {
+      type: 'object',
+      properties: {
+        sourcePath: { type: 'string', description: '本次已授权的源 DOCX 绝对路径或明确文件名。' },
+        fileName: { type: 'string', description: '新副本文件名，必须以 .docx 结尾，且不能覆盖已有成果。' },
+        replacements: {
+          type: 'array',
+          description: '1—20 项精确替换。原文必须来自实际读取或用户逐字提供；expectedCount 可用于避免误改同名内容。',
+          items: {
+            type: 'object',
+            properties: {
+              from: { type: 'string', description: '需要精确匹配的原文。' },
+              to: { type: 'string', description: '替换后的文字。' },
+              expectedCount: { type: 'number', description: '可选；原文预期出现次数，不一致时停止且不生成副本。' },
+              matchCase: { type: 'boolean', description: '是否区分大小写，默认 true。' },
+            },
+            required: ['from', 'to'],
+          },
+        },
+      },
+      required: ['sourcePath', 'fileName', 'replacements'],
+    },
+  },
+};
+
+export function parseReviseDocxArgs(raw: string): {
+  sourcePath: string;
+  fileName: string;
+  replacements: Array<{ from: string; to: string; expectedCount?: number; matchCase?: boolean }>;
+} {
+  try {
+    const parsed = JSON.parse(raw) as {
+      sourcePath?: string;
+      path?: string;
+      fileName?: string;
+      replacements?: Array<{ from?: string; to?: string; expectedCount?: number; matchCase?: boolean }>;
+    };
+    return {
+      sourcePath: String(parsed.sourcePath || parsed.path || '').trim(),
+      fileName: String(parsed.fileName || '').trim(),
+      replacements: Array.isArray(parsed.replacements)
+        ? parsed.replacements.map((item) => ({
+            from: String(item.from || ''),
+            to: String(item.to || ''),
+            ...(item.expectedCount === undefined ? {} : { expectedCount: Number(item.expectedCount) }),
+            ...(item.matchCase === undefined ? {} : { matchCase: Boolean(item.matchCase) }),
+          }))
+        : [],
+    };
+  } catch {
+    return { sourcePath: '', fileName: '', replacements: [] };
+  }
+}
+
 export function classifyAuthorizedPaths(contextPaths?: string[]): AuthorizedFs {
   const folders: string[] = [];
   const files: string[] = [];

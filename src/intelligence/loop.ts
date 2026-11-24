@@ -8,9 +8,11 @@ import {
   LIST_DIRECTORY_TOOL,
   MAX_WRITE_BYTES,
   READ_FILE_TOOL,
+  REVISE_DOCX_TOOL,
   classifyAuthorizedPaths,
   describeAuthorizedFs,
   parseExportArgs,
+  parseReviseDocxArgs,
   resolveAuthorizedFile,
   resolveAuthorizedWritePath,
   resolveProposedAccessPath,
@@ -18,6 +20,7 @@ import {
   runReadFile,
   writeExportedOffice,
 } from './mechanical-tools';
+import { reviseDocxWithInstalledOffice } from '../infrastructure/office-revision';
 import { folderCovers } from '../authorization/filesystem-path';
 import type {
   ProfessionalAgent,
@@ -515,7 +518,7 @@ export async function runTalkTurn(input: {
       readAuth.files.push(exec.outputPath);
     }
     const artifactRoot = path.join(input.workRoot, 'artifacts', 'talk');
-    if (exec.ok && exec.outputPath && exec.capabilityId === 'write_artifact' &&
+    if (exec.ok && exec.outputPath && (exec.capabilityId === 'write_artifact' || exec.capabilityId === 'revise_docx') &&
       folderCovers(artifactRoot, exec.outputPath) && !readAuth.files.includes(exec.outputPath)) {
       readAuth.files.push(exec.outputPath);
     }
@@ -529,7 +532,7 @@ export async function runTalkTurn(input: {
     '【会话边界】此前 user/assistant 消息只作同一 Thread 背景；当前请求换题时，以标有【当前请求】的最后一条为准。',
     '根据当前数字之我和本次能读到的材料理解用户。摘录若标明未读完，不得说成已经读完；需要其余部分时读取原文件。后续回合仍可读取已附上的文件，不要把上一轮摘录当成全文仍在上下文里。',
     '是否搜索、读取、写入或调用外部能力，由你根据用户这次要什么来决定。询问也可以查证；委托也可以只在对话里交付。不要另做用户没要求的事，也不要因为句式而拒绝需要的工具。',
-    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
+    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
     '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
     '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
     '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
@@ -588,6 +591,12 @@ export async function runTalkTurn(input: {
       !tools.some((item) => item.function.name === 'read_file')
     ) {
       tools.push(READ_FILE_TOOL);
+    }
+    if (
+      (readAuth.folders.length || readAuth.files.some((file) => path.extname(file).toLowerCase() === '.docx')) &&
+      !tools.some((item) => item.function.name === 'revise_docx')
+    ) {
+      tools.push(REVISE_DOCX_TOOL);
     }
   };
   const ensureFsTools = () => {
@@ -1019,6 +1028,91 @@ export async function runTalkTurn(input: {
     });
   };
 
+  const runReviseDocx = async (rawArgs: string): Promise<string> => {
+    const parsed = parseReviseDocxArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    const fail = (reason: string) => {
+      lastOk = false;
+      lastEvidenceOnly = false;
+      lastPath = undefined;
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'revise_docx',
+        instruction: parsed.fileName || parsed.sourcePath,
+        ok: false,
+        summary: reason,
+        failureReason: reason,
+      });
+      return JSON.stringify({
+        actualSuccess: false,
+        ok: false,
+        capabilityId: 'revise_docx',
+        failureReason: reason,
+        producedOutputs: [],
+        summary: reason,
+      });
+    };
+    const source = resolveAuthorizedFile(readAuth, parsed.sourcePath);
+    if (!source.ok) return fail(source.reason);
+    if (path.extname(source.abs).toLowerCase() !== '.docx') return fail('当前只支持修改 DOCX。');
+    const rawName = path.basename(parsed.fileName || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 120);
+    if (!rawName || path.extname(rawName).toLowerCase() !== '.docx') return fail('新副本文件名必须以 .docx 结尾。');
+    const artifactRoot = path.join(input.workRoot, 'artifacts', 'talk', userTurn.id);
+    const outputPath = path.join(artifactRoot, rawName);
+    throwIfAborted(input.signal);
+    try {
+      const revised = await reviseDocxWithInstalledOffice({
+        sourcePath: source.abs,
+        outputPath,
+        replacements: parsed.replacements,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      seq += 1;
+      mutations.push({ target: outputPath, seq });
+      lastOk = true;
+      lastEvidenceOnly = false;
+      lastPath = outputPath;
+      if (!readAuth.files.includes(outputPath)) readAuth.files.push(outputPath);
+      const changed = revised.replacements.reduce((sum, item) => sum + item.count, 0);
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'revise_docx',
+        instruction: `${path.basename(source.abs)} → ${rawName}`,
+        ok: true,
+        summary: `源文件未覆盖；已另存 ${rawName}，完成 ${changed} 处精确替换并回读 ${revised.readbackChars} 字。`,
+        producedOutputs: [outputPath],
+        outputPath,
+        safeDetail: JSON.stringify({
+          sourceSha256: revised.sourceSha256,
+          outputSha256: revised.outputSha256,
+          replacements: revised.replacements,
+        }),
+        observedEffect: { kind: 'file_created', target: outputPath, mutated: true },
+      });
+      return JSON.stringify({
+        actualSuccess: true,
+        ok: true,
+        capabilityId: 'revise_docx',
+        producedOutputs: [outputPath],
+        outputPath,
+        sourceUnchanged: true,
+        sourceSha256: revised.sourceSha256,
+        outputSha256: revised.outputSha256,
+        replacements: revised.replacements,
+        readback: revised.readback,
+        readbackChars: revised.readbackChars,
+        summary: `源文件未覆盖；已另存新 DOCX，完成 ${changed} 处精确替换并真实回读。`,
+      });
+    } catch (error) {
+      input.signal?.throwIfAborted();
+      return fail(String(error instanceof Error ? error.message : error));
+    }
+  };
+
   const runDelegate = async (rawArgs: string): Promise<string> => {
     const parsed = parseArgs(rawArgs);
     const requested = parsed.capabilityId;
@@ -1182,6 +1276,7 @@ export async function runTalkTurn(input: {
     if (call.name === 'request_folder_access') return runRequestFolderAccess(call.arguments);
     if (call.name === 'write_file') return runWriteFile(call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
+    if (call.name === 'revise_docx') return runReviseDocx(call.arguments);
     if (call.name === 'list_directory') {
       const payload = await runListDirectory(readAuth, call.arguments);
       let parsed: { actualSuccess?: boolean; failureReason?: string; entries?: unknown[] } = {};
@@ -1546,7 +1641,8 @@ export async function runTalkTurn(input: {
     execs.filter((item) => !item.ok && (
       item.capabilityId === 'write_file' ||
       item.capabilityId === 'export_file' ||
-      item.capabilityId === 'write_artifact'
+      item.capabilityId === 'write_artifact' ||
+      item.capabilityId === 'revise_docx'
     ));
   const denied = (execs: typeof thread.executions) =>
     execs.some((item) => !item.ok && item.capabilityId === 'request_folder_access');

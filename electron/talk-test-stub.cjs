@@ -220,6 +220,25 @@ async function chat({ messages, tools }) {
 
   const hasArtifact =
     Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'write_artifact');
+  const hasDocxRevision =
+    Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'revise_docx');
+  if (hasDocxRevision && /DOCX修订验证/.test(text)) {
+    const source = /^- (.+\.docx)$/mi.exec(sys)?.[1]?.trim();
+    if (source) {
+      return {
+        text: '',
+        toolCalls: [{
+          id: 'call_docx_revision_1',
+          name: 'revise_docx',
+          arguments: JSON.stringify({
+            sourcePath: source,
+            fileName: 'DOCX修订验证_修订版.docx',
+            replacements: [{ from: '待替换原文', to: '已完成替换', expectedCount: 1 }],
+          }),
+        }],
+      };
+    }
+  }
   if (hasArtifact && /Office成果验证/.test(text)) {
     return {
       text: '',
