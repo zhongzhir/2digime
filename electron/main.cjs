@@ -5,6 +5,7 @@
  * 未配置真实模型时不注册 Fake Adapter。
  */
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require("electron");
+const { externalWindowOpenDecision } = require("./external-links.cjs");
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
@@ -669,30 +670,9 @@ function createWindow(bootInfo) {
   });
   const indexHtml = rendererIndexUrl();
   mainWindow.loadURL(indexHtml);
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    let parsed;
-    try {
-      parsed = new URL(url);
-    } catch {
-      return { action: "deny" };
-    }
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return { action: "deny" };
-    }
-    return {
-      action: "allow",
-      overrideBrowserWindowOptions: {
-        width: 1100,
-        height: 800,
-        autoHideMenuBar: true,
-        webPreferences: {
-          sandbox: true,
-          contextIsolation: true,
-          nodeIntegration: false,
-        },
-      },
-    };
-  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) =>
+    externalWindowOpenDecision(url, (externalUrl) => shell.openExternal(externalUrl)),
+  );
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("shell:boot", bootInfo || lastBootInfo);
   });
