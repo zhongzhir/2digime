@@ -53,6 +53,8 @@ Slice 3A 已实现 Owner→Digital Subject 委托核心：既有 `AuthorizationG
 
 Slice 4 已实现 A2A v1 标准对象映射：复用官方 `@a2a-js/sdk 1.0.1`，用签名 Agent Card 表达 Subject、Endpoint、技能和现有 Relay/E2EE 安全事实，用 Message/Task/Artifact 承载一次真实协作；现有 Relay 同时核验既有签名卡和标准签名 Card，拒绝篡改、过期、撤销 key、错误绑定与 token-only 降级。一个不导入 Digital Me 代码的独立官方 A2A server 进程已完成 Agent Card discovery、Message、Task + Artifact 离线零费用协议门；相关构建和定向回归 37/37 通过。该门不是公网外部组织互操作、第二位 Owner 真实 Subject、机构信任或产品验收；当前也没有公网 A2A endpoint、协作中心、Task Store、第二套 runtime、主干合并、推送、打包、发布或部署。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-4-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-4-DEVELOPER-VALIDATION.md)。下一推荐路线是具备真实外部条件后的 Slice 5 两 Owner 机构试验；若条件不足，不以单机回放冒充。
 
+2026-11-24 Slice 6 已完成代码实现与聚焦开发验证：同一 Talk 模型可选择本地 Capability 或外部 Subject，`consult_subject` 进入既有执行事实链；只有非空可消费贡献和 A2A Artifact 引用才算外部完成，接受但无成果、拒绝、超时和失联会回到同一模型，只有后续真实本地成果或外部 Artifact 才能恢复。聚焦主链 3/3、本机双 Subject 3/3、Relay 2/2、两 Owner 非 Electron 2/2、A2A 4/4、文件写入 6/6 通过。正式双 Electron 长测及 Electron preflight 仍挂起，既有多轮 Talk 上下文用例仍有 1 项失败，Owner 产品验收未做；因此不得写成 Electron 门、全 Talk 回归或产品完成。未合并主干、推送、打包、发布或部署。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-6-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-6-DEVELOPER-VALIDATION.md)。下一步先修复 Electron/Playwright 启动与清理挂起，再做正式界面 Owner 验收；Slice 5 的两位真实 Owner/两安装端/真实机构身份源验收仍独立 pending。
+
 ### Discover 收束结论
 
 下列“下一阶段产品结果”“当前动作顺序”和“开发检查点”保留为 `DISCOVER-WATCH-ENTRY-01` 历史，不再是当前执行指令。现有通用页面读取、作品/依据分离和入口结构化能力保留；Tavily 免费验证没有形成有效净增，专用 key 已撤销，未产生费用、未写 adapter、未部署 Relay。后续不得继续叠加供应商、站点规则、查询改写或提示词补丁。

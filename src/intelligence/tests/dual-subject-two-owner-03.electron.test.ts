@@ -206,7 +206,9 @@ test('两个正式 Electron：B 自主收件、拒绝后恢复、再合作；Own
       executions?: unknown[];
       turns?: Array<{ role: string }>;
     };
-    assert.equal((aThread.executions || []).length, 0);
+    assert.ok((aThread.executions || []).some((item) =>
+      Boolean(item && typeof item === 'object' && (item as { capabilityId?: string }).capabilityId === 'consult_subject'),
+    ));
     assert.ok((aThread.turns || []).some((turn) => turn.role === 'assistant'));
 
     const inbox = await InboxStore.open(bPkg.dir);

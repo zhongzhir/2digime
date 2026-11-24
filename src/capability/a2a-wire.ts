@@ -3,19 +3,17 @@
  * 不引入第二 Job 状态机;仅协议映射。
  */
 import { randomUUID } from 'node:crypto';
-import {
-  A2A_PROTOCOL_VERSION,
-  Role,
+import type {
+  AgentCard,
+  CancelTaskRequest,
+  GetTaskRequest,
+  Message,
+  Part,
+  SendMessageRequest,
+  Task,
   TaskState,
-  type AgentCard,
-  type CancelTaskRequest,
-  type GetTaskRequest,
-  type Message,
-  type Part,
-  type SendMessageRequest,
-  type Task,
 } from '@a2a-js/sdk';
-import { ClientFactory, JsonRpcTransportFactory, type Client } from '@a2a-js/sdk/client';
+import type { Client } from '@a2a-js/sdk/client';
 import {
   fetchAllowlisted,
   type AgentCardView,
@@ -25,7 +23,17 @@ import {
 import type { RemoteLifecycleStatus } from './adapter';
 
 export const A2A_ADAPTER_PROTOCOL = 'a2a';
-export const A2A_ADAPTER_PROTOCOL_VERSION = A2A_PROTOCOL_VERSION;
+export const A2A_ADAPTER_PROTOCOL_VERSION = '1.0';
+
+type A2AClientModule = typeof import('@a2a-js/sdk/client');
+const nativeImport = new Function('specifier', 'return import(specifier)') as (
+  specifier: string,
+) => Promise<unknown>;
+let clientSdkPromise: Promise<A2AClientModule> | undefined;
+function loadA2AClientSdk(): Promise<A2AClientModule> {
+  clientSdkPromise ||= nativeImport('@a2a-js/sdk/client') as Promise<A2AClientModule>;
+  return clientSdkPromise;
+}
 
 export interface A2AAuthorizedPayload {
   goal: string;
@@ -39,13 +47,9 @@ export interface A2AAuthorizedPayload {
 export function mapA2AStateToLocal(state: TaskState | number | string | undefined): RemoteLifecycleStatus {
   const value = typeof state === 'string' ? state : Number(state);
   switch (value) {
-    case TaskState.TASK_STATE_SUBMITTED:
     case 'TASK_STATE_SUBMITTED':
     case 1:
       return 'pending';
-    case TaskState.TASK_STATE_WORKING:
-    case TaskState.TASK_STATE_INPUT_REQUIRED:
-    case TaskState.TASK_STATE_AUTH_REQUIRED:
     case 'TASK_STATE_WORKING':
     case 'TASK_STATE_INPUT_REQUIRED':
     case 'TASK_STATE_AUTH_REQUIRED':
@@ -53,18 +57,14 @@ export function mapA2AStateToLocal(state: TaskState | number | string | undefine
     case 6:
     case 8:
       return 'running';
-    case TaskState.TASK_STATE_COMPLETED:
     case 'TASK_STATE_COMPLETED':
     case 3:
       return 'completed';
-    case TaskState.TASK_STATE_FAILED:
-    case TaskState.TASK_STATE_REJECTED:
     case 'TASK_STATE_FAILED':
     case 'TASK_STATE_REJECTED':
     case 4:
     case 7:
       return 'failed';
-    case TaskState.TASK_STATE_CANCELED:
     case 'TASK_STATE_CANCELED':
     case 5:
       return 'cancelled';
@@ -133,7 +133,7 @@ export function extractTaskTextArtifact(task: Task): {
   const history = Array.isArray(task.history) ? task.history : [];
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const msg = history[i];
-    if (msg?.role === Role.ROLE_AGENT) {
+    if (msg?.role === 2) {
       const text = partsToText(msg.parts || []);
       if (text.trim()) return { text };
     }
@@ -247,6 +247,7 @@ export async function createA2AClientForPolicy(policy: RemoteEndpointPolicy): Pr
   validation: ReturnType<typeof validateAgentCardAgainstPolicy>;
 }> {
   const { card, validation } = await fetchAndValidateAgentCard(policy);
+  const { ClientFactory, JsonRpcTransportFactory } = await loadA2AClientSdk();
   const factory = new ClientFactory({
     transports: [new JsonRpcTransportFactory()],
   });
@@ -256,7 +257,7 @@ export async function createA2AClientForPolicy(policy: RemoteEndpointPolicy): Pr
 
 export function buildUserMessage(payload: A2AAuthorizedPayload): Message {
   return {
-    role: Role.ROLE_USER,
+    role: 1,
     messageId: randomUUID(),
     parts: [
       {

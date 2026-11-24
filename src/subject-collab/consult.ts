@@ -211,7 +211,10 @@ export async function consultSubject(input: {
 
   const unreachable = response.reply === '对方当前不可达。' && response.decision === 'decline';
   const received = !unreachable;
-  const ok = response.decision === 'accept';
+  const contribution = String(response.contribution || '').trim();
+  // Acceptance is only a decision. Completion requires a real contribution
+  // carried back in the verified A2A Task/Artifact response.
+  const ok = response.decision === 'accept' && Boolean(contribution);
   if (received) await appendExchange(input.packageRoot, {
     exchangeId,
     kind: 'response_received',
@@ -238,8 +241,17 @@ export async function consultSubject(input: {
     reply: response.reply,
     exchangeId,
     disclosed: disclosure,
-    ...(response.contribution ? { contribution: response.contribution } : {}),
-    ...(ok ? {} : { failureReason: response.reply }),
+    ...(contribution ? { contribution } : {}),
+    ...(ok ? { artifactRef: `a2a:artifact:artifact_${exchangeId}` } : {}),
+    ...(response.evidenceDigest ? { evidenceDigest: response.evidenceDigest } : {}),
+    ...(ok
+      ? {}
+      : {
+          failureReason:
+            response.decision === 'accept'
+              ? '对方接受了请求，但没有返回可用成果。'
+              : response.reply,
+        }),
     ...(response.usedOwnCapability ? { usedOwnCapability: true } : {}),
   };
 }

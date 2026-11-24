@@ -4,7 +4,6 @@
  * 禁止各自拼接探测请求。
  */
 import { randomUUID } from 'node:crypto';
-import { A2A_PROTOCOL_VERSION } from '@a2a-js/sdk';
 import {
   assertEndpointPolicyShape,
   buildResearchEndpointPolicy,
@@ -20,6 +19,7 @@ export const A2A_VERSION_HEADER = 'A2A-Version';
 
 /** 无副作用探测：查询不存在的 Task。协议成功时可得到 Task not found。 */
 export const A2A_PROTOCOL_PROBE_METHOD = 'GetTask';
+const A2A_PROTOCOL_VERSION = '1.0';
 
 /** 方法/协议不匹配类错误码 — 不得视为可连接。 */
 const PROTOCOL_MISMATCH_CODES = new Set([-32600, -32601, -32602, -32009]);

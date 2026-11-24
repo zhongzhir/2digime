@@ -7,19 +7,12 @@
 import { createHash, createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import {
-  A2A_PROTOCOL_VERSION,
-  AgentCard,
-  Message,
-  Role,
-  Task,
+import type {
+  AgentCard as A2AAgentCard,
+  Message as A2AMessage,
+  Part,
+  Task as A2ATask,
   TaskState,
-  generateAgentCardSignature,
-  verifyAgentCardSignature,
-  type AgentCard as A2AAgentCard,
-  type Message as A2AMessage,
-  type Part,
-  type Task as A2ATask,
 } from '@a2a-js/sdk';
 import type { CommIdentityStore } from '../subject-comm/identity-store';
 import type { PeerEndpointRecord, SubjectEndpointPublic } from '../subject-comm/endpoint';
@@ -38,6 +31,26 @@ export const DIGITALME_A2A_REQUEST_KIND =
   'digitalme.a2a.subject_collaboration_request.v1' as const;
 export const DIGITALME_A2A_TASK_KIND =
   'digitalme.a2a.subject_collaboration_task.v1' as const;
+
+// @a2a-js/sdk 1.0.1 publishes a CommonJS facade that requires ESM-only jose.
+// Native import selects the SDK's ESM export and keeps Electron bootstrap usable.
+// Function construction is intentional: TypeScript must not rewrite import() to require().
+type A2ASdkModule = typeof import('@a2a-js/sdk');
+const nativeImport = new Function('specifier', 'return import(specifier)') as (
+  specifier: string,
+) => Promise<unknown>;
+let sdkPromise: Promise<A2ASdkModule> | undefined;
+function loadA2ASdk(): Promise<A2ASdkModule> {
+  sdkPromise ||= nativeImport('@a2a-js/sdk') as Promise<A2ASdkModule>;
+  return sdkPromise;
+}
+
+const A2A_PROTOCOL_VERSION = '1.0';
+const ROLE_USER = 1;
+const ROLE_AGENT = 2;
+const TASK_STATE_COMPLETED = 3;
+const TASK_STATE_REJECTED = 7;
+const TASK_STATE_INPUT_REQUIRED = 6;
 
 interface DigitalMeSubjectExtensionParams {
   subjectId: string;
@@ -213,6 +226,7 @@ export async function createSignedA2AAgentCard(input: {
   }
   if (keys.keyId !== profile.keyId) throw new Error('A2A Agent Card signing key mismatch');
   const unsigned = projectPublicSubjectCardToA2A(input);
+  const { generateAgentCardSignature } = await loadA2ASdk();
   const sign = generateAgentCardSignature(createPrivateKey(keys.signPrivatePem), {
     alg: 'EdDSA',
     kid: keys.keyId,
@@ -274,6 +288,7 @@ export async function verifyA2AAgentCard(input: {
   now?: string;
   maxClockSkewMs?: number;
 }): Promise<A2AAgentCardVerification> {
+  const { AgentCard, verifyAgentCardSignature } = await loadA2ASdk();
   let card: A2AAgentCard;
   try {
     card = AgentCard.fromJSON(input.card);
@@ -361,7 +376,7 @@ export function collaborationRequestToA2AMessage(request: CollaborationRequest):
     messageId: randomUUID(),
     contextId: request.threadId,
     taskId: '',
-    role: Role.ROLE_USER,
+    role: ROLE_USER,
     parts: [
       textPart(`${request.goal}\n\n${request.hopedContribution}`.trim()),
       dataPart(data),
@@ -386,11 +401,12 @@ function findData(parts: Part[], kind: string): Record<string, unknown> | null {
   return null;
 }
 
-export function collaborationRequestFromA2AMessage(input: {
+export async function collaborationRequestFromA2AMessage(input: {
   message: unknown;
   expectedFromSubjectId: string;
   expectedToSubjectId: string;
-}): CollaborationRequest | null {
+}): Promise<CollaborationRequest | null> {
+  const { Message } = await loadA2ASdk();
   let message: A2AMessage;
   try {
     message = Message.fromJSON(input.message);
@@ -398,7 +414,7 @@ export function collaborationRequestFromA2AMessage(input: {
     return null;
   }
   if (
-    message.role !== Role.ROLE_USER ||
+    message.role !== ROLE_USER ||
     !message.extensions.includes(DIGITALME_A2A_SUBJECT_EXTENSION_URI)
   ) {
     return null;
@@ -434,9 +450,9 @@ export function collaborationRequestFromA2AMessage(input: {
 }
 
 function responseState(decision: CollaborationResponse['decision']): TaskState {
-  if (decision === 'accept') return TaskState.TASK_STATE_COMPLETED;
-  if (decision === 'decline') return TaskState.TASK_STATE_REJECTED;
-  return TaskState.TASK_STATE_INPUT_REQUIRED;
+  if (decision === 'accept') return TASK_STATE_COMPLETED;
+  if (decision === 'decline') return TASK_STATE_REJECTED;
+  return TASK_STATE_INPUT_REQUIRED;
 }
 
 export function collaborationResponseToA2ATask(
@@ -459,7 +475,7 @@ export function collaborationResponseToA2ATask(
     messageId: randomUUID(),
     contextId,
     taskId: response.exchangeId,
-    role: Role.ROLE_AGENT,
+    role: ROLE_AGENT,
     parts: [textPart(response.reply), dataPart(data)],
     metadata: undefined,
     extensions: [DIGITALME_A2A_SUBJECT_EXTENSION_URI],
@@ -474,7 +490,7 @@ export function collaborationResponseToA2ATask(
       timestamp: response.at,
     },
     artifacts:
-      response.decision === 'accept'
+      response.decision === 'accept' && Boolean(response.contribution?.trim())
         ? [
             {
               artifactId: `artifact_${response.exchangeId}`,
@@ -493,12 +509,13 @@ export function collaborationResponseToA2ATask(
   };
 }
 
-export function collaborationResponseFromA2ATask(input: {
+export async function collaborationResponseFromA2ATask(input: {
   task: unknown;
   expectedExchangeId: string;
   expectedFromSubjectId: string;
   expectedToSubjectId: string;
-}): CollaborationResponse | null {
+}): Promise<CollaborationResponse | null> {
+  const { Task } = await loadA2ASdk();
   let task: A2ATask;
   try {
     task = Task.fromJSON(input.task);
@@ -555,6 +572,7 @@ export async function writePeerA2AAgentCard(
   subjectId: string,
   card: A2AAgentCard,
 ): Promise<void> {
+  const { AgentCard } = await loadA2ASdk();
   const file = a2aCardPath(packageRoot, subjectId);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, `${JSON.stringify(AgentCard.toJSON(card), null, 2)}\n`, 'utf8');
@@ -565,8 +583,24 @@ export async function readPeerA2AAgentCard(
   subjectId: string,
 ): Promise<A2AAgentCard | null> {
   try {
+    const { AgentCard } = await loadA2ASdk();
     return AgentCard.fromJSON(JSON.parse(await fs.readFile(a2aCardPath(packageRoot, subjectId), 'utf8')));
   } catch {
     return null;
   }
+}
+
+export async function a2aAgentCardToJSON(card: A2AAgentCard): Promise<Record<string, unknown>> {
+  const { AgentCard } = await loadA2ASdk();
+  return AgentCard.toJSON(card) as Record<string, unknown>;
+}
+
+export async function a2aMessageToJSON(message: A2AMessage): Promise<Record<string, unknown>> {
+  const { Message } = await loadA2ASdk();
+  return Message.toJSON(message) as Record<string, unknown>;
+}
+
+export async function a2aTaskToJSON(task: A2ATask): Promise<Record<string, unknown>> {
+  const { Task } = await loadA2ASdk();
+  return Task.toJSON(task) as Record<string, unknown>;
 }

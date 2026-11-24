@@ -118,6 +118,9 @@ async function startIndependentAgent(): Promise<{
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  let childOutput = '';
+  child.stdout?.on('data', (chunk) => { childOutput += String(chunk); });
+  child.stderr?.on('data', (chunk) => { childOutput += String(chunk); });
   const control = `http://127.0.0.1:${port + 1}`;
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
@@ -142,7 +145,7 @@ async function startIndependentAgent(): Promise<{
     await new Promise((resolve) => setTimeout(resolve, 80));
   }
   child.kill();
-  throw new Error('independent A2A agent did not start');
+  throw new Error(`independent A2A agent did not start: ${childOutput.slice(-2000)}`);
 }
 
 test('Slice 4: standard signed Agent Card binds Subject, endpoint, skills and Relay security facts', async () => {
@@ -200,10 +203,10 @@ test('Slice 4: standard signed Agent Card binds Subject, endpoint, skills and Re
   assert.ok(expired.reasons.includes('card_expired'));
 });
 
-test('Slice 4: Message/Task/Artifact are lossless wire projections, not a new product state machine', () => {
+test('Slice 4: Message/Task/Artifact are lossless wire projections, not a new product state machine', async () => {
   const request = requestFixture();
   const message = collaborationRequestToA2AMessage(request);
-  const decoded = collaborationRequestFromA2AMessage({
+  const decoded = await collaborationRequestFromA2AMessage({
     message: Message.toJSON(message),
     expectedFromSubjectId: request.fromSubjectId,
     expectedToSubjectId: request.toSubjectId,
@@ -215,7 +218,7 @@ test('Slice 4: Message/Task/Artifact are lossless wire projections, not a new pr
   tokenOnly.parts = [];
   tokenOnly.metadata = { bearerToken: 'not-a-trust-root' };
   assert.equal(
-    collaborationRequestFromA2AMessage({
+    await collaborationRequestFromA2AMessage({
       message: tokenOnly,
       expectedFromSubjectId: request.fromSubjectId,
       expectedToSubjectId: request.toSubjectId,
@@ -238,7 +241,7 @@ test('Slice 4: Message/Task/Artifact are lossless wire projections, not a new pr
   assert.equal(task.status?.state, TaskState.TASK_STATE_COMPLETED);
   assert.equal(task.artifacts.length, 1);
   assert.deepEqual(
-    collaborationResponseFromA2ATask({
+    await collaborationResponseFromA2ATask({
       task: Task.toJSON(task),
       expectedExchangeId: request.exchangeId,
       expectedFromSubjectId: request.toSubjectId,
@@ -249,7 +252,7 @@ test('Slice 4: Message/Task/Artifact are lossless wire projections, not a new pr
 
   task.status!.state = TaskState.TASK_STATE_FAILED;
   assert.equal(
-    collaborationResponseFromA2ATask({
+    await collaborationResponseFromA2ATask({
       task,
       expectedExchangeId: request.exchangeId,
       expectedFromSubjectId: request.toSubjectId,

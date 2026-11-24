@@ -10,26 +10,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
 const {
-  A2A_PROTOCOL_VERSION,
-  AGENT_CARD_PATH,
-} = require('@a2a-js/sdk');
-const {
-  InMemoryTaskStore,
-  DefaultRequestHandler,
-} = require('@a2a-js/sdk/server');
-const {
-  agentCardHandler,
-  jsonRpcHandler,
-  UserBuilder,
-} = require('@a2a-js/sdk/server/express');
-const { ResearchAgentExecutor, resolvePeerModelEnv } = require('./agent-executor.cjs');
+  ResearchAgentExecutor,
+  resolvePeerModelEnv,
+  initializeA2AExecutorRuntime,
+} = require('./agent-executor.cjs');
 
 const HOST = process.env.RESEARCH_A2A_HOST || '127.0.0.1';
 const PORT = Number(process.env.RESEARCH_A2A_PORT || 43111);
 const CONTROL_PORT = Number(process.env.RESEARCH_A2A_CONTROL_PORT || PORT + 1);
 const PID_FILE = path.join(__dirname, '.agent.pid');
 
-function buildAgentCard(baseUrl) {
+function buildAgentCard(baseUrl, protocolVersion) {
   return {
     name: 'Research Analysis Agent',
     description: '独立研究分析专业能力：根据明确授权材料生成结构化项目风险摘要。',
@@ -38,7 +29,7 @@ function buildAgentCard(baseUrl) {
         url: baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`,
         protocolBinding: 'JSONRPC',
         tenant: '',
-        protocolVersion: A2A_PROTOCOL_VERSION,
+        protocolVersion,
       },
     ],
     provider: {
@@ -74,8 +65,17 @@ function buildAgentCard(baseUrl) {
 }
 
 async function main() {
+  const [sdk, serverSdk, expressSdk] = await Promise.all([
+    import('@a2a-js/sdk'),
+    import('@a2a-js/sdk/server'),
+    import('@a2a-js/sdk/server/express'),
+    initializeA2AExecutorRuntime(),
+  ]);
+  const { A2A_PROTOCOL_VERSION, AGENT_CARD_PATH } = sdk;
+  const { InMemoryTaskStore, DefaultRequestHandler } = serverSdk;
+  const { agentCardHandler, jsonRpcHandler, UserBuilder } = expressSdk;
   const baseUrl = `http://${HOST}:${PORT}`;
-  const agentCard = buildAgentCard(baseUrl);
+  const agentCard = buildAgentCard(baseUrl, A2A_PROTOCOL_VERSION);
   const taskStore = new InMemoryTaskStore();
   const executor = new ResearchAgentExecutor({
     processDelayMs: Number(process.env.RESEARCH_A2A_DELAY_MS || 80),

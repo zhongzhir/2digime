@@ -123,6 +123,16 @@ async function chat({ messages, tools }) {
     } catch {
       parsed = {};
     }
+    if (parsed.actualSuccess === false) {
+      return {
+        text: String(parsed.failureReason || parsed.reply || '这次合作没有成立，尚未收到可用成果。'),
+      };
+    }
+    if (parsed.actualSuccess === true && parsed.artifactRef) {
+      return {
+        text: String(parsed.contribution || parsed.reply || '已经收到对方的可用成果。'),
+      };
+    }
     const summary = String(parsed.summary || parsed.error || '');
     return {
       text: summary ? `已经完成。\n\n${summary.slice(0, 800)}` : '已经完成你要的这件事。',
@@ -130,6 +140,12 @@ async function chat({ messages, tools }) {
   }
 
   const text = lastUserText(messages);
+  if (/工具执行记录/.test(text) && /consult_subject\s*\|\s*failed/.test(text)) {
+    return { text: '这次合作没有成立，尚未收到对方的可用成果。我可以改用本地能力继续。' };
+  }
+  if (/工具执行记录/.test(text) && /consult_subject\s*\|\s*ok/.test(text)) {
+    return { text: '我综合了对方返回的工艺安全补充判断：当前设想可继续评估，但需补齐物料平衡。' };
+  }
   const hasConsult =
     Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'consult_subject');
   if (hasConsult && /找|更懂|补充判断|工艺安全/.test(text)) {

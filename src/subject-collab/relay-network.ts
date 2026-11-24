@@ -2,7 +2,7 @@
  * 配对目录 + Relay/E2EE 上的 SubjectCollabNetwork。
  * 不持有对方 runtime 引用；不打开对方 Package。
  */
-import { AgentCard, Message, Task, type AgentCard as A2AAgentCard } from '@a2a-js/sdk';
+import type { AgentCard as A2AAgentCard } from '@a2a-js/sdk';
 import type { CipherAdapter } from '../infrastructure/secret-store';
 import type { SubjectRef } from '../collaboration/schema';
 import { CommIdentityStore } from '../subject-comm/identity-store';
@@ -23,6 +23,9 @@ import { readPeerCard, readPublicCard, sanitizePublicCard, writePeerCard } from 
 import { signPublicSubjectCard, verifySignedPublicSubjectCard } from './signed-public-card';
 import {
   DIGITALME_A2A_RELAY_BINDING,
+  a2aAgentCardToJSON,
+  a2aMessageToJSON,
+  a2aTaskToJSON,
   collaborationRequestFromA2AMessage,
   collaborationRequestToA2AMessage,
   collaborationResponseFromA2ATask,
@@ -187,7 +190,7 @@ export function createRelaySubjectNetwork(input: {
           wire: 'public_card',
           card: {
             legacySignedCard: signedCard,
-            a2aAgentCard: AgentCard.toJSON(a2aCard),
+            a2aAgentCard: await a2aAgentCardToJSON(a2aCard),
           },
         },
       );
@@ -282,7 +285,7 @@ export function createRelaySubjectNetwork(input: {
         }
         if (payload.wire === 'collab_response') {
           const exchangeId = String(payload.exchangeId || env.correlationId || '');
-          const parsed = collaborationResponseFromA2ATask({
+          const parsed = await collaborationResponseFromA2ATask({
             task: payload.response,
             expectedExchangeId: exchangeId,
             expectedFromSubjectId: env.from.subjectId,
@@ -294,7 +297,7 @@ export function createRelaySubjectNetwork(input: {
           continue;
         }
         if (payload.wire === 'collab_request') {
-          const request = collaborationRequestFromA2AMessage({
+          const request = await collaborationRequestFromA2AMessage({
             message: payload.request,
             expectedFromSubjectId: env.from.subjectId,
             expectedToSubjectId: env.to.subjectId,
@@ -313,7 +316,7 @@ export function createRelaySubjectNetwork(input: {
             {
               wire: 'collab_response',
               exchangeId: request.exchangeId,
-              response: Task.toJSON(collaborationResponseToA2ATask(response, request.threadId)) as Record<string, unknown>,
+              response: await a2aTaskToJSON(collaborationResponseToA2ATask(response, request.threadId)),
             },
             request.exchangeId,
           );
@@ -366,7 +369,7 @@ export function createRelaySubjectNetwork(input: {
         const card = await readPeerA2AAgentCard(input.packageRoot, peer.subjectId);
         if (!card) continue;
         const verified = await verifyA2AAgentCard({
-          card: AgentCard.toJSON(card),
+          card: await a2aAgentCardToJSON(card),
           expectedPeer: peer,
           revokedKeyIds: await identity.listRevokedPeerKeyIds(peer.subjectId),
           expectedProtocolBinding: DIGITALME_A2A_RELAY_BINDING,
@@ -408,7 +411,7 @@ export function createRelaySubjectNetwork(input: {
     },
     async deliverWithReceipt(request): Promise<SubjectCollabDeliveryResult> {
       const message = collaborationRequestToA2AMessage(request);
-      const wireRequest = Message.toJSON(message) as Record<string, unknown>;
+      const wireRequest = await a2aMessageToJSON(message);
       const actualBody = JSON.stringify(wireRequest);
       const baseReceipt = {
         delivered: false,

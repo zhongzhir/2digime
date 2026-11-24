@@ -284,7 +284,9 @@ test('A 从「与 2digime」自主选择 B，B 独立贡献后回到原 Thread',
     executions: unknown[];
     turns: Array<{ exchangeIds?: string[] }>;
   };
-  assert.equal(rec.executions.length, 0);
+  assert.ok(rec.executions.some((item) =>
+    Boolean(item && typeof item === 'object' && (item as { capabilityId?: string }).capabilityId === 'consult_subject'),
+  ));
   assert.ok(rec.turns.some((turn) => (turn.exchangeIds || []).length > 0));
 
   const bRunsDir = path.join(bDir, 'intelligence', 'runs');

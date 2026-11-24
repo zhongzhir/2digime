@@ -11,9 +11,22 @@
 'use strict';
 
 const { createHash, randomUUID } = require('node:crypto');
-const { TaskState, Role } = require('@a2a-js/sdk');
-const { AgentEvent } = require('@a2a-js/sdk/server');
 const { resolvePeerModelEnv, chatComplete } = require('./model-client.cjs');
+
+let TaskState;
+let Role;
+let AgentEvent;
+
+async function initializeA2AExecutorRuntime() {
+  if (TaskState && Role && AgentEvent) return;
+  const [sdk, serverSdk] = await Promise.all([
+    import('@a2a-js/sdk'),
+    import('@a2a-js/sdk/server'),
+  ]);
+  TaskState = sdk.TaskState;
+  Role = sdk.Role;
+  AgentEvent = serverSdk.AgentEvent;
+}
 
 const MIN_MODEL_CHARS = 450;
 const ALLOWED_FORMATTING = Object.freeze([
@@ -542,6 +555,7 @@ function sleep(ms) {
 module.exports = {
   ResearchAgentExecutor,
   resolvePeerModelEnv,
+  initializeA2AExecutorRuntime,
   applyDeterministicFormatting,
   ALLOWED_FORMATTING,
   MIN_MODEL_CHARS,

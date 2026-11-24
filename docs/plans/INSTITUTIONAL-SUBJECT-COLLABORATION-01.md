@@ -136,6 +136,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - 外部能力的成功必须有真实结果、可打开文件/链接或对方签名 Artifact；“请求已发出”不等于事情完成。
 - 拒绝、超时、授权不足和对方失联要回到同一对话，由模型解释并提出可执行替代方案。
 - 沿用现有审批、费用和高风险动作边界；本计划不授权购买、付款、生产部署或机构数据接入。
+- **Slice 6 实现状态（2026-11-24）：** 同一 Talk 模型已能在本地 Capability 与外部 Subject 之间选择；`consult_subject` 已进入既有执行事实链，只有非空可消费贡献和 A2A Artifact 引用才算外部完成。接受但无成果、拒绝、超时、不可达会回到同一模型，后续只有真实本地成果或外部 Artifact 才能恢复完成状态。没有新增关键词路由、协作 UI、Task Store、状态机或第二套 runtime。
+- **Slice 6 开发边界：** 聚焦主链、Relay、A2A 和文件写入回归通过；正式双 Electron 长测与 `preflight:electron` 仍存在启动/清理挂起，Owner 产品验收未做，既有多轮 Talk 上下文回归仍有 1 项失败。因此当前只记代码实现与聚焦开发验证完成，不记产品完成。证据见 [`../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-6-DEVELOPER-VALIDATION.md`](../audits/INSTITUTIONAL-SUBJECT-COLLABORATION-01-SLICE-6-DEVELOPER-VALIDATION.md)。
 
 ## 6. 开发与验收门
 
@@ -181,6 +183,8 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 - Slice 3A 已实现 Owner→Subject 的 VC 2.0 + JOSE 委托核心、最小披露、短时挑战绑定出示，以及撤销/过期/Owner 停用/双侧 key 轮换负向门；
 - Slice 4 已实现官方 A2A v1 Agent Card、Message、Task、Artifact 标准对象映射；现有 Relay/E2EE 已真实承载这些对象，签名 Card 双投影一致性与 token-only 降级拒绝通过；
 - 独立官方 A2A server 进程的 Agent Card discovery、Message、Task + Artifact 零费用离线互操作通过；它不是外部组织服务或第二位 Owner 的真实 Subject；
+- Slice 6 已把本地 Capability 与外部 Subject 接入同一 Talk 模型与既有执行事实链；外部接受但无成果不再算完成，拒绝/超时/失联可回到同一模型并以真实替代成果恢复；
+- Slice 6 聚焦测试中主链 3/3、本机双 Subject 3/3、Relay 2/2、两 Owner 非 Electron 2/2、A2A 4/4、文件写入 6/6 通过；正式双 Electron 与 Electron preflight 挂起，既有多轮 Talk 上下文用例为 5/6，均未伪装成通过；
 - TypeScript 构建、身份专项测试 6/6、真实本机 OIDC 浏览器闭环与 Owner 控制 Auth0 浏览器闭环通过；
 - 真实外部 OIDC 浏览器闭环通过，账号创建、真实身份、付款方式和费用均为 false；
 - 物化前按需挂载既有 work runtime，已关闭 initiator 本地物化和远端 pull 共用的 artifact committer 回归；原始失败套件 7/7 通过；
@@ -196,6 +200,7 @@ Second 一类探索与 2digime 初衷共通的部分是：长期稳定的是用�
 4. 在 2C-1 全部真实端到端门通过前，`fapi2` 配置继续机械拒绝，普通 Auth0 Native client、本机普通 OIDC 或只有 PAR 的局部演示均不得写成 FAPI 2.0 已实现；
 5. Slice 3B 只在具备独立、零费用 OpenID4VCI/VP 测试 issuer/wallet/verifier 后实施互操作门；优先复用 Final 规范实现，不自研二维码、DCQL、`vp_token` 或 `direct_post` 协议栈。没有独立对端时不得用本机回环冒充互操作；
 6. Slice 4 的 A2A 标准对象映射和独立进程协议门已完成；在 Slice 5 前不新增协作中心、Task Store、第二套 runtime 或公网服务；
-7. 下一推荐实现为 Slice 5 两 Owner 真实机构试验，但必须先确认两位独立 Owner、两个独立 Subject/运行端点和至少一侧合法可用的真实机构身份源；没有这些外部条件时不得用单机自动回放冒充；
-8. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
-9. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。
+7. Slice 5 两 Owner 真实机构试验仍需两位独立 Owner、两个独立 Subject/运行端点和至少一侧合法可用的真实机构身份源；没有这些外部条件时不得用单机自动回放冒充；
+8. Slice 6 代码与聚焦开发门已完成；下一步先修复 Electron/Playwright 启动和清理挂起，并在正式产品界面做 Owner 验收。未通过前不把“窗口曾创建”或单机自动测试写成产品完成；
+9. 另立开发/打包工具链升级批次处理完整审计中的 28 项公告；在完成安装包复验前，不把生产依赖审计为 0 扩写成全依赖或发布安全通过；
+10. 未通过前不做数字人民币/支付、平台定制、A2A 市场、生产接入或真实机构数据试验。

@@ -242,7 +242,9 @@ test('B 自主收件：A 不 drain B，经真实配对完成合作', { timeout: 
     const rec = JSON.parse(await fs.readFile(talkThreadFilePath(aDir), 'utf8')) as {
       executions: unknown[];
     };
-    assert.equal(rec.executions.length, 0);
+    assert.ok(rec.executions.some((item) =>
+      Boolean(item && typeof item === 'object' && (item as { capabilityId?: string }).capabilityId === 'consult_subject'),
+    ));
   } finally {
     await aRt.stop();
     await bRt.stop();

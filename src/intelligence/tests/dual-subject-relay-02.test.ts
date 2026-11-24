@@ -344,7 +344,9 @@ test('A 经配对目录 + Relay/E2EE 自主选择 B，网络层无完整 Digital
       const rec = JSON.parse(await fs.readFile(talkThreadFilePath(aDir), 'utf8')) as {
         executions: unknown[];
       };
-      assert.equal(rec.executions.length, 0);
+      assert.ok(rec.executions.some((item) =>
+        Boolean(item && typeof item === 'object' && (item as { capabilityId?: string }).capabilityId === 'consult_subject'),
+      ));
       const bSelf = await fs.readFile(digitalSelfFilePath(bDir), 'utf8');
       assert.match(bSelf, /西湖区某某路88号/);
       const aSelf = await fs.readFile(digitalSelfFilePath(aDir), 'utf8');

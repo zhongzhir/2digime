@@ -108,5 +108,8 @@ export interface ConsultResult {
   exchangeId: string;
   failureReason?: string;
   usedOwnCapability?: boolean;
+  /** Verified result carried by the peer response, not a delivery receipt. */
+  artifactRef?: string;
+  evidenceDigest?: string;
   disclosed: string;
 }

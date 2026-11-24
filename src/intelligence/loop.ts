@@ -1213,7 +1213,18 @@ export async function runTalkTurn(input: {
     }
     if (call.name === 'consult_subject') {
       const parsed = parseConsultArgs(call.arguments);
+      const execId = `run_${randomUUID()}`;
       if (!input.subjectCollab) {
+        recordExec({
+          id: execId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'consult_subject',
+          instruction: parsed.goal || input.userText,
+          ok: false,
+          summary: '当前没有可联系的其他主体。',
+          failureReason: '当前没有可联系的其他主体。',
+        });
         return JSON.stringify({
           actualSuccess: false,
           received: false,
@@ -1221,29 +1232,90 @@ export async function runTalkTurn(input: {
           reply: '当前没有可联系的其他主体。',
         });
       }
-      const consult = input.subjectCollab.consult({
-        threadId: thread.threadId,
-        threadTurns: thread.turns.map((turn) => ({ role: turn.role, text: turn.text })),
-        selfContext: input.selfContext,
-        now: input.now,
-        subjectId: parsed.subjectId,
-        goal: parsed.goal || input.userText,
-        hopedContribution: parsed.hopedContribution,
-        disclosure: parsed.disclosure,
-        ...(parsed.contextUnderstandingIds.length
-          ? { contextUnderstandingIds: parsed.contextUnderstandingIds }
-          : {}),
-      });
-      const collabResult = input.signal
-        ? await Promise.race([consult, waitForAbort(input.signal)])
-        : await consult;
+      let collabResult: ConsultResult;
+      try {
+        const consult = input.subjectCollab.consult({
+          threadId: thread.threadId,
+          threadTurns: thread.turns.map((turn) => ({ role: turn.role, text: turn.text })),
+          selfContext: input.selfContext,
+          now: input.now,
+          subjectId: parsed.subjectId,
+          goal: parsed.goal || input.userText,
+          hopedContribution: parsed.hopedContribution,
+          disclosure: parsed.disclosure,
+          ...(parsed.contextUnderstandingIds.length
+            ? { contextUnderstandingIds: parsed.contextUnderstandingIds }
+            : {}),
+        });
+        collabResult = input.signal
+          ? await Promise.race([consult, waitForAbort(input.signal)])
+          : await consult;
+      } catch (err) {
+        if (input.signal?.aborted || isAbortLike(err)) throw err;
+        const failureReason = /timeout|timed out|超时/i.test(
+          err instanceof Error ? err.message : String(err),
+        )
+          ? '联系对方超时，未收到成果。'
+          : '联系对方时没有完成，未收到成果。';
+        recordExec({
+          id: execId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'consult_subject',
+          instruction: parsed.goal || input.userText,
+          ok: false,
+          summary: failureReason,
+          failureReason,
+        });
+        return JSON.stringify({
+          actualSuccess: false,
+          completed: false,
+          received: false,
+          failureReason,
+          reply: failureReason,
+        });
+      }
       if (collabResult.exchangeId) exchangeIds.push(collabResult.exchangeId);
+      const summary = collabResult.ok
+        ? `已收到对方成果${collabResult.artifactRef ? `（${collabResult.artifactRef}）` : ''}`
+        : collabResult.failureReason || collabResult.reply || '外部协作没有完成';
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'consult_subject',
+        instruction: parsed.goal || input.userText,
+        ok: collabResult.ok,
+        summary,
+        ...(collabResult.failureReason ? { failureReason: collabResult.failureReason } : {}),
+        ...(collabResult.artifactRef
+          ? {
+              producedOutputs: [collabResult.artifactRef],
+              outputPath: collabResult.artifactRef,
+              observedEffect: {
+                kind: 'peer_artifact_received',
+                target: collabResult.artifactRef,
+                mutated: false,
+              },
+            }
+          : {}),
+        safeDetail: JSON.stringify({
+          received: collabResult.received,
+          decision: collabResult.decision || '',
+          exchangeId: collabResult.exchangeId,
+          artifactRef: collabResult.artifactRef || '',
+          evidenceDigest: collabResult.evidenceDigest || '',
+        }),
+      });
       return JSON.stringify({
         actualSuccess: collabResult.ok,
+        completed: collabResult.ok,
         received: collabResult.received,
         decision: collabResult.decision || '',
         reply: collabResult.reply,
         contribution: collabResult.contribution || '',
+        artifactRef: collabResult.artifactRef || '',
+        evidenceDigest: collabResult.evidenceDigest || '',
         disclosed: collabResult.disclosed,
         ...(collabResult.failureReason ? { failureReason: collabResult.failureReason } : {}),
       });
@@ -1473,9 +1545,21 @@ export async function runTalkTurn(input: {
     return !recoveredLater;
   });
   const accessDenied = denied(turnExecs);
+  const unresolvedCollabFailure = turnExecs.some((item, index) => {
+    if (item.capabilityId !== 'consult_subject' || item.ok) return false;
+    return !turnExecs.slice(index + 1).some((later) =>
+      later.ok && (
+        later.capabilityId === 'consult_subject' ||
+        later.observedEffect?.mutated === true ||
+        Boolean(later.producedOutputs?.length)
+      ),
+    );
+  });
   const wrote = hasObservedMutation(turnExecs);
   const toolsRan = turnExecs.length > 0;
-  const needsExplanation = toolsRan && (accessDenied || failedWrites.length > 0 || !wrote);
+  const needsExplanation = toolsRan && (
+    accessDenied || failedWrites.length > 0 || unresolvedCollabFailure || !wrote
+  );
   if (needsExplanation) {
     throwIfAborted(input.signal);
     messages.push({
@@ -1487,10 +1571,11 @@ export async function runTalkTurn(input: {
   let outcome = deriveTalkOutcome({
     execs: turnExecs,
     expected: [],
-    stillOpen: (failedWrites.length > 0 || accessDenied) && !wrote,
+    stillOpen: ((failedWrites.length > 0 || accessDenied) && !wrote) || unresolvedCollabFailure,
   });
   if (failedWrites.length > 0 && wrote) outcome = 'PARTIAL_SUCCESS';
   if ((failedWrites.length > 0 || accessDenied) && !wrote) outcome = 'FAILED';
+  if (unresolvedCollabFailure) outcome = wrote ? 'PARTIAL_SUCCESS' : 'FAILED';
 
   // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
   // 完成判断不看模型自定的验收句子。写失败时附上工具事实；写成功不以字符串不一致改口失败。
