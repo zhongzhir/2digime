@@ -72,7 +72,7 @@
 | 顺序 | 结果 | 状态 | 预计工作量* | 关键依赖 |
 |---|---|---|---|---|
 | Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1C 技术门 pass） | 1–2 周 | Owner 界面验收 |
-| Now-2 | Slice 2：Doing 领先能力集成与基准 | Not Started | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
+| Now-2 | Slice 2：Doing 领先能力集成与基准 | In Progress（2A-1 Word/PPT Talk 主链） | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
 | Next-1 | Slice 3：数字之我右侧身份、协作与自动化投影 | Not Started | 1–2 周小批次 | Slice 2 至少两条真实执行主链 |
 | Next-2 | Slice 4：机构伙伴沙箱与合作演示 | Not Started | 2–3 个小批次 | Slice 3、现有 Institution Distribution |
 | Later | Slice 5：统一产品验收、签名试用包与伙伴材料 | Not Started | 1–2 周 | Slice 1–4 全部门通过 |
@@ -139,6 +139,15 @@ Slice 1 的开发者技术门已完成，仍待 Owner 界面验收；不打包�
 - Talk 中能创建、修改、继续迭代并打开 Word/PPT/PDF；
 - 中文字体、分页、表格、图片、页眉页脚和导出 PDF 做结构与逐页视觉 QA；
 - 至少覆盖报告、会议材料、演示文稿、表格型附件四类真实交付。
+
+#### Slice 2A-1 开发检查点（2026-11-24）
+
+- 普通用户可在同一 Talk 直接委托生成 Word 或 PPT 应用成果，不需要先授权外部文件夹；系统复用既有 Office 序列化、Talk Execution 和结果卡，不接旧做事页或旧 Work Runtime；
+- `.docx` / `.pptx` 写入后必须能由现有 Office/PDF 抽取链真实回读；该次成果作为精确文件进入同一 Thread 后续读取范围，不扩大为整个成果目录授权；
+- 每个回复保持一个可打开成果。连续要求另一种格式时，在下一回复生成第二张结果卡，不为本批新增多成果状态或第二事实源；
+- TypeScript 构建通过；Talk/文件围栏/协作回退聚焦回归 14/14，通过；Office 结构、抽取及布局相关 21/21 通过；正式 Electron Talk → 真实 DOCX → 回读 → “打开”结果卡门 1/1 通过。
+
+本检查点只关闭现有 Word/PPT 能力未接入普通 Talk 的欠账，不代表 Slice 2A 或 95% 完成。PDF、成熟 Office 生成/渲染能力接入、DOCX/PPTX/PDF 各 10 个固定任务、逐页视觉 QA、修改迭代基准和 Owner 验收仍待后续小批次完成；不 push、不打包、不发布。
 
 ### 2B. 授权本地文件与工作区
 

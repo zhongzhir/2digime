@@ -171,12 +171,12 @@ const WRITE_ARTIFACT_TOOL: ChatToolDefinition = {
   function: {
     name: 'write_artifact',
     description:
-      '仅当主人明确委托现在生成一个文本成果并保存到应用成果区时使用。应用成果区不需要桌面目录权限；能力咨询、假设性提问或只要建议时不要调用。写入后会真实回读。',
+      '仅当主人明确委托现在生成成果并保存到应用成果区时使用。支持 .md、.txt、.json、.docx 和 .pptx；Word/PPT 由系统生成真实 Office 文件。应用成果区不需要桌面目录权限；能力咨询、假设性提问或只要建议时不要调用。写入后会真实回读。',
     parameters: {
       type: 'object',
       properties: {
-        fileName: { type: 'string', description: '成果文件名，使用 .md、.txt 或 .json。' },
-        content: { type: 'string', description: '完整成果正文。' },
+        fileName: { type: 'string', description: '成果文件名，使用 .md、.txt、.json、.docx 或 .pptx。' },
+        content: { type: 'string', description: '完整成果正文；Word/PPT 可使用结构清晰的 Markdown。' },
       },
       required: ['fileName', 'content'],
     },
@@ -514,6 +514,11 @@ export async function runTalkTurn(input: {
       resolveAuthorizedFile(writeAuth, exec.outputPath).ok && !readAuth.files.includes(exec.outputPath)) {
       readAuth.files.push(exec.outputPath);
     }
+    const artifactRoot = path.join(input.workRoot, 'artifacts', 'talk');
+    if (exec.ok && exec.outputPath && exec.capabilityId === 'write_artifact' &&
+      folderCovers(artifactRoot, exec.outputPath) && !readAuth.files.includes(exec.outputPath)) {
+      readAuth.files.push(exec.outputPath);
+    }
   }
   const auth = writeAuth;
   const deniedThisTurn = new Set<string>();
@@ -524,7 +529,7 @@ export async function runTalkTurn(input: {
     '【会话边界】此前 user/assistant 消息只作同一 Thread 背景；当前请求换题时，以标有【当前请求】的最后一条为准。',
     '根据当前数字之我和本次能读到的材料理解用户。摘录若标明未读完，不得说成已经读完；需要其余部分时读取原文件。后续回合仍可读取已附上的文件，不要把上一轮摘录当成全文仍在上下文里。',
     '是否搜索、读取、写入或调用外部能力，由你根据用户这次要什么来决定。询问也可以查证；委托也可以只在对话里交付。不要另做用户没要求的事，也不要因为句式而拒绝需要的工具。',
-    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本文件并保存到应用成果区时，直接使用 write_artifact；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
+    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word 或 PPT 成果并保存到应用成果区时，直接使用 write_artifact；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
     '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
     '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
     '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
@@ -865,7 +870,9 @@ export async function runTalkTurn(input: {
     const content = String(parsed.content || '');
     const rawName = path.basename(String(parsed.fileName || '成果.md').trim() || '成果.md');
     const cleaned = rawName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 120) || '成果.md';
-    const fileName = /\.(md|txt|json)$/i.test(cleaned) ? cleaned : `${cleaned}.md`;
+    const requestedExt = path.extname(cleaned).toLowerCase();
+    const allowedExt = /\.(md|txt|json|docx|pptx)$/i.test(requestedExt);
+    const fileName = requestedExt ? cleaned : `${cleaned}.md`;
     const artifactRoot = path.join(input.workRoot, 'artifacts', 'talk', userTurn.id);
     const outputPath = path.join(artifactRoot, fileName);
     const fail = (reason: string) => {
@@ -876,16 +883,37 @@ export async function runTalkTurn(input: {
         instruction: fileName, ok: false, summary: reason, failureReason: reason });
       return JSON.stringify({ actualSuccess: false, ok: false, capabilityId: 'write_artifact', failureReason: reason, producedOutputs: [] });
     };
+    if (requestedExt && !allowedExt) return fail('应用成果区当前支持 Markdown、文本、JSON、Word 和 PowerPoint；PDF 将在下一批接入成熟渲染能力。');
     if (!content.trim()) return fail('成果内容不能为空。');
     if (Buffer.byteLength(content, 'utf8') > MAX_WRITE_BYTES) return fail(`成果超过 ${MAX_WRITE_BYTES} 字节上限。`);
     throwIfAborted(input.signal);
     try {
       await fs.mkdir(artifactRoot, { recursive: true });
       throwIfAborted(input.signal);
-      await fs.writeFile(outputPath, content, 'utf8');
-      const readback = await fs.readFile(outputPath, 'utf8');
+      if (requestedExt === '.docx' || requestedExt === '.pptx') {
+        const written = await writeExportedOffice({
+          writeRoot: artifactRoot,
+          relativePath: fileName,
+          format: requestedExt.slice(1),
+          content,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+        if (!written.ok) return fail(written.reason);
+      } else {
+        await fs.writeFile(outputPath, content, 'utf8');
+      }
       const stat = await fs.stat(outputPath);
-      if (!stat.isFile() || readback !== content) return fail('成果写入后回读不一致。');
+      if (!stat.isFile() || stat.size <= 0) return fail('成果写入后文件不存在或为空。');
+      const readPayload = JSON.parse(await runReadFile(
+        { folders: [], files: [outputPath] },
+        JSON.stringify({ path: outputPath, offset: 0, limit: 4000 }),
+      )) as { actualSuccess?: boolean; content?: string; total?: number; failureReason?: string };
+      if (!readPayload.actualSuccess || !String(readPayload.content || '').trim()) {
+        return fail(readPayload.failureReason || '成果写入后无法回读。');
+      }
+      const readback = String(readPayload.content || '');
+      const readbackChars = Number(readPayload.total || readback.length);
+      if (!requestedExt && readback !== content) return fail('成果写入后回读不一致。');
       seq += 1;
       mutations.push({ target: outputPath, seq });
       lastOk = true;
@@ -898,7 +926,7 @@ export async function runTalkTurn(input: {
         capabilityId: 'write_artifact',
         instruction: fileName,
         ok: true,
-        summary: `已写入应用成果区并回读 ${readback.length} 字。`,
+        summary: `已写入应用成果区并回读 ${readbackChars} 字。`,
         producedOutputs: [outputPath],
         outputPath,
         observedEffect: { kind: 'file_created', target: outputPath, mutated: true },
@@ -910,9 +938,9 @@ export async function runTalkTurn(input: {
         producedOutputs: [outputPath],
         outputPath,
         readback: readback.slice(0, 4000),
-        readbackChars: readback.length,
-        readbackTruncated: readback.length > 4000,
-        summary: `已写入应用成果区并真实回读 ${readback.length} 字。最终答复必须按这个执行事实描述。`,
+        readbackChars,
+        readbackTruncated: readbackChars > readback.length,
+        summary: `已写入应用成果区并真实回读 ${readbackChars} 字。最终答复必须按这个执行事实描述。`,
       });
     } catch (err) {
       throwIfAborted(input.signal);

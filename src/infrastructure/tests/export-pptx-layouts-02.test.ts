@@ -6,6 +6,7 @@ import * as os from 'node:os';
 import { buildPptxFromMarkdown, collectPptxVisibleTexts, inspectPptxDraftQuality, inspectPptxSlideGeometry, splitMarkdownIntoSlides } from '../export';
 import { readZipEntries } from '../zip';
 import { makeTempDir } from './helpers';
+import { launchDigitalMeElectron } from '../../runtime/tests/electron-harness';
 import {
   buildAerospaceBioLearningPlanMarkdown,
   buildFixturePptMarkdown,
@@ -284,28 +285,13 @@ function buildAerospaceVisualHtml(
 }
 
 async function renderHtmlSlidesToPng(html: string, pngDir: string, count: number): Promise<void> {
-  const playwright = await import('playwright');
-  let electronPath: string;
-  try {
-    electronPath = require('electron') as string;
-  } catch {
-    throw new Error('渲染 PNG 需要 electron');
-  }
-  const userData = await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-pptx-png-'));
-  const app = await playwright._electron.launch({
-    executablePath: electronPath,
-    args: [path.resolve(__dirname, '../../../electron/main.cjs')],
-    cwd: path.resolve(__dirname, '../../..'),
-    timeout: 60_000,
-    env: {
-      ...process.env,
-      DIGITALME_V2_ELECTRON_TEST: '1',
+  const harness = await launchDigitalMeElectron({
+    extraEnv: {
       DIGITALME_V2_SEARCH_ENABLED: '0',
-      DIGITALME_V2_USER_DATA: userData,
     },
   });
   try {
-    const page = await app.firstWindow();
+    const page = harness.page;
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
     for (let i = 1; i <= count; i += 1) {
       const shot = page.locator(`#slide-${i}`);
@@ -323,7 +309,7 @@ async function renderHtmlSlidesToPng(html: string, pngDir: string, count: number
     );
     await page.locator('#montage').screenshot({ path: path.join(pngDir, 'montage.png') });
   } finally {
-    await app.close();
+    await harness.close();
   }
 }
 

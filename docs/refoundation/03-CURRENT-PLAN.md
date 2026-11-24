@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_IN_PROGRESS`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_IN_PROGRESS`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -52,6 +52,12 @@ Playwright 已升级到支持 Node 24、修复 Windows shell 参数链的 1.65.1
 无模型费用的真实开放来源健康门连续运行 30 分 17 秒并通过：21 个健康来源、21 个域名、文章/图片/音频/视频 4 种表达、72 条候选池，Wikimedia Commons 的图片与音视频游标从首批真实推进到下一批，规范化重复为 0。新增可重复入口门，沿用既有开放来源、候选池与 SSRF 防护，不增加供应商、站点特例或模型调用；当前来源重新形成 251 条目录、72 条候选池、22 个来源，60 个唯一原文入口抽样为 60/60 可打开。304 未冒充失效内容恢复，SSRF 拒绝未放宽。
 
 Slice 1 的开发者技术门已完成，仍待 Owner 界面验收；尚未打包、push 或发布。
+
+### Slice 2A-1 开发检查点（2026-11-24）
+
+现有 Word/PPT 序列化、Talk Execution 与结果卡已经接成普通用户主链：用户可在同一 Talk 直接委托生成 `.docx` 或 `.pptx` 应用成果，不需要外部文件夹授权；文件写入后由现有抽取链真实回读，结果以文件名和“打开”卡片返回；后续 Talk 只恢复该 Thread 实际生成的精确文件读取权，不开放整个成果目录。每个回复仍只投影一个成果，连续要求另一格式时在下一回复生成，不新增多成果状态或第二事实源。
+
+TypeScript 构建通过；Talk/文件围栏/协作回退聚焦回归 14/14，Office 结构、抽取及布局相关 21/21，正式 Electron Talk → DOCX → 回读 → 结果卡 1/1 通过。该检查点只关闭已有能力未接入普通 Talk 的欠账；PDF、成熟 Office 生成/渲染能力、DOCX/PPTX/PDF 各 10 项固定任务、逐页视觉 QA、修改迭代基准和 Owner 验收仍未完成，不得写成 Slice 2A 或 95% 通过。尚未打包、push 或发布。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

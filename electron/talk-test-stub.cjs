@@ -220,6 +220,21 @@ async function chat({ messages, tools }) {
 
   const hasArtifact =
     Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'write_artifact');
+  if (hasArtifact && /Office成果验证/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [
+        {
+          id: 'call_office_artifact_1',
+          name: 'write_artifact',
+          arguments: JSON.stringify({
+            fileName: 'Office成果验证.docx',
+            content: '# Office成果验证\n\n## 结论\n\nWord 已由 Talk 应用成果区生成并真实回读。',
+          }),
+        },
+      ],
+    };
+  }
   if (hasArtifact && /无付费成果打开验证/.test(text)) {
     return {
       text: '',

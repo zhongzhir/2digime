@@ -98,6 +98,115 @@ test('明确委托直接写入应用成果区并把真实回读交回模型', as
   assert.match(answer?.text || '', /已保存.*回读确认/);
 });
 
+test('Talk 可直接生成 Word/PPT 应用成果并在下一轮继续读取', async () => {
+  const root = await tempDir('office-artifact');
+  const now = new Date().toISOString();
+  const content = [
+    '# 项目周报',
+    '',
+    '## 本周进展',
+    '- 完成统一 Talk 主链',
+    '- 保留真实执行回读',
+    '',
+    '## 下一步',
+    '- 继续完善常用文档能力',
+  ].join('\n');
+  let wordStep = 0;
+  const wordTurn = await runTalkTurn({
+    thread: emptyThread(now),
+    userText: '请把这份周报制作成 Word，保存到应用成果区。',
+    selfContext: '',
+    agents: [],
+    workRoot: root,
+    now,
+    chat: async ({ tools, messages }) => {
+      if (wordStep++ === 0) {
+        const artifactTool = tools?.find((tool) => tool.function.name === 'write_artifact');
+        assert.ok(artifactTool);
+        assert.match(artifactTool!.function.description, /Word\/PPT/);
+        return {
+          text: '',
+          toolCalls: [{
+            id: 'word_1',
+            name: 'write_artifact',
+            arguments: JSON.stringify({ fileName: '项目周报.docx', content }),
+          }],
+        };
+      }
+      const fact = String(messages.filter((message) => message.role === 'tool').at(-1)?.content || '');
+      assert.match(fact, /actualSuccess":true/);
+      assert.match(fact, /项目周报/);
+      return { text: 'Word 已生成并回读确认。' };
+    },
+  });
+
+  const word = wordTurn.thread.executions.find((row) => row.outputPath?.endsWith('.docx'))?.outputPath;
+  assert.ok(word);
+  assert.ok((await fs.stat(word!)).size > 1000);
+  assert.equal(wordTurn.thread.turns.at(-1)?.result?.path, word);
+
+  let pptStep = 0;
+  const pptTurn = await runTalkTurn({
+    thread: wordTurn.thread,
+    userText: '再把同一份周报制作成 PPT。',
+    selfContext: '',
+    agents: [],
+    workRoot: root,
+    now: new Date(Date.now() + 1000).toISOString(),
+    chat: async ({ tools, messages }) => {
+      if (pptStep++ === 0) {
+        assert.equal(tools?.some((tool) => tool.function.name === 'write_artifact'), true);
+        return {
+          text: '',
+          toolCalls: [{
+            id: 'ppt_1',
+            name: 'write_artifact',
+            arguments: JSON.stringify({ fileName: '项目周报.pptx', content }),
+          }],
+        };
+      }
+      const fact = String(messages.filter((message) => message.role === 'tool').at(-1)?.content || '');
+      assert.match(fact, /actualSuccess":true/);
+      assert.match(fact, /项目周报/);
+      return { text: 'PPT 已生成并回读确认。' };
+    },
+  });
+  const ppt = pptTurn.thread.executions.find((row) => row.outputPath?.endsWith('.pptx'))?.outputPath;
+  assert.ok(ppt);
+  assert.ok((await fs.stat(ppt!)).size > 1000);
+  assert.equal(pptTurn.thread.turns.at(-1)?.result?.path, ppt);
+
+  let followStep = 0;
+  const readTurn = await runTalkTurn({
+    thread: pptTurn.thread,
+    userText: '继续修改刚才的 Word，先读一下其中的内容。',
+    selfContext: '',
+    agents: [],
+    workRoot: root,
+    now: new Date(Date.now() + 2000).toISOString(),
+    chat: async ({ tools, messages }) => {
+      if (followStep++ === 0) {
+        assert.equal(tools?.some((tool) => tool.function.name === 'read_file'), true);
+        return {
+          text: '',
+          toolCalls: [{
+            id: 'read_word_1',
+            name: 'read_file',
+            arguments: JSON.stringify({ path: word }),
+          }],
+        };
+      }
+      const fact = String(messages.filter((message) => message.role === 'tool').at(-1)?.content || '');
+      assert.match(fact, /actualSuccess":true/);
+      assert.match(fact, /项目周报/);
+      assert.match(fact, /本周进展/);
+      return { text: '已经读取，可以继续修改。' };
+    },
+  });
+  assert.equal(readTurn.thread.executions.at(-1)?.capabilityId, 'read_file');
+  assert.equal(readTurn.thread.executions.at(-1)?.ok, true);
+});
+
 test('Digital Self 前置解释复用北京 Responses 且不暴露 Web 工具', async () => {
   const originalFetch = globalThis.fetch;
   let requestUrl = '';
