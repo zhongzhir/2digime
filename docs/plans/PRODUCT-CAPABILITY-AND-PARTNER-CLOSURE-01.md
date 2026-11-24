@@ -71,7 +71,7 @@
 
 | 顺序 | 结果 | 状态 | 预计工作量* | 关键依赖 |
 |---|---|---|---|---|
-| Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1B Electron gate pass） | 1–2 周 | 真实开放来源与 Owner 验收 |
+| Now-1 | Slice 1：Discover 新鲜、连续、整齐、可读 | In Progress（Slice 1C 技术门 pass） | 1–2 周 | Owner 界面验收 |
 | Now-2 | Slice 2：Doing 领先能力集成与基准 | Not Started | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
 | Next-1 | Slice 3：数字之我右侧身份、协作与自动化投影 | Not Started | 1–2 周小批次 | Slice 2 至少两条真实执行主链 |
 | Next-2 | Slice 4：机构伙伴沙箱与合作演示 | Not Started | 2–3 个小批次 | Slice 3、现有 Institution Distribution |
@@ -118,7 +118,14 @@
 - 修正首次进入 Discover 的异步刷新覆盖合成验收视图的测试竞态。构建通过；Discover/个人流聚焦回归 35 passed / 1 skipped（跳过项为已有失效开发模型凭据），Electron Discover 2/2 连续通过，harness 正式 AppData 隔离保护通过；
 - 另一条既有 `chat-scroll-electron` 已能进入页面断言，但暴露滚轮事件未推动聊天列表的独立失败；它不是本 Slice 的 Discover 用户主链，本轮不顺手改聊天交互。
 
-Slice 1 仍未完成真实开放来源 30 分钟门、60 个入口可打开率抽样与 Owner 验收；不打包、不 push、不发布。
+### Slice 1C 开发检查点（2026-11-24）
+
+- 无模型费用的真实开放来源健康门连续运行 30 分 17 秒并通过：21 个健康来源、21 个域名、文章/图片/音频/视频 4 种表达、72 条候选池；Wikimedia Commons 的图片与音视频续页游标由首批位置真实推进到下一批，规范化重复为 0；
+- 新增可重复执行的 `discover-stage1-link-openability-check.cjs`，沿用既有开放来源、候选池与 SSRF 防护，不增加搜索供应商、站点特例或模型调用；
+- 当前来源重新形成 251 条目录、72 条候选池、22 个来源；抽取 60 个唯一原文入口，60/60 可打开，达到 ≥95% 退出门；
+- 失败来源继续按现有可用性与退避机制隔离：304 不冒充失效内容恢复，SSRF 拒绝不放宽。
+
+Slice 1 的开发者技术门已完成，仍待 Owner 界面验收；不打包、不 push、不发布。
 
 ## 6. Slice 2 — Doing 领先能力集成
 
