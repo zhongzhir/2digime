@@ -5,21 +5,26 @@ import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastru
 import { describeProfessionals } from './professionals';
 import {
   COPY_FILE_TOOL,
+  DELETE_FILE_TOOL,
   EDIT_FILE_TOOL,
   EXPORT_FILE_TOOL,
   LIST_DIRECTORY_TOOL,
   MAX_WRITE_BYTES,
   MOVE_FILE_TOOL,
+  PREPARE_DELETE_FILE_TOOL,
   READ_FILE_TOOL,
   REVISE_DOCX_TOOL,
   ROLLBACK_FILE_TOOL,
   SEARCH_FILES_TOOL,
   classifyAuthorizedPaths,
   copyAuthorizedFile,
+  deleteAuthorizedFile,
   describeAuthorizedFs,
   editAuthorizedTextFile,
+  inspectAuthorizedDeletion,
   parseEditFileArgs,
   parseExportArgs,
+  parseFilePathArgs,
   parseFileTransferArgs,
   parseReviseDocxArgs,
   resolveAuthorizedFile,
@@ -398,6 +403,39 @@ function parseTextEditSafeDetail(exec: TalkExecution): TextEditSafeDetail | unde
   }
 }
 
+type DeletePreviewSafeDetail = {
+  kind: 'file_delete_preview_v1';
+  confirmationToken: string;
+  target: string;
+  size: number;
+  mtimeMs: number;
+  sha256: string;
+  root?: string;
+};
+
+function parseDeletePreviewSafeDetail(exec: TalkExecution): DeletePreviewSafeDetail | undefined {
+  if (exec.capabilityId !== 'prepare_delete_file' || !exec.ok || !exec.safeDetail) return undefined;
+  try {
+    const parsed = JSON.parse(exec.safeDetail) as Partial<DeletePreviewSafeDetail>;
+    if (
+      parsed.kind !== 'file_delete_preview_v1' || !parsed.confirmationToken || !parsed.target ||
+      !Number.isFinite(parsed.size) || !Number.isFinite(parsed.mtimeMs) || !parsed.sha256
+    ) return undefined;
+    return parsed as DeletePreviewSafeDetail;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseDeleteConfirmationToken(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as { confirmationToken?: string };
+    return String(parsed.confirmationToken || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 function isAbortLike(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const name = (err as { name?: string }).name;
@@ -600,7 +638,7 @@ export async function runTalkTurn(input: {
     '【会话边界】此前 user/assistant 消息只作同一 Thread 背景；当前请求换题时，以标有【当前请求】的最后一条为准。',
     '根据当前数字之我和本次能读到的材料理解用户。摘录若标明未读完，不得说成已经读完；需要其余部分时读取原文件。后续回合仍可读取已附上的文件，不要把上一轮摘录当成全文仍在上下文里。',
     '是否搜索、读取、写入或调用外部能力，由你根据用户这次要什么来决定。询问也可以查证；委托也可以只在对话里交付。不要另做用户没要求的事，也不要因为句式而拒绝需要的工具。',
-    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；修改授权文件夹内现有文本时必须先 read_file，再用 edit_file 精确修改，不得用 write_file 覆盖；主人明确要求撤销最近一次文本修改时用 rollback_file；只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
+    '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；修改授权文件夹内现有文本时必须先 read_file，再用 edit_file 精确修改，不得用 write_file 覆盖；主人明确要求撤销最近一次文本修改时用 rollback_file。删除普通文件必须先调用 prepare_delete_file，把返回的具体目标告诉主人并停止等待；只有紧接着的下一条主人回复明确同意，才调用 delete_file 使用原令牌。不要自行补确认、跨轮沿用或把别的回复当作确认。只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
     '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
     '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
     '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
@@ -647,7 +685,16 @@ export async function runTalkTurn(input: {
   } });
   const ensureWriteTools = () => {
     if (writeAuth.folders.length && !tools.some((item) => item.function.name === 'write_file')) {
-      tools.push(WRITE_FILE_TOOL, EDIT_FILE_TOOL, ROLLBACK_FILE_TOOL, EXPORT_FILE_TOOL, COPY_FILE_TOOL, MOVE_FILE_TOOL);
+      tools.push(
+        WRITE_FILE_TOOL,
+        EDIT_FILE_TOOL,
+        ROLLBACK_FILE_TOOL,
+        PREPARE_DELETE_FILE_TOOL,
+        DELETE_FILE_TOOL,
+        EXPORT_FILE_TOOL,
+        COPY_FILE_TOOL,
+        MOVE_FILE_TOOL,
+      );
     }
   };
   const ensureReadTools = () => {
@@ -1165,6 +1212,191 @@ export async function runTalkTurn(input: {
     });
   };
 
+  const failDeleteAction = (action: {
+    execId: string;
+    capabilityId: 'prepare_delete_file' | 'delete_file';
+    instruction: string;
+    reason: string;
+  }): string => {
+    lastOk = false;
+    lastEvidenceOnly = false;
+    lastPath = undefined;
+    recordExec({
+      id: action.execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: action.capabilityId,
+      instruction: action.instruction,
+      ok: false,
+      summary: action.reason,
+      failureReason: action.reason,
+    });
+    return JSON.stringify({
+      actualSuccess: false,
+      ok: false,
+      capabilityId: action.capabilityId,
+      evidenceOnly: false,
+      failureReason: action.reason,
+      producedOutputs: [],
+      summary: action.reason,
+    });
+  };
+
+  const runPrepareDeleteFile = async (rawArgs: string): Promise<string> => {
+    const parsed = parseFilePathArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    throwIfAborted(input.signal);
+    const preview = await inspectAuthorizedDeletion(auth, parsed);
+    if (!preview.ok || !preview.path || preview.size === undefined || preview.mtimeMs === undefined || !preview.sha256) {
+      return failDeleteAction({
+        execId,
+        capabilityId: 'prepare_delete_file',
+        instruction: parsed.path,
+        reason: preview.reason || '无法准备文件删除确认。',
+      });
+    }
+    const confirmationToken = randomUUID();
+    const detail: DeletePreviewSafeDetail = {
+      kind: 'file_delete_preview_v1',
+      confirmationToken,
+      target: preview.path,
+      size: preview.size,
+      mtimeMs: preview.mtimeMs,
+      sha256: preview.sha256,
+      ...(parsed.root ? { root: parsed.root } : {}),
+    };
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: 'prepare_delete_file',
+      instruction: parsed.path,
+      ok: true,
+      summary: `等待主人确认删除 ${preview.path}（${preview.size} 字节）。`,
+      safeDetail: JSON.stringify(detail),
+      observedEffect: { kind: 'file_delete_previewed', target: preview.path, mutated: false },
+    });
+    lastOk = true;
+    lastEvidenceOnly = true;
+    lastPath = undefined;
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'prepare_delete_file',
+      evidenceOnly: true,
+      confirmationRequired: true,
+      confirmationToken,
+      target: preview.path,
+      fileName: path.basename(preview.path),
+      size: preview.size,
+      sha256: preview.sha256,
+      producedOutputs: [],
+      summary: `尚未删除。请明确告诉主人将删除“${path.basename(preview.path)}”（${preview.size} 字节），并停止等待主人下一条回复。`,
+    });
+  };
+
+  const runDeleteFile = async (rawArgs: string): Promise<string> => {
+    const confirmationToken = parseDeleteConfirmationToken(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    if (!confirmationToken) {
+      return failDeleteAction({ execId, capabilityId: 'delete_file', instruction: '', reason: '缺少一次性删除确认令牌。' });
+    }
+    const previousUserTurn = [...thread.turns]
+      .reverse()
+      .find((turn) => turn.role === 'user' && turn.id !== userTurn.id);
+    const consumedPreviewIds = new Set<string>();
+    for (const exec of thread.executions) {
+      if (exec.capabilityId !== 'delete_file' || !exec.ok || !exec.safeDetail) continue;
+      try {
+        const detail = JSON.parse(exec.safeDetail) as { kind?: string; confirmationExecutionId?: string };
+        if (detail.kind === 'file_delete_v1' && detail.confirmationExecutionId) {
+          consumedPreviewIds.add(detail.confirmationExecutionId);
+        }
+      } catch {
+        /* ignore unrelated execution detail */
+      }
+    }
+    let previewExec: TalkExecution | undefined;
+    let previewDetail: DeletePreviewSafeDetail | undefined;
+    if (previousUserTurn) {
+      for (let index = thread.executions.length - 1; index >= 0; index -= 1) {
+        const candidate = thread.executions[index];
+        if (!candidate || candidate.turnId !== previousUserTurn.id || consumedPreviewIds.has(candidate.id)) continue;
+        const detail = parseDeletePreviewSafeDetail(candidate);
+        if (detail?.confirmationToken === confirmationToken) {
+          previewExec = candidate;
+          previewDetail = detail;
+          break;
+        }
+      }
+    }
+    if (!previewExec || !previewDetail) {
+      return failDeleteAction({
+        execId,
+        capabilityId: 'delete_file',
+        instruction: confirmationToken,
+        reason: '删除确认令牌无效、已使用或不是紧接上一轮产生；请重新准备并确认。',
+      });
+    }
+    throwIfAborted(input.signal);
+    const backupRoot = path.join(input.workRoot, 'artifacts', 'talk-deletions');
+    const result = await deleteAuthorizedFile({
+      auth,
+      args: { path: previewDetail.target, ...(previewDetail.root ? { root: previewDetail.root } : {}) },
+      expectedSha256: previewDetail.sha256,
+      expectedSize: previewDetail.size,
+      expectedMtimeMs: previewDetail.mtimeMs,
+      backupRoot,
+      operationId: execId,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    if (!result.ok || !result.path || !result.sha256 || !result.backupPath || !result.backupSha256) {
+      throwIfAborted(input.signal);
+      return failDeleteAction({
+        execId,
+        capabilityId: 'delete_file',
+        instruction: previewDetail.target,
+        reason: result.reason || '文件删除失败。',
+      });
+    }
+    seq += 1;
+    mutations.push({ target: result.path, seq });
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: 'delete_file',
+      instruction: previewDetail.target,
+      ok: true,
+      summary: `已删除 ${result.path}；删除前内容和恢复副本 SHA-256 已核对。`,
+      safeDetail: JSON.stringify({
+        kind: 'file_delete_v1',
+        confirmationExecutionId: previewExec.id,
+        confirmationToken,
+        target: result.path,
+        size: result.size,
+        sha256: result.sha256,
+        backupPath: result.backupPath,
+        backupSha256: result.backupSha256,
+      }),
+      observedEffect: { kind: 'file_deleted', target: result.path, mutated: true },
+    });
+    lastOk = true;
+    lastEvidenceOnly = false;
+    lastPath = undefined;
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'delete_file',
+      evidenceOnly: false,
+      target: result.path,
+      deletedSha256: result.sha256,
+      recoveryCopyAvailable: true,
+      producedOutputs: [],
+      summary: `已删除“${path.basename(result.path)}”；删除前已保存并核对受控恢复副本。`,
+    });
+  };
+
   const runFileTransfer = async (kind: 'copy_file' | 'move_file', rawArgs: string): Promise<string> => {
     const parsed = parseFileTransferArgs(rawArgs);
     const execId = `run_${randomUUID()}`;
@@ -1647,6 +1879,8 @@ export async function runTalkTurn(input: {
     if (call.name === 'write_file') return runWriteFile(call.arguments);
     if (call.name === 'edit_file') return runEditFile(call.arguments);
     if (call.name === 'rollback_file') return runRollbackFile(call.arguments);
+    if (call.name === 'prepare_delete_file') return runPrepareDeleteFile(call.arguments);
+    if (call.name === 'delete_file') return runDeleteFile(call.arguments);
     if (call.name === 'copy_file') return runFileTransfer('copy_file', call.arguments);
     if (call.name === 'move_file') return runFileTransfer('move_file', call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
@@ -2042,6 +2276,8 @@ export async function runTalkTurn(input: {
       item.capabilityId === 'write_file' ||
       item.capabilityId === 'edit_file' ||
       item.capabilityId === 'rollback_file' ||
+      item.capabilityId === 'prepare_delete_file' ||
+      item.capabilityId === 'delete_file' ||
       item.capabilityId === 'copy_file' ||
       item.capabilityId === 'move_file' ||
       item.capabilityId === 'export_file' ||

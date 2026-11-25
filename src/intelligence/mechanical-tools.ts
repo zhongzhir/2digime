@@ -3,7 +3,7 @@
  * 抽取走 extract.ts，Office 序列化走 export.ts，不做语义判断。
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, existsSync, promises as fs, statSync } from 'node:fs';
+import { constants, createReadStream, existsSync, promises as fs, statSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { TextDecoder } from 'node:util';
@@ -166,6 +166,54 @@ export const ROLLBACK_FILE_TOOL: ChatToolDefinition = {
     },
   },
 };
+
+export const PREPARE_DELETE_FILE_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'prepare_delete_file',
+    description:
+      '准备删除已授权文件夹内的一个普通文件：锁定真实路径、大小和 SHA-256，并返回一次性确认请求。此工具不会删除文件；必须把工具返回的具体文件告诉主人并等待下一条回复。目录和符号链接不能删除。多个授权根时必须填写 root。',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: '授权根内的文件相对路径，或该文件的绝对路径。' },
+        root: { type: 'string', description: '授权根绝对路径；有多个授权根时必填。' },
+      },
+      required: ['path'],
+    },
+  },
+};
+
+export const DELETE_FILE_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'delete_file',
+    description:
+      '仅在主人针对上一轮 prepare_delete_file 明确确认后调用。只接受该准备步骤返回的一次性 confirmationToken；路径和内容由系统从确认记录恢复，不能由模型改写。令牌仅限紧接着的下一次用户回复、只能使用一次。',
+    parameters: {
+      type: 'object',
+      properties: {
+        confirmationToken: { type: 'string', description: '上一轮 prepare_delete_file 返回的一次性确认令牌。' },
+      },
+      required: ['confirmationToken'],
+    },
+  },
+};
+
+export type FilePathArgs = { path: string; root?: string };
+
+export function parseFilePathArgs(raw: string): FilePathArgs {
+  try {
+    const parsed = JSON.parse(raw) as { path?: string; relativePath?: string; root?: string };
+    const root = String(parsed.root || '').trim();
+    return {
+      path: String(parsed.path || parsed.relativePath || '').trim(),
+      ...(root ? { root } : {}),
+    };
+  } catch {
+    return { path: '' };
+  }
+}
 
 export type TextReplacement = { from: string; to: string; expectedCount: number };
 export type EditFileArgs = { path: string; root?: string; replacements: TextReplacement[] };
@@ -542,7 +590,13 @@ export async function resolveAuthorizedFileTransfer(
 }
 
 async function sha256File(filePath: string): Promise<string> {
-  return createHash('sha256').update(await fs.readFile(filePath)).digest('hex');
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 function sha256Bytes(content: Uint8Array | string): string {
@@ -640,6 +694,7 @@ async function resolveAuthorizedEditableFile(
   auth: AuthorizedFs,
   requestedPath: string,
   requestedRoot?: string,
+  maxBytes = MAX_WRITE_BYTES,
 ): Promise<{ ok: true; root: string; abs: string } | { ok: false; reason: string }> {
   const roots = uniqAbs(auth.folders);
   if (!roots.length) return { ok: false, reason: '当前没有已授权的可写文件夹。' };
@@ -665,12 +720,125 @@ async function resolveAuthorizedEditableFile(
     if (linked) return { ok: false, reason: '目标路径包含符号链接，已拒绝操作。' };
     const st = await fs.lstat(resolved.abs);
     if (st.isSymbolicLink() || !st.isFile()) return { ok: false, reason: '目标必须是授权目录内的普通文件。' };
-    if (st.size > MAX_WRITE_BYTES) return { ok: false, reason: `文件超过 ${MAX_WRITE_BYTES} 字节上限。` };
+    if (st.size > maxBytes) return { ok: false, reason: `文件超过 ${maxBytes} 字节上限。` };
   } catch (err) {
     if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return { ok: false, reason: '目标文件不存在。' };
     return { ok: false, reason: String(err instanceof Error ? err.message : err) };
   }
   return { ok: true, root, abs: resolved.abs };
+}
+
+export type AuthorizedDeletionPreview = {
+  ok: boolean;
+  reason?: string;
+  path?: string;
+  size?: number;
+  mtimeMs?: number;
+  sha256?: string;
+};
+
+export async function inspectAuthorizedDeletion(
+  auth: AuthorizedFs,
+  args: FilePathArgs,
+): Promise<AuthorizedDeletionPreview> {
+  const resolved = await resolveAuthorizedEditableFile(auth, args.path, args.root, Number.POSITIVE_INFINITY);
+  if (!resolved.ok) return { ok: false, reason: resolved.reason };
+  try {
+    const st = await fs.lstat(resolved.abs);
+    return {
+      ok: true,
+      path: resolved.abs,
+      size: st.size,
+      mtimeMs: st.mtimeMs,
+      sha256: await sha256File(resolved.abs),
+    };
+  } catch (err) {
+    return { ok: false, reason: String(err instanceof Error ? err.message : err), path: resolved.abs };
+  }
+}
+
+export type AuthorizedDeletionResult = AuthorizedDeletionPreview & {
+  backupPath?: string;
+  backupSha256?: string;
+};
+
+export async function deleteAuthorizedFile(input: {
+  auth: AuthorizedFs;
+  args: FilePathArgs;
+  expectedSha256: string;
+  expectedSize: number;
+  expectedMtimeMs: number;
+  backupRoot: string;
+  operationId: string;
+  signal?: AbortSignal;
+}): Promise<AuthorizedDeletionResult> {
+  const resolved = await resolveAuthorizedEditableFile(input.auth, input.args.path, input.args.root, Number.POSITIVE_INFINITY);
+  if (!resolved.ok) return { ok: false, reason: resolved.reason };
+  const backupDir = path.join(input.backupRoot, input.operationId);
+  const backupPath = path.join(backupDir, `${path.basename(resolved.abs)}.deleted`);
+  const tombstonePath = path.join(path.dirname(resolved.abs), `.${path.basename(resolved.abs)}.2digime-delete-${randomUUID()}`);
+  let renamed = false;
+  try {
+    if (input.signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const before = await fs.lstat(resolved.abs);
+    if (before.size !== input.expectedSize || before.mtimeMs !== input.expectedMtimeMs) {
+      return { ok: false, reason: '文件在确认后发生了变化；为避免删除新内容，请重新发起删除确认。', path: resolved.abs };
+    }
+    const beforeSha256 = await sha256File(resolved.abs);
+    if (beforeSha256 !== input.expectedSha256) {
+      return { ok: false, reason: '文件在确认后发生了变化；为避免删除新内容，请重新发起删除确认。', path: resolved.abs };
+    }
+    await fs.mkdir(backupDir, { recursive: true });
+    await fs.copyFile(resolved.abs, backupPath, constants.COPYFILE_EXCL);
+    const backupSha256 = await sha256File(backupPath);
+    if (backupSha256 !== beforeSha256) {
+      return { ok: false, reason: '删除前恢复副本 SHA-256 核对失败，目标文件未删除。', path: resolved.abs };
+    }
+    if (input.signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    await fs.rename(resolved.abs, tombstonePath);
+    renamed = true;
+    const tombstoneStat = await fs.lstat(tombstonePath);
+    const tombstoneSha256 = await sha256File(tombstonePath);
+    if (!tombstoneStat.isFile() || tombstoneStat.isSymbolicLink() || tombstoneSha256 !== beforeSha256) {
+      await fs.rename(tombstonePath, resolved.abs);
+      renamed = false;
+      return { ok: false, reason: '删除动作前文件身份核对失败，目标文件未删除。', path: resolved.abs };
+    }
+    if (input.signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    await fs.unlink(tombstonePath);
+    renamed = false;
+    try {
+      await fs.lstat(resolved.abs);
+      return { ok: false, reason: '删除后目标路径仍然存在。', path: resolved.abs };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') throw err;
+    }
+    return {
+      ok: true,
+      path: resolved.abs,
+      size: before.size,
+      mtimeMs: before.mtimeMs,
+      sha256: beforeSha256,
+      backupPath,
+      backupSha256,
+    };
+  } catch (err) {
+    if (renamed) {
+      try {
+        await fs.rename(tombstonePath, resolved.abs);
+        renamed = false;
+      } catch {
+        // The verified recovery copy remains in backupPath; report the exact failure below.
+      }
+    }
+    const recovery = renamed ? `；已验证恢复副本位于 ${backupPath}` : '';
+    return {
+      ok: false,
+      reason: `${String(err instanceof Error ? err.message : err)}${recovery}`,
+      path: resolved.abs,
+      ...(existsSync(backupPath) ? { backupPath } : {}),
+    };
+  }
 }
 
 async function readUtf8Text(filePath: string): Promise<{ text: string; bytes: Buffer; sha256: string }> {
