@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "slice-2c-zero-start-talk/1",
+  "source": "real_process",
+  "taskId": "2C-WEB-01",
+  "projectClass": "web",
+  "arm": "2digime_orchestrated",
+  "projectRevision": "5b6b97f81f8008c2a035b55d315b32d251b66caa",
+  "baselineTest": {
+    "exitCode": 1,
+    "outputDigest": "0852b01b358159707501f831de0ae3e9efe01051b3b6ba9f307f986571ad90e3",
+    "startedAt": "2026-11-26T12:47:16.964Z",
+    "finishedAt": "2026-11-26T12:47:17.183Z"
+  },
+  "finalTest": {
+    "exitCode": 0,
+    "outputDigest": "4f4415db47248674e7cd15cec576d223f67f79d16fd12ee3d2e508ad189a4662",
+    "startedAt": "2026-11-26T12:48:10.226Z",
+    "finishedAt": "2026-11-26T12:48:10.448Z"
+  },
+  "changedFiles": ["src/price-card.cjs"],
+  "scopeBoundary": {
+    "policy": "opencode_v1_external_directory_deny",
+    "operatingSystemSandbox": false,
+    "outsideScopeWritesProven": false
+  },
+  "consent": {
+    "prepared": true,
+    "executedAfterNextUserTurn": true,
+    "userText": "同意获取并继续。"
+  },
+  "acquisition": {
+    "displayName": "OpenCode 成熟 Coding Runtime",
+    "version": "1.18.29",
+    "expectedArchiveSha256": "b32618aa3d1415f6e4f473aec248edef25759203fb707d7d968359d86d4a35ee"
+  },
+  "agent": {
+    "executorId": "opencode-acquired-runtime",
+    "version": "1.18.29",
+    "executableDigest": "88d2fa691b2d9e32fde6d1039382a850ddf96fe49cd41683c6375fe1dc8ec2a5"
+  },
+  "talkReceipt": {
+    "threadId": "conv_mwxjrsrb52b6b24c",
+    "executionId": "run_36696744-deaa-402a-8da4-b72555443630",
+    "artifactRefs": ["src/price-card.cjs"],
+    "userVisibleSummary": "已经完成价格格式修复，并在授权项目中运行了原有聚焦测试。"
+  },
+  "allowance": {
+    "beforePercent": 89,
+    "afterPercent": 89,
+    "externalChargeIncurred": false,
+    "amountCny": 0,
+    "usageInterpretation": "rounded_percentage_unchanged_not_zero_usage"
+  },
+  "localCodexUsed": false,
+  "benchmarkEligibility": {
+    "eligible": false,
+    "blockers": [
+      "no_os_level_outside_scope_write_proof",
+      "not_same_agent_build_as_existing_direct_arm"
+    ]
+  },
+  "createdAt": "2026-11-26T12:48:10.788Z"
+}

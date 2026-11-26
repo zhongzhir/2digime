@@ -122,6 +122,10 @@ const DELEGATE_TOOL: ChatToolDefinition = {
           type: 'string',
           description: '已连接能力的 id。多个已连接能力时必须填写。',
         },
+        acquisitionConfirmationToken: {
+          type: 'string',
+          description: '仅在主人明确同意上一轮展示的第三方 runtime 获取说明后，原样传入本轮提供的一次性令牌。',
+        },
       },
       required: ['instruction'],
     },
@@ -300,12 +304,25 @@ function parseConsultArgs(raw: string): {
   }
 }
 
-function parseArgs(raw: string): { instruction: string; capabilityId?: string } {
+function parseArgs(raw: string): {
+  instruction: string;
+  capabilityId?: string;
+  acquisitionConfirmationToken?: string;
+} {
   try {
-    const parsed = JSON.parse(raw) as { instruction?: string; capabilityId?: string };
+    const parsed = JSON.parse(raw) as {
+      instruction?: string;
+      capabilityId?: string;
+      acquisitionConfirmationToken?: string;
+    };
     const instruction = String(parsed.instruction || '').trim();
     const capabilityId = String(parsed.capabilityId || '').trim();
-    return capabilityId ? { instruction, capabilityId } : { instruction };
+    const acquisitionConfirmationToken = String(parsed.acquisitionConfirmationToken || '').trim();
+    return {
+      instruction,
+      ...(capabilityId ? { capabilityId } : {}),
+      ...(acquisitionConfirmationToken ? { acquisitionConfirmationToken } : {}),
+    };
   } catch {
     return { instruction: raw.trim() };
   }
@@ -464,6 +481,111 @@ function findPendingDeletePreview(
     if (detail && (!confirmationToken || detail.confirmationToken === confirmationToken)) {
       return { exec: candidate, detail };
     }
+  }
+  return undefined;
+}
+
+type CapabilityAcquisitionPreviewSafeDetail = {
+  kind: 'capability_acquisition_preview_v1';
+  confirmationToken: string;
+  capabilityId: string;
+  displayName: string;
+  version?: string;
+  sources: string[];
+  expectedSha256?: string;
+  costNotice: string;
+  workingDirectory?: string;
+};
+
+function parseCapabilityAcquisitionPreview(
+  exec: TalkExecution,
+): CapabilityAcquisitionPreviewSafeDetail | undefined {
+  if (exec.capabilityId !== 'prepare_capability_acquisition' || !exec.ok || !exec.safeDetail) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(exec.safeDetail) as Partial<CapabilityAcquisitionPreviewSafeDetail>;
+    if (
+      parsed.kind !== 'capability_acquisition_preview_v1' ||
+      !parsed.confirmationToken ||
+      !parsed.capabilityId ||
+      !parsed.displayName ||
+      !Array.isArray(parsed.sources) ||
+      !parsed.costNotice
+    ) return undefined;
+    return parsed as CapabilityAcquisitionPreviewSafeDetail;
+  } catch {
+    return undefined;
+  }
+}
+
+function findPendingCapabilityAcquisition(
+  thread: TalkThread,
+  currentUserTurnId: string,
+  confirmationToken?: string,
+  capabilityId?: string,
+): { exec: TalkExecution; detail: CapabilityAcquisitionPreviewSafeDetail } | undefined {
+  const previousUserTurn = [...thread.turns]
+    .reverse()
+    .find((turn) => turn.role === 'user' && turn.id !== currentUserTurnId);
+  if (!previousUserTurn) return undefined;
+  const consumedPreviewIds = new Set<string>();
+  for (const exec of thread.executions) {
+    if (!exec.safeDetail) continue;
+    try {
+      const detail = JSON.parse(exec.safeDetail) as {
+        kind?: string;
+        confirmationExecutionId?: string;
+      };
+      if (detail.kind === 'capability_acquisition_attempt_v1' && detail.confirmationExecutionId) {
+        consumedPreviewIds.add(detail.confirmationExecutionId);
+      }
+    } catch {
+      /* ignore unrelated execution detail */
+    }
+  }
+  for (let index = thread.executions.length - 1; index >= 0; index -= 1) {
+    const candidate = thread.executions[index];
+    if (!candidate || candidate.turnId !== previousUserTurn.id || consumedPreviewIds.has(candidate.id)) continue;
+    const detail = parseCapabilityAcquisitionPreview(candidate);
+    if (
+      detail &&
+      (!confirmationToken || detail.confirmationToken === confirmationToken) &&
+      (!capabilityId || detail.capabilityId === capabilityId)
+    ) {
+      return { exec: candidate, detail };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 第三方 runtime 获取会跨一个用户确认回合。只把上一用户轮次已经授权的目录
+ * 延续到紧接着的确认回合；出现任何其它用户轮次或已消费执行后即失效。
+ */
+export function pendingCapabilityAcquisitionWorkspace(thread: TalkThread): string | undefined {
+  const latestUserTurn = [...thread.turns].reverse().find((turn) => turn.role === 'user');
+  if (!latestUserTurn) return undefined;
+  const consumedPreviewIds = new Set<string>();
+  for (const exec of thread.executions) {
+    if (!exec.safeDetail) continue;
+    try {
+      const detail = JSON.parse(exec.safeDetail) as {
+        kind?: string;
+        confirmationExecutionId?: string;
+      };
+      if (detail.kind === 'capability_acquisition_attempt_v1' && detail.confirmationExecutionId) {
+        consumedPreviewIds.add(detail.confirmationExecutionId);
+      }
+    } catch {
+      /* ignore unrelated execution detail */
+    }
+  }
+  for (let index = thread.executions.length - 1; index >= 0; index -= 1) {
+    const candidate = thread.executions[index];
+    if (!candidate || candidate.turnId !== latestUserTurn.id || consumedPreviewIds.has(candidate.id)) continue;
+    const detail = parseCapabilityAcquisitionPreview(candidate);
+    if (detail?.workingDirectory) return detail.workingDirectory;
   }
   return undefined;
 }
@@ -665,6 +787,7 @@ export async function runTalkTurn(input: {
   const pendingDelete = findPendingDeletePreview(thread, userTurn.id);
   const deniedThisTurn = new Set<string>();
   let agents = input.agents.slice();
+  const pendingAcquisition = findPendingCapabilityAcquisition(thread, userTurn.id);
   const system = [
     '你是用户的兔机米，也是用户的超级助手。',
     `【产品能力事实（不是用户偏好）】\n${PRODUCT_CONTEXT}`,
@@ -674,13 +797,26 @@ export async function runTalkTurn(input: {
     '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；修改授权文件夹内现有文本时必须先 read_file，再用 edit_file 精确修改，不得用 write_file 覆盖；主人明确要求撤销最近一次文本修改时用 rollback_file。删除普通文件必须先调用 prepare_delete_file，把返回的具体目标告诉主人并停止等待；只有紧接着的下一条主人回复明确同意，才调用 delete_file 使用原令牌。不要自行补确认、跨轮沿用或把别的回复当作确认。只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
     '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
     '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
-    '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
+    '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。若工具返回第三方 runtime 获取说明，向主人说明将获取什么、从哪里获取、校验方式和费用边界，然后停止等待；不得在同一轮绕过同意继续下载。',
     '工具列表中若提供 web_search、news_search 或 web_extractor，你自主决定是否调用、搜索什么、打开哪些正文、是否补搜或改路。候选或摘要不等于合格结论；关键陈述紧邻来源，只见摘要或读取失败必须明说。',
     '能够回答时就回答，不要无意义地继续调用工具。',
     input.goalReceipt ? `${input.goalReceipt}\n此回执只证明当前目标条件保存，不证明任何文件已创建、修改或读取。本轮文件动作尚未执行；历史回复中声称的执行不能替代本轮工具结果。用户委托修改或回读文件时，必须实际调用相应工具，取得本轮成功结果后才能报告完成。` : '本轮没有已核实的目标保存回执；需要保存时先执行更新工具，没有成功回执不能声称已经保存。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     pendingDelete
       ? `【仅限本轮的待确认删除机械事实】\n目标：${pendingDelete.detail.target}\n一次性 confirmationToken：${pendingDelete.detail.confirmationToken}\n只有当前请求明确确认删除该目标时才可调用 delete_file；否则不要调用，且令牌在本轮结束后失效。`
+      : '',
+    pendingAcquisition
+      ? [
+          '【仅限本轮的待确认第三方能力获取机械事实】',
+          `能力：${pendingAcquisition.detail.displayName}${pendingAcquisition.detail.version ? ` ${pendingAcquisition.detail.version}` : ''}`,
+          `来源：${pendingAcquisition.detail.sources.join('；')}`,
+          pendingAcquisition.detail.expectedSha256
+            ? `固定 SHA-256：${pendingAcquisition.detail.expectedSha256}`
+            : '',
+          `费用边界：${pendingAcquisition.detail.costNotice}`,
+          `一次性 acquisitionConfirmationToken：${pendingAcquisition.detail.confirmationToken}`,
+          `只有当前请求明确同意获取该能力时，才可再次调用 delegate，并携带该令牌和 capabilityId=${pendingAcquisition.detail.capabilityId}；否则不要调用。令牌仅限本轮、只能使用一次。`,
+        ].filter(Boolean).join('\n')
       : '',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
     '工具回读是文件和执行的机械事实。完成与否由你对照用户要求和这些事实判断，不要另造验收句子去否定已经写对的文件，也不要把没发生的读取、修改或保存说成已经发生。',
@@ -1748,6 +1884,80 @@ export async function runTalkTurn(input: {
         summary: failureReason,
       });
     }
+    let acquisitionConfirmation:
+      | { exec: TalkExecution; detail: CapabilityAcquisitionPreviewSafeDetail }
+      | undefined;
+    if (agent.runtimeStatus === 'acquirable' && agent.acquisition) {
+      const confirmationToken = parsed.acquisitionConfirmationToken;
+      if (!confirmationToken) {
+        const previewExecId = `run_${randomUUID()}`;
+        const previewDetail: CapabilityAcquisitionPreviewSafeDetail = {
+          kind: 'capability_acquisition_preview_v1',
+          confirmationToken: randomUUID(),
+          capabilityId: agent.id,
+          displayName: agent.acquisition.displayName,
+          ...(agent.acquisition.version ? { version: agent.acquisition.version } : {}),
+          sources: agent.acquisition.sources,
+          ...(agent.acquisition.expectedSha256
+            ? { expectedSha256: agent.acquisition.expectedSha256 }
+            : {}),
+          costNotice: agent.acquisition.costNotice,
+          ...(agent.acquisition.workingDirectory
+            ? { workingDirectory: agent.acquisition.workingDirectory }
+            : {}),
+        };
+        recordExec({
+          id: previewExecId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'prepare_capability_acquisition',
+          instruction: agent.id,
+          ok: true,
+          summary: `已准备 ${previewDetail.displayName} 的获取说明，尚未下载或执行。`,
+          safeDetail: JSON.stringify(previewDetail),
+        });
+        lastOk = false;
+        lastEvidenceOnly = false;
+        lastPath = undefined;
+        return JSON.stringify({
+          actualSuccess: false,
+          ok: false,
+          confirmationRequired: true,
+          capabilityId: agent.id,
+          acquisition: {
+            displayName: previewDetail.displayName,
+            ...(previewDetail.version ? { version: previewDetail.version } : {}),
+            sources: previewDetail.sources,
+            ...(previewDetail.expectedSha256
+              ? { expectedSha256: previewDetail.expectedSha256 }
+              : {}),
+            costNotice: previewDetail.costNotice,
+          },
+          producedOutputs: [],
+          summary: '第三方专业能力尚未获取；需要先向主人说明并等待下一轮明确同意。',
+        });
+      }
+      acquisitionConfirmation = findPendingCapabilityAcquisition(
+        thread,
+        userTurn.id,
+        confirmationToken,
+        agent.id,
+      );
+      if (!acquisitionConfirmation) {
+        const failureReason = '第三方能力获取同意已失效或不属于本次能力，没有下载或执行。';
+        lastOk = false;
+        lastEvidenceOnly = false;
+        lastPath = undefined;
+        return JSON.stringify({
+          actualSuccess: false,
+          ok: false,
+          capabilityId: agent.id,
+          failureReason,
+          producedOutputs: [],
+          summary: failureReason,
+        });
+      }
+    }
     const instruction = parsed.instruction || input.userText;
     const execId = `run_${randomUUID()}`;
     const workDir = path.join(input.workRoot, 'intelligence', 'runs', execId);
@@ -1817,7 +2027,18 @@ export async function runTalkTurn(input: {
       ok: result.ok,
       summary: result.summary,
       ...(failureReason ? { failureReason } : {}),
-      ...(result.safeDetail ? { safeDetail: result.safeDetail } : {}),
+      ...(acquisitionConfirmation
+        ? {
+            safeDetail: JSON.stringify({
+              kind: 'capability_acquisition_attempt_v1',
+              confirmationExecutionId: acquisitionConfirmation.exec.id,
+              capabilityId: agent.id,
+              ...(result.safeDetail ? { agentSafeDetail: result.safeDetail } : {}),
+            }),
+          }
+        : result.safeDetail
+          ? { safeDetail: result.safeDetail }
+          : {}),
       ...(outputs.length ? { producedOutputs: outputs } : {}),
       ...(lastPath ? { outputPath: lastPath } : {}),
       ...(result.ok && lastPath

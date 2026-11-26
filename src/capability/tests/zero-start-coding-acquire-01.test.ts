@@ -9,7 +9,10 @@ import * as path from 'node:path';
 import { acquireCapability, type AcquireCandidate } from '../acquire-capability';
 import { mapChatModelToProviderEnv } from '../chat-model-credential-bridge';
 import { defaultCodingRuntimeCandidates } from '../coding-runtime-candidates';
-import { createAcquiredCodingExecutorAdapter } from '../adapters/acquired-coding-executor';
+import {
+  createAcquiredCodingExecutorAdapter,
+  writeAcquiredCodingProviderConfig,
+} from '../adapters/acquired-coding-executor';
 import { createExternalExecutorCodexAdapter } from '../adapters/external-executor-codex';
 import { recommendedCodingCapability } from '../coding-capability';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
@@ -19,6 +22,27 @@ import { CapabilityRegistry } from '../registry';
 import { routeCodingAgent } from '../coding-agent-route';
 
 describe('zero-start-coding-acquire-01', () => {
+  it('获取后的 runtime 配置拒绝授权项目外目录和内置联网工具', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-acquired-config-'));
+    const configPath = writeAcquiredCodingProviderConfig(
+      root,
+      'managed-ai',
+      false,
+      'http://127.0.0.1:1234/v1',
+    );
+    const config = JSON.parse(await fs.readFile(configPath, 'utf8')) as {
+      permissions?: unknown;
+      policies?: unknown;
+      permission?: Record<string, string>;
+    };
+    assert.equal(config.permissions, undefined);
+    assert.equal(config.policies, undefined);
+    assert.equal(config.permission?.external_directory, 'deny');
+    assert.equal(config.permission?.webfetch, 'deny');
+    assert.equal(config.permission?.websearch, 'deny');
+    assert.equal(config.permission?.task, 'deny');
+  });
+
   it('acquireCapability 按候选顺序获取，不理解用户任务', async () => {
     const seen: string[] = [];
     const failing: AcquireCandidate = {
@@ -68,6 +92,7 @@ describe('zero-start-coding-acquire-01', () => {
     assert.equal(bridged.nativeDeepSeek, true);
     assert.equal(bridged.modelRef, 'deepseek/deepseek-v4-flash');
     assert.equal(bridged.env.DEEPSEEK_API_KEY, 'secret-key-value');
+    assert.equal(bridged.baseUrl, 'https://api.deepseek.com/v1');
     assert.equal(bridged.host, 'api.deepseek.com');
   });
 

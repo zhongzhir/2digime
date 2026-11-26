@@ -157,6 +157,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 没有 API Key、购买、充值或按量付费，按现有权益记零新增外部收费；订阅额度消耗不可见，不写零配额消耗。第一次启动在 CLI 参数解析阶段停止，未进入模型、未改文件并已清理；修正参数层级后用全新副本完成唯一一次真实运行。当前状态为 `SLICE_2C_WEB_DIRECT_PASS / WEB_ORCHESTRATED_PENDING`，仍不是双臂、四类覆盖、95%、Owner 验收、打包、push、发布或部署。下一小批次只做同一 Web 任务的 2digime 正式 Talk 编排臂。
 
+### Slice 2C-6 开发检查点（2026-11-26）
+
+“用户必须预装并登录本机 Codex CLI”已从产品路径移除。用户只有兔机米时，正式 Talk 会先展示可获取的 OpenCode 1.18.29、来源、固定 SHA-256 和费用边界；只有下一轮明确同意后才下载、校验并执行。兔机米把当前托管模型以仅回环、随机临时 token 的兼容端点交给本次 Runtime，结束即关闭；上一轮目录授权只延续到紧接着的确认回合，执行后失效。
+
+`2C-WEB-01` 零起步真实产品链通过：基线失败，只修改 `src/price-card.cjs`，最终测试通过，同一 Talk 的 Execution/Artifact/用户可见摘要成立；本机 Codex 未参与，没有购买、充值或按量付费。免费额度百分比 89%→89% 不代表零模型消耗。OpenCode V1 配置已拒绝外部目录、内置网页工具和子 Agent，但不是 Windows OS 级 sandbox；同时既有直连样本使用 Codex，本次编排使用 OpenCode，不满足同一 Agent build。当前状态为 `ZERO_START_PRODUCT_CHAIN_PASS / FORMAL_BENCHMARK_INELIGIBLE`，不得据此计算 95%、宣称零越界写入或转入其余三类评分任务。下一小批次只解决 OS 级工作区边界与同一 build 准入。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-ZERO-START-TALK-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-ZERO-START-TALK-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

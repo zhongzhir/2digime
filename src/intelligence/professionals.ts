@@ -36,6 +36,10 @@ export function describeProfessionals(agents: ProfessionalAgent[]): string {
       if (agent.authNeeded) lines.push(`  需要授权：${agent.authNeeded}`);
       if (agent.runtimeStatus === 'ready') lines.push('  专业 runtime：已准备好');
       if (agent.runtimeStatus === 'acquirable') lines.push('  专业 runtime：可获得（尚未准备好）');
+      if (agent.acquisition) {
+        lines.push(`  第三方 runtime：${agent.acquisition.displayName}${agent.acquisition.version ? ` ${agent.acquisition.version}` : ''}`);
+        lines.push('  获取前必须先向主人说明并取得一次性同意');
+      }
       return lines.join('\n');
     })
     .join('\n');
@@ -88,6 +92,15 @@ function authNeededFor(reg: CapabilityRegistration): string {
     : '不需要工作目录授权';
 }
 
+function readAcquisitionPreview(adapter: CapabilityAdapter): ProfessionalAgent['acquisition'] {
+  const preview = (
+    adapter as CapabilityAdapter & {
+      mechanicalAcquisitionPreview?: () => ProfessionalAgent['acquisition'];
+    }
+  ).mechanicalAcquisitionPreview;
+  return typeof preview === 'function' ? preview() : undefined;
+}
+
 function readRuntimeStatus(adapter: CapabilityAdapter): 'ready' | 'acquirable' | undefined {
   const probe = (
     adapter as CapabilityAdapter & { mechanicalRuntimeStatus?: () => 'ready' | 'acquirable' }
@@ -106,12 +119,20 @@ function wrapAdapter(
   const artifactType = reg.outputArtifactTypes[0] || 'document';
   const projectDir = writes ? input.authorizedWorkingDirectory : undefined;
   const runtimeStatus = readRuntimeStatus(adapter);
+  const acquisitionPreview = readAcquisitionPreview(adapter);
+  const acquisition = acquisitionPreview
+    ? {
+        ...acquisitionPreview,
+        ...(writes && projectDir ? { workingDirectory: projectDir } : {}),
+      }
+    : undefined;
   return {
     id: reg.id,
     label: reg.displayName,
     description: factualDescription(reg),
     authNeeded: authNeededFor(reg),
     ...(runtimeStatus ? { runtimeStatus } : {}),
+    ...(acquisition ? { acquisition } : {}),
     ...(searchLike ? { returnsEvidence: true } : {}),
     async run(runInput): Promise<ProfessionalResult> {
       await fs.mkdir(runInput.workDir, { recursive: true });

@@ -287,6 +287,16 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 
 下一小批次只运行同一 Web 任务的 2digime 正式 Talk 编排臂，并要求同一 Codex build、独立副本、真实 Thread/Execution/Artifact 回执。该臂未通过前不评分，也不转入桌面、后端或脏工作区。
 
+#### Slice 2C-6 开发检查点（2026-11-26）
+
+- 纠正“依赖用户预装并登录本机 Codex CLI”的产品设计：用户只有兔机米时，正式 Talk 可先展示第三方成熟 Runtime 的固定版本、来源、SHA-256 与费用边界，取得下一轮一次性同意后再获取、校验和执行；不要求用户理解或配置 Coding 工具；
+- 兔机米现有托管模型通过仅回环、随机临时 token 的 OpenAI-compatible 桥接驱动获取后的 OpenCode 1.18.29，退出后关闭桥接，不把安装令牌或模型凭证交给 Runtime；第一轮目录只延续到紧接着的确认回合，消费后失效；
+- `2C-WEB-01` 零起步真实产品链通过：基线失败，只修改 `src/price-card.cjs`，最终测试通过，Talk Thread/Execution/Artifact 回执成立；本机 Codex 未参与，未购买、充值或按量付费，免费额度百分比 89%→89% 不能解释为零模型消耗；
+- OpenCode V1 配置拒绝外部目录、内置网页工具和子 Agent，并补齐隔离进程的 Windows 基础环境；但它不是 OS 级 sandbox，运行器不再伪报零越界写入；
+- 因缺少 OS 级外部写证明，且本次 OpenCode 与既有 Codex 直连样本不是同一 Agent build，本结果状态为 `ZERO_START_PRODUCT_CHAIN_PASS / FORMAL_BENCHMARK_INELIGIBLE`，不计算双臂相对分，不宣称 95% 或 Owner 验收。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-ZERO-START-TALK-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-ZERO-START-TALK-01.md)。
+
+下一小批次只解决可获取 Runtime 的 OS 级工作区边界与同一 Agent build 的直连/编排准入；两项未同时成立时继续 fail-closed，不转入其余三类正式任务。
+
 ### 2D. 第三方系统
 
 - 统一接入 MCP、OAuth/OIDC API、官方 Connector/Skill；不为每个网站写关键词路由或页面脚本；

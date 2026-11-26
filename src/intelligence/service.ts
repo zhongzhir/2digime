@@ -11,7 +11,13 @@ import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
 import { persistDiscoveryGoalUpdate } from './store';
 import { randomUUID } from 'node:crypto';
-import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
+import {
+  EMPTY_REPLY,
+  NO_MODEL_NOTICE,
+  pendingCapabilityAcquisitionWorkspace,
+  runTalkTurn,
+  type SubjectCollabPort,
+} from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
 import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkTurnOutcome, TalkView, TalkThread } from './types';
 import { listContentPreferences, formatPreferenceDirectives } from '../subject-comm/content-preferences';
@@ -290,8 +296,15 @@ export class TalkService {
           .filter(Boolean),
       ),
     ];
+    const pendingAcquisitionWorkspace = pendingCapabilityAcquisitionWorkspace(thread);
+    const effectiveContextPaths = [
+      ...new Set([
+        ...contextPaths,
+        ...(pendingAcquisitionWorkspace ? [pendingAcquisitionWorkspace] : []),
+      ]),
+    ];
     const writeFolders = [...new Set(grantedFolders.map((item) => String(item || '').trim()).filter(Boolean))];
-    const turnCtx = contextPaths.length ? { contextPaths } : {};
+    const turnCtx = effectiveContextPaths.length ? { contextPaths: effectiveContextPaths } : {};
     const ac = new AbortController();
     const timer = setTimeout(() => {
       if (!ac.signal.aborted) ac.abort(new TalkTimeoutError());
@@ -332,7 +345,7 @@ export class TalkService {
         onExecution: (rec) => {
           turnExecutions.push(rec);
         },
-        ...(contextPaths.length ? { contextPaths } : {}),
+        ...(effectiveContextPaths.length ? { contextPaths: effectiveContextPaths } : {}),
         ...(writeFolders.length ? { writeFolders } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),

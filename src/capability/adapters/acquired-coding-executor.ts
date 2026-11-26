@@ -16,7 +16,14 @@ import type {
 import type { CapabilityRegistration } from '../registration';
 import { acquireCapability, type AcquireCandidate, type AcquireResult } from '../acquire-capability';
 import { defaultCodingRuntimeCandidates, probeCachedOpencodeRuntime } from '../coding-runtime-candidates';
+import {
+  OPENCODE_ASSET_SHA256,
+  OPENCODE_PINNED_VERSION,
+  defaultOpencodeSources,
+} from '../coding-runtime-manifest';
 import { mapChatModelToProviderEnv, type ChatModelConnection } from '../chat-model-credential-bridge';
+import { startLocalChatModelBridge } from '../chat-model-http-bridge';
+import type { ChatCompleteFn } from '../../subject-core/structured-distill';
 import { hiddenSpawnOptions } from '../../execution/hidden-spawn';
 import { CODE_CHANGE_ARTIFACT_TYPE } from '../../execution/external-executor-contract';
 
@@ -44,6 +51,14 @@ export interface AcquiredCodingExecutorOptions {
   acquireHook?: (ctx: { runtimeRoot: string }) => Promise<AcquireResult>;
 }
 
+export interface AcquiredCodingPreview {
+  displayName: string;
+  version: string;
+  sources: string[];
+  expectedSha256: string;
+  costNotice: string;
+}
+
 function renderAcquiredCodingPrompt(instruction: string, workingDirectory: string): string {
   return [
     instruction,
@@ -65,6 +80,19 @@ export function acquiredCodingRuntimeStatus(options: AcquiredCodingExecutorOptio
   return probeCachedOpencodeRuntime(options.runtimeRoot) ? 'ready' : 'acquirable';
 }
 
+export function acquiredCodingRuntimePreview(
+  options: AcquiredCodingExecutorOptions,
+): AcquiredCodingPreview | undefined {
+  if (acquiredCodingRuntimeStatus(options) !== 'acquirable') return undefined;
+  return {
+    displayName: 'OpenCode 成熟 Coding Runtime',
+    version: OPENCODE_PINNED_VERSION,
+    sources: defaultOpencodeSources().map((source) => source.url),
+    expectedSha256: OPENCODE_ASSET_SHA256,
+    costNotice: '运行包下载本身不收费；模型调用沿用兔机米当前已经连接的模型与既有额度。',
+  };
+}
+
 function isolatedPath(runtimeDir: string): string {
   const root = process.env.SystemRoot || 'C:\\Windows';
   const parts = [
@@ -79,15 +107,30 @@ function isolatedPath(runtimeDir: string): string {
   return parts.join(';');
 }
 
-function writeProviderConfig(configDir: string, modelId: string, nativeDeepSeek: boolean, baseUrl?: string): string {
+export function writeAcquiredCodingProviderConfig(
+  configDir: string,
+  modelId: string,
+  nativeDeepSeek: boolean,
+  baseUrl?: string,
+): string {
   const configPath = path.join(configDir, 'opencode.json');
+  const executionBoundary = {
+    // OpenCode 1.18.x uses the V1 permission object. Deny rules remain in force in --auto mode.
+    permission: {
+      '*': 'allow',
+      external_directory: 'deny',
+      webfetch: 'deny',
+      websearch: 'deny',
+      task: 'deny',
+    },
+  };
   const cfg = nativeDeepSeek
     ? {
         $schema: 'https://opencode.ai/config.json',
         model: `deepseek/${modelId}`,
         enabled_providers: ['deepseek'],
         autoupdate: false,
-        permission: { '*': 'allow' },
+        ...executionBoundary,
         provider: {
           deepseek: {
             npm: '@ai-sdk/openai-compatible',
@@ -104,7 +147,7 @@ function writeProviderConfig(configDir: string, modelId: string, nativeDeepSeek:
         $schema: 'https://opencode.ai/config.json',
         model: `openai-compatible/${modelId}`,
         autoupdate: false,
-        permission: { '*': 'allow' },
+        ...executionBoundary,
         provider: {
           'openai-compatible': {
             npm: '@ai-sdk/openai-compatible',
@@ -122,23 +165,41 @@ function writeProviderConfig(configDir: string, modelId: string, nativeDeepSeek:
   return configPath;
 }
 
-function runAcquiredCli(input: {
+async function runAcquiredCli(input: {
   exe: string;
   prompt: string;
   workingDirectory: string;
   modelRef: string;
+  providerBaseUrl: string;
+  chatComplete?: ChatCompleteFn;
   extraEnv: Record<string, string>;
   timeoutMs: number;
   signal?: AbortSignal;
 }): Promise<AcquiredCodingRunResult> {
+  const bridge = input.chatComplete
+    ? await startLocalChatModelBridge({
+        complete: input.chatComplete,
+        model: input.modelRef.split('/')[1] || input.modelRef,
+        ...(input.signal ? { signal: input.signal } : {}),
+      })
+    : undefined;
   const home = path.join(path.dirname(input.exe), '..', '..', 'home');
   const configDir = path.join(path.dirname(input.exe), '..', '..', 'config');
   const modelId = input.modelRef.split('/')[1] || input.modelRef;
   const nativeDeepSeek = input.modelRef.startsWith('deepseek/');
-  const configPath = writeProviderConfig(configDir, modelId, nativeDeepSeek);
+  const configPath = writeAcquiredCodingProviderConfig(
+    configDir,
+    modelId,
+    nativeDeepSeek,
+    bridge?.baseUrl || input.providerBaseUrl,
+  );
   const env: NodeJS.ProcessEnv = {
     PATH: isolatedPath(path.dirname(input.exe)),
     SystemRoot: process.env.SystemRoot || 'C:\\Windows',
+    COMSPEC: process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe',
+    PATHEXT: process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD',
+    TEMP: process.env.TEMP,
+    TMP: process.env.TMP,
     OPENCODE_CONFIG: configPath,
     OPENCODE_DISABLE_AUTOUPDATE: '1',
     OPENCODE_DISABLE_DEFAULT_PLUGINS: '1',
@@ -148,8 +209,10 @@ function runAcquiredCli(input: {
     XDG_CONFIG_HOME: path.join(home, 'xdg-config'),
     XDG_STATE_HOME: path.join(home, 'xdg-state'),
     ...input.extraEnv,
+    ...(bridge ? { OPENAI_API_KEY: bridge.apiKey } : {}),
   };
-  return new Promise((resolve, reject) => {
+  try {
+    return await new Promise((resolve, reject) => {
     const child = spawn(
       input.exe,
       ['run', '--auto', '--dir', input.workingDirectory, '--model', input.modelRef, input.prompt],
@@ -183,7 +246,10 @@ function runAcquiredCli(input: {
         summary: (stdout || stderr || '已返回执行结果').slice(0, 12000),
       });
     });
-  });
+    });
+  } finally {
+    await bridge?.close().catch(() => undefined);
+  }
 }
 
 export function createAcquiredCodingExecutorAdapter(
@@ -319,6 +385,8 @@ export function createAcquiredCodingExecutorAdapter(
           prompt,
           workingDirectory,
           modelRef: bridged.modelRef,
+          providerBaseUrl: bridged.baseUrl,
+          ...(bridged.complete ? { chatComplete: bridged.complete } : {}),
           extraEnv: bridged.env,
           timeoutMs,
           signal: ctx.signal,
@@ -367,5 +435,6 @@ export function createAcquiredCodingExecutorAdapter(
     },
   }), {
     mechanicalRuntimeStatus: () => acquiredCodingRuntimeStatus(options),
+    mechanicalAcquisitionPreview: () => acquiredCodingRuntimePreview(options),
   });
 }

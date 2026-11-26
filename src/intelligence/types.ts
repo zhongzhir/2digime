@@ -128,6 +128,19 @@ export interface ProfessionalAgent {
   authNeeded?: string;
   /** 专业 runtime 是否已经在本机准备好；acquirable 表示调用时才会获取。 */
   runtimeStatus?: 'ready' | 'acquirable';
+  /**
+   * 尚未安装时可向主人说明的机械获取事实。
+   * 这不是能力商店或推荐，只用于在下载、校验并执行第三方 runtime 前取得一次性同意。
+   */
+  acquisition?: {
+    displayName: string;
+    version?: string;
+    sources: string[];
+    expectedSha256?: string;
+    costNotice: string;
+    /** 只用于把本轮已授权目录延续到紧接着的获取确认回合。 */
+    workingDirectory?: string;
+  };
   /** 运行态：该能力返回证据而非用户交付物。 */
   returnsEvidence?: boolean;
   run(input: {
