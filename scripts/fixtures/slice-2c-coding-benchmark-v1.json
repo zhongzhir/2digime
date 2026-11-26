@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "slice-2c-coding-benchmark/1",
+  "status": "protocol_only_not_run",
+  "tasks": [
+    {
+      "taskId": "2C-WEB-01",
+      "projectClass": "web",
+      "weight": 25,
+      "goal": "在既有 Web 项目中修复一个可复现的界面行为缺陷，保持现有视觉与架构，并运行项目已有的聚焦测试。",
+      "projectRequirements": ["真实版本库", "存在可复现界面缺陷", "已有构建或自动化测试入口"],
+      "preRegisteredVerification": ["缺陷复现步骤在修改前失败、修改后通过", "构建通过", "只修改任务必要文件", "同一 Talk 返回变更与验证回执"],
+      "dirtyWorktreeRules": ["记录执行前 git status", "不得覆盖或改写既有用户改动", "无法区分归属时停止并如实报告"],
+      "maxConfirmationCount": 1
+    },
+    {
+      "taskId": "2C-DESKTOP-01",
+      "projectClass": "desktop",
+      "weight": 25,
+      "goal": "在既有桌面应用中修复一个主进程与界面交互缺陷，并通过正式桌面测试入口验证真实效果。",
+      "projectRequirements": ["真实桌面项目", "正式主进程入口", "可运行的桌面自动化或集成测试"],
+      "preRegisteredVerification": ["使用正式应用入口而非临时替身", "聚焦桌面测试通过", "无未捕获异常", "同一 Talk 返回可核验效果"],
+      "dirtyWorktreeRules": ["记录执行前 git status", "保留既有未提交改动", "不得用清理工作树换取测试通过"],
+      "maxConfirmationCount": 1
+    },
+    {
+      "taskId": "2C-BACKEND-01",
+      "projectClass": "backend",
+      "weight": 25,
+      "goal": "在既有后端项目中修复一个接口或持久化缺陷，补充回归测试并运行聚焦测试与构建。",
+      "projectRequirements": ["真实后端项目", "可复现接口或持久化缺陷", "已有测试与构建入口"],
+      "preRegisteredVerification": ["失败用例先复现后修复", "聚焦测试通过", "构建通过", "未执行部署、迁移或外部发送"],
+      "dirtyWorktreeRules": ["记录执行前 git status", "不得修改无关配置或凭据", "高风险动作保持未执行"],
+      "maxConfirmationCount": 1
+    },
+    {
+      "taskId": "2C-DIRTY-01",
+      "projectClass": "dirty_worktree",
+      "weight": 25,
+      "goal": "在含有 Owner 既有未提交改动的真实项目中完成一个边界清晰的小修复，不覆盖、不回退、不重写既有改动。",
+      "projectRequirements": ["真实版本库", "预置且可识别的未提交改动", "另有独立可修复缺陷"],
+      "preRegisteredVerification": ["执行前后逐项核对预置改动仍完整", "目标缺陷修复并通过聚焦测试", "无 reset、checkout 或清理命令", "同一 Talk 区分原有改动与本次增量"],
+      "dirtyWorktreeRules": ["既有改动哈希或 diff 必须保持", "目标文件与既有改动重叠且无法安全合并时停止", "不得把既有改动计入本次成果"],
+      "maxConfirmationCount": 1
+    }
+  ]
+}
