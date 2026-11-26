@@ -1,0 +1,6 @@
+{
+  "name": "slice-2c-desktop-window-state",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": { "test": "node --test test/window-state.test.cjs" }
+}

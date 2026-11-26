@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "slice-2c-project-materials/1",
+  "materials": [
+    {
+      "taskId": "2C-WEB-01",
+      "projectClass": "web",
+      "fixtureDir": "slice-2c-projects/web-price-card",
+      "testFile": "test/price-card.test.cjs",
+      "expectedFailureMarker": "keeps two decimal places"
+    },
+    {
+      "taskId": "2C-DESKTOP-01",
+      "projectClass": "desktop",
+      "fixtureDir": "slice-2c-projects/desktop-window-state",
+      "testFile": "test/window-state.test.cjs",
+      "expectedFailureMarker": "moves an off-screen window"
+    },
+    {
+      "taskId": "2C-BACKEND-01",
+      "projectClass": "backend",
+      "fixtureDir": "slice-2c-projects/backend-retry-after",
+      "testFile": "test/retry-after.test.cjs",
+      "expectedFailureMarker": "converts seconds to milliseconds"
+    },
+    {
+      "taskId": "2C-DIRTY-01",
+      "projectClass": "dirty_worktree",
+      "fixtureDir": "slice-2c-projects/dirty-title-normalizer",
+      "testFile": "test/title-normalizer.test.cjs",
+      "expectedFailureMarker": "preserves meaningful inner spacing",
+      "dirtySetup": {
+        "protectedPath": "OWNER-NOTES.md",
+        "appendText": "\nOwner draft: keep this uncommitted sentence intact.\n"
+      }
+    }
+  ]
+}

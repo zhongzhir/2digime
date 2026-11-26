@@ -1,0 +1,5 @@
+{
+  "name": "slice-2c-web-price-card",
+  "private": true,
+  "scripts": { "test": "node --test test/price-card.test.cjs" }
+}

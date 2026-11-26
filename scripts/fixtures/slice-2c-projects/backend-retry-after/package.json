@@ -1,0 +1,5 @@
+{
+  "name": "slice-2c-backend-retry-after",
+  "private": true,
+  "scripts": { "test": "node --test test/retry-after.test.cjs" }
+}

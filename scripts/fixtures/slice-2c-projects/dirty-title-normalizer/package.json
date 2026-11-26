@@ -1,0 +1,5 @@
+{
+  "name": "slice-2c-dirty-title-normalizer",
+  "private": true,
+  "scripts": { "test": "node --test test/title-normalizer.test.cjs" }
+}
