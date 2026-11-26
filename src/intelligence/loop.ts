@@ -436,6 +436,38 @@ function parseDeleteConfirmationToken(raw: string): string {
   }
 }
 
+function findPendingDeletePreview(
+  thread: TalkThread,
+  currentUserTurnId: string,
+  confirmationToken?: string,
+): { exec: TalkExecution; detail: DeletePreviewSafeDetail } | undefined {
+  const previousUserTurn = [...thread.turns]
+    .reverse()
+    .find((turn) => turn.role === 'user' && turn.id !== currentUserTurnId);
+  if (!previousUserTurn) return undefined;
+  const consumedPreviewIds = new Set<string>();
+  for (const exec of thread.executions) {
+    if (exec.capabilityId !== 'delete_file' || !exec.ok || !exec.safeDetail) continue;
+    try {
+      const detail = JSON.parse(exec.safeDetail) as { kind?: string; confirmationExecutionId?: string };
+      if (detail.kind === 'file_delete_v1' && detail.confirmationExecutionId) {
+        consumedPreviewIds.add(detail.confirmationExecutionId);
+      }
+    } catch {
+      /* ignore unrelated execution detail */
+    }
+  }
+  for (let index = thread.executions.length - 1; index >= 0; index -= 1) {
+    const candidate = thread.executions[index];
+    if (!candidate || candidate.turnId !== previousUserTurn.id || consumedPreviewIds.has(candidate.id)) continue;
+    const detail = parseDeletePreviewSafeDetail(candidate);
+    if (detail && (!confirmationToken || detail.confirmationToken === confirmationToken)) {
+      return { exec: candidate, detail };
+    }
+  }
+  return undefined;
+}
+
 function isAbortLike(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const name = (err as { name?: string }).name;
@@ -630,6 +662,7 @@ export async function runTalkTurn(input: {
     }
   }
   const auth = writeAuth;
+  const pendingDelete = findPendingDeletePreview(thread, userTurn.id);
   const deniedThisTurn = new Set<string>();
   let agents = input.agents.slice();
   const system = [
@@ -646,6 +679,9 @@ export async function runTalkTurn(input: {
     '能够回答时就回答，不要无意义地继续调用工具。',
     input.goalReceipt ? `${input.goalReceipt}\n此回执只证明当前目标条件保存，不证明任何文件已创建、修改或读取。本轮文件动作尚未执行；历史回复中声称的执行不能替代本轮工具结果。用户委托修改或回读文件时，必须实际调用相应工具，取得本轮成功结果后才能报告完成。` : '本轮没有已核实的目标保存回执；需要保存时先执行更新工具，没有成功回执不能声称已经保存。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
+    pendingDelete
+      ? `【仅限本轮的待确认删除机械事实】\n目标：${pendingDelete.detail.target}\n一次性 confirmationToken：${pendingDelete.detail.confirmationToken}\n只有当前请求明确确认删除该目标时才可调用 delete_file；否则不要调用，且令牌在本轮结束后失效。`
+      : '',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
     '工具回读是文件和执行的机械事实。完成与否由你对照用户要求和这些事实判断，不要另造验收句子去否定已经写对的文件，也不要把没发生的读取、修改或保存说成已经发生。',
     '不要问用户选择 Agent、任务类型、workflow、协作者或协议。',
@@ -1301,36 +1337,8 @@ export async function runTalkTurn(input: {
     if (!confirmationToken) {
       return failDeleteAction({ execId, capabilityId: 'delete_file', instruction: '', reason: '缺少一次性删除确认令牌。' });
     }
-    const previousUserTurn = [...thread.turns]
-      .reverse()
-      .find((turn) => turn.role === 'user' && turn.id !== userTurn.id);
-    const consumedPreviewIds = new Set<string>();
-    for (const exec of thread.executions) {
-      if (exec.capabilityId !== 'delete_file' || !exec.ok || !exec.safeDetail) continue;
-      try {
-        const detail = JSON.parse(exec.safeDetail) as { kind?: string; confirmationExecutionId?: string };
-        if (detail.kind === 'file_delete_v1' && detail.confirmationExecutionId) {
-          consumedPreviewIds.add(detail.confirmationExecutionId);
-        }
-      } catch {
-        /* ignore unrelated execution detail */
-      }
-    }
-    let previewExec: TalkExecution | undefined;
-    let previewDetail: DeletePreviewSafeDetail | undefined;
-    if (previousUserTurn) {
-      for (let index = thread.executions.length - 1; index >= 0; index -= 1) {
-        const candidate = thread.executions[index];
-        if (!candidate || candidate.turnId !== previousUserTurn.id || consumedPreviewIds.has(candidate.id)) continue;
-        const detail = parseDeletePreviewSafeDetail(candidate);
-        if (detail?.confirmationToken === confirmationToken) {
-          previewExec = candidate;
-          previewDetail = detail;
-          break;
-        }
-      }
-    }
-    if (!previewExec || !previewDetail) {
+    const pending = findPendingDeletePreview(thread, userTurn.id, confirmationToken);
+    if (!pending) {
       return failDeleteAction({
         execId,
         capabilityId: 'delete_file',
@@ -1342,10 +1350,10 @@ export async function runTalkTurn(input: {
     const backupRoot = path.join(input.workRoot, 'artifacts', 'talk-deletions');
     const result = await deleteAuthorizedFile({
       auth,
-      args: { path: previewDetail.target, ...(previewDetail.root ? { root: previewDetail.root } : {}) },
-      expectedSha256: previewDetail.sha256,
-      expectedSize: previewDetail.size,
-      expectedMtimeMs: previewDetail.mtimeMs,
+      args: { path: pending.detail.target, ...(pending.detail.root ? { root: pending.detail.root } : {}) },
+      expectedSha256: pending.detail.sha256,
+      expectedSize: pending.detail.size,
+      expectedMtimeMs: pending.detail.mtimeMs,
       backupRoot,
       operationId: execId,
       ...(input.signal ? { signal: input.signal } : {}),
@@ -1355,7 +1363,7 @@ export async function runTalkTurn(input: {
       return failDeleteAction({
         execId,
         capabilityId: 'delete_file',
-        instruction: previewDetail.target,
+        instruction: pending.detail.target,
         reason: result.reason || '文件删除失败。',
       });
     }
@@ -1366,12 +1374,12 @@ export async function runTalkTurn(input: {
       at: input.now,
       turnId: userTurn.id,
       capabilityId: 'delete_file',
-      instruction: previewDetail.target,
+      instruction: pending.detail.target,
       ok: true,
       summary: `已删除 ${result.path}；删除前内容和恢复副本 SHA-256 已核对。`,
       safeDetail: JSON.stringify({
         kind: 'file_delete_v1',
-        confirmationExecutionId: previewExec.id,
+        confirmationExecutionId: pending.exec.id,
         confirmationToken,
         target: result.path,
         size: result.size,

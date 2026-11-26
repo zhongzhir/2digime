@@ -224,6 +224,15 @@ Slice 2A 的开发范围据此关闭为：创建并打开 DOCX/PPTX/PDF，三种
 
 本批关闭经动作时确认删除普通文件的最小安全闭环。目录增删、Office 原格式编辑、20 项完整退出门、正式 Electron 与 Owner 验收仍待后续小批次；Slice 2B 继续为 IN PROGRESS。不打包、不 push、不发布。
 
+#### Slice 2B-5 开发检查点（2026-11-26）
+
+- 建立固定 20 项授权文件工作区门：列出、读取、文件名/正文搜索、Markdown/HTML 创建、DOCX/PPTX/PDF 导出回读、单处/多处编辑、回滚、复制、重命名、准备/确认删除，以及未授权读写、移出授权根和多授权根歧义拒绝；20/20 通过；
+- 删除确认真实主链补齐：准备步骤保存的一次性令牌只在紧接下一条用户回复中作为机械事实提供给模型；runtime 仍独立验证上一轮、未消费令牌、目标身份、授权和哈希。没有确认则不调用，跨轮自动失效；
+- 正式 Electron + 测试模型替身走正式 Talk、renderer、主进程、Thread 和真实临时磁盘，连续完成搜索、编辑、复制、重命名和两步确认删除，1/1 通过；没有真实模型调用或外部费用；
+- 联合授权文件回归 71 passed / 1 skipped / 0 failed；跳过项仍为当前 Windows 测试进程无权新建额外文件符号链接，目录联接越界门已覆盖。
+
+Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_PENDING`；真实模型 smoke 仍独立 pending。该结论不包含目录增删、Office 原格式编辑、Owner 验收、市场 95%、打包、push、发布或部署。
+
 ### 2C. Coding Agent
 
 - 复用成熟 Codex/Claude Code 类 Agent，不自研 Coding Agent；首个正式适配以仓库已有 Codex 路线为主；

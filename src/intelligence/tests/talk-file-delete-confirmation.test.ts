@@ -56,7 +56,12 @@ async function prepareDeletion(root: string, target: string): Promise<TalkThread
   return result.thread;
 }
 
-async function confirmDeletion(root: string, thread: TalkThread, token: string): Promise<TalkThread> {
+async function confirmDeletion(
+  root: string,
+  thread: TalkThread,
+  token: string,
+  expectPending = true,
+): Promise<TalkThread> {
   let round = 0;
   const result = await runTalkTurn({
     thread,
@@ -67,9 +72,13 @@ async function confirmDeletion(root: string, thread: TalkThread, token: string):
     contextPaths: [root],
     writeFolders: [root],
     now: new Date().toISOString(),
-    chat: async () => round++ === 0
-      ? { text: '', toolCalls: [{ id: 'delete', name: 'delete_file', arguments: JSON.stringify({ confirmationToken: token }) }] }
-      : { text: '已按确认结果处理。' },
+    chat: async ({ messages }) => {
+      if (round++ > 0) return { text: '已按确认结果处理。' };
+      const system = String(messages.find((message) => message.role === 'system')?.content || '');
+      const exposed = /一次性 confirmationToken：([^\s]+)/.exec(system)?.[1] || '';
+      assert.equal(exposed, expectPending ? token : '');
+      return { text: '', toolCalls: [{ id: 'delete', name: 'delete_file', arguments: JSON.stringify({ confirmationToken: exposed || token }) }] };
+    },
   });
   return result.thread;
 }
@@ -165,7 +174,7 @@ test('确认令牌跨过一轮普通对话后失效', async () => {
     userText: '先等等，我问个别的问题', selfContext: '', agents: [], workRoot: root, contextPaths: [root], writeFolders: [root], now: new Date().toISOString(),
     chat: async () => ({ text: '好的，删除尚未执行。' }),
   });
-  const attempted = await confirmDeletion(root, interposed.thread, preview.confirmationToken);
+  const attempted = await confirmDeletion(root, interposed.thread, preview.confirmationToken, false);
   assert.equal(await fs.readFile(target, 'utf8'), '不能隔轮删除');
   assert.equal(attempted.executions.some((item) => item.capabilityId === 'delete_file' && !item.ok && /无效、已使用或不是紧接上一轮/.test(item.failureReason || '')), true);
 });
@@ -178,7 +187,7 @@ test('已使用令牌不能重复删除后来创建的同名文件', async () =>
   const preview = deletePreview(prepared);
   const deleted = await confirmDeletion(root, prepared, preview.confirmationToken);
   await fs.writeFile(target, '后来同名文件', 'utf8');
-  const replayed = await confirmDeletion(root, deleted, preview.confirmationToken);
+  const replayed = await confirmDeletion(root, deleted, preview.confirmationToken, false);
   assert.equal(await fs.readFile(target, 'utf8'), '后来同名文件');
   assert.equal(replayed.executions.filter((item) => item.capabilityId === 'delete_file' && item.ok).length, 1);
 });

@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_DEVELOPER_CLOSED_OWNER_PENDING / SLICE_2B_IN_PROGRESS`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_1_TECHNICAL_GATE_PASS_OWNER_PENDING / SLICE_2A_DEVELOPER_CLOSED_OWNER_PENDING / SLICE_2B_DEVELOPER_GATE_PASS_OWNER_PENDING`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -118,6 +118,14 @@ TypeScript 构建通过；文本编辑/回滚、搜索、复制移动、授权�
 执行删除时重新解析授权与链接边界并核对当前 SHA-256；文件在确认前后发生任何变化即拒绝。删除前先在应用受控恢复区建立并核对同哈希副本，再通过同目录墓碑名原子移走目标、复核哈希后移除；取消或中途失败不得把未确认内容作为成功删除。成功 Execution 只记录目标、哈希和恢复副本引用，不新增入口、确认弹窗、Store、任务类型路由或第二事实源，也不支持目录删除。
 
 TypeScript 构建通过；删除确认核心门 10/10 通过，其中同内容文件在确认后被替换也会因大小/修改时间身份不符而拒绝。联合授权持久化、能力暴露、搜索、复制移动、文本编辑/回滚和既有 list/read/write/export 聚焦回归为 50 passed / 1 skipped / 0 failed；唯一跳过项仍是当前 Windows 测试进程无权新建额外文件符号链接，目录联接越界负向门已真实通过。经确认的普通文件删除最小闭环据此关闭；目录增删、Office 原格式编辑、20 项完整退出门、正式 Electron 与 Owner 验收仍不在本检查点，Slice 2B 继续为 IN PROGRESS。不打包、不 push、不发布。
+
+### Slice 2B-5 开发检查点（2026-11-26）
+
+固定 20 项授权文件工作区退出门已建立并全部通过，覆盖授权目录列出、文本读取、文件名/正文搜索、Markdown/HTML 创建、DOCX/PPTX/PDF 导出与抽取回读、单处/多处精确编辑、回滚、复制、移动/重命名、两步确认删除及恢复副本，以及相邻未授权读取/写入、移出授权根、多授权根歧义四类负向任务。正向任务均核对真实磁盘或格式抽取结果，负向任务均核对未产生越权效果。
+
+退出门同时发现并关闭一项正式主链缺口：删除准备的一次性令牌此前只保存在 Execution `safeDetail`，下一轮模型上下文无法取得，旧单元测试由测试代码直接传令牌，不能代表产品。现在 runtime 只在紧接的下一条用户回复中，把目标和令牌作为本轮机械事实提供给模型；若用户没有明确确认，模型不得调用，下一轮自动失效；删除工具仍机械复核上一轮、一次性消费、目标身份、授权根和哈希，不新增 Store 或确认状态机。
+
+正式 Electron 使用测试模型替身、正式 renderer/主进程/Thread 与真实临时磁盘，在同一 Talk 连续完成搜索、先读后编辑、复制、重命名、先请求确认再于下一轮删除，1/1 通过；没有模型调用或外部费用。联合授权文件回归为 71 passed / 1 skipped / 0 failed，固定 20 项为 20/20；唯一跳过仍是当前 Windows 测试进程无权新建额外文件符号链接。Slice 2B 开发门据此通过，Owner 产品验收和真实模型 smoke 仍独立 pending；不得写成 Owner 接受、市场 95%、打包、push、发布或部署。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

@@ -115,6 +115,31 @@ async function chat({ messages, tools }) {
     };
   }
 
+  const text = lastUserText(messages);
+
+  if (lastRole(messages) === 'tool' && /文件工作区验收：编辑/.test(text)) {
+    const toolMsg = messages[messages.length - 1];
+    let parsed = {};
+    try {
+      parsed = JSON.parse(toolMsg.content || '{}');
+    } catch {
+      parsed = {};
+    }
+    if (parsed.actualSuccess === true && parsed.capabilityId === 'read_file') {
+      return {
+        text: '',
+        toolCalls: [{
+          id: 'call_workspace_edit_1',
+          name: 'edit_file',
+          arguments: JSON.stringify({
+            path: 'note.txt',
+            replacements: [{ from: '修改前', to: '修改后', expectedCount: 1 }],
+          }),
+        }],
+      };
+    }
+  }
+
   if (lastRole(messages) === 'tool') {
     const toolMsg = messages[messages.length - 1];
     let parsed = {};
@@ -139,9 +164,12 @@ async function chat({ messages, tools }) {
     };
   }
 
-  const text = lastUserText(messages);
   if (/工具执行记录/.test(text) && /consult_subject\s*\|\s*failed/.test(text)) {
     return { text: '这次合作没有成立，尚未收到对方的可用成果。我可以改用本地能力继续。' };
+  }
+  if (/工具执行记录/.test(text) && /prepare_delete_file\s*\|\s*ok/.test(text)) {
+    const target = /等待主人确认删除\s+([^（\n]+)/.exec(text)?.[1]?.trim() || '这个文件';
+    return { text: `尚未删除。将删除“${target}”，请确认是否继续。` };
   }
   if (/工具执行记录/.test(text) && /consult_subject\s*\|\s*ok/.test(text)) {
     return { text: '我综合了对方返回的工艺安全补充判断：当前设想可继续评估，但需补齐物料平衡。' };
@@ -218,6 +246,48 @@ async function chat({ messages, tools }) {
     };
   }
 
+  const toolNames = new Set(
+    Array.isArray(tools) ? tools.map((t) => t.function && t.function.name).filter(Boolean) : [],
+  );
+  if (toolNames.has('search_files') && /文件工作区验收：搜索/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [{ id: 'call_workspace_search_1', name: 'search_files', arguments: JSON.stringify({ query: '修改前' }) }],
+    };
+  }
+  if (toolNames.has('read_file') && /文件工作区验收：编辑/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [{ id: 'call_workspace_read_1', name: 'read_file', arguments: JSON.stringify({ path: 'note.txt' }) }],
+    };
+  }
+  if (toolNames.has('copy_file') && /文件工作区验收：复制/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [{ id: 'call_workspace_copy_1', name: 'copy_file', arguments: JSON.stringify({ sourcePath: 'note.txt', destinationPath: 'note-copy.txt' }) }],
+    };
+  }
+  if (toolNames.has('move_file') && /文件工作区验收：重命名/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [{ id: 'call_workspace_move_1', name: 'move_file', arguments: JSON.stringify({ sourcePath: 'note-copy.txt', destinationPath: 'note-renamed.txt' }) }],
+    };
+  }
+  if (toolNames.has('prepare_delete_file') && /文件工作区验收：删除/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [{ id: 'call_workspace_prepare_delete_1', name: 'prepare_delete_file', arguments: JSON.stringify({ path: 'delete-me.txt' }) }],
+    };
+  }
+  if (toolNames.has('delete_file') && /文件工作区验收：确认删除/.test(text)) {
+    const token = /一次性 confirmationToken：([^\s]+)/.exec(sys)?.[1];
+    if (token) {
+      return {
+        text: '',
+        toolCalls: [{ id: 'call_workspace_delete_1', name: 'delete_file', arguments: JSON.stringify({ confirmationToken: token }) }],
+      };
+    }
+  }
   const hasArtifact =
     Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'write_artifact');
   const hasDocxRevision =
