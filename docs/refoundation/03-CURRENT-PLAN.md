@@ -139,6 +139,12 @@ Web、桌面、后端和既有脏工作区四类最小隔离项目材料已建�
 
 TypeScript 构建通过，2C-1 评分合同与 2C-2 材料门联合测试 6/6 通过；没有调用真实 Agent、没有模型或外部费用。当前状态为 `SLICE_2C_MATERIALS_READY / REAL_BENCHMARK_PENDING`。下一小批次只建设真实双臂证据采集与零费用 fail-closed 门；不新增 Agent、执行链或产品入口，未取得真实双臂结果前不得宣称 95%、Owner 验收、打包、push、发布或部署。
 
+### Slice 2C-3 开发检查点（2026-11-26）
+
+真实双臂证据合同和零费用准入门已经建立。Agent 不可用、费用未知或外部计费一律阻断；真实证据必须包含同一冻结任务/revision、同一 Agent build、独立工作副本、基线失败、最终测试通过、变更文件与零越界写入。2digime 编排臂必须带同一 Talk 的 Thread/Execution/Artifact/用户可见摘要回执，直连臂不得伪装该回执；脏工作区还必须证明既有文件和 diff 摘要前后相同。hook、fixture 和合成结果均不能进入评分。
+
+TypeScript 构建通过，2C-1～2C-3 联合聚焦测试 11/11 通过；没有启动真实 Agent、没有模型或外部费用。当前状态为 `SLICE_2C_EVIDENCE_GATE_READY / REAL_BENCHMARK_PENDING`。下一小批次只做一次性真实运行采集器，并继续限制为本机已连接、可证明无新增收费的成熟 Agent；不手工拼证据，不宣称 95%、Owner 验收、打包、push、发布或部署。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

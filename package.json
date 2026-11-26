@@ -24,6 +24,7 @@
     "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
     "benchmark:office": "npm run build && node scripts/run-office-benchmark.cjs",
     "benchmark:coding:preflight": "node scripts/preflight-slice-2c-coding-benchmark.cjs",
+    "benchmark:coding:evidence": "npm run build && node scripts/check-slice-2c-coding-evidence.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
   },
   "dependencies": {
