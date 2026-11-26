@@ -151,6 +151,12 @@ TypeScript 构建通过，2C-1～2C-3 联合聚焦测试 11/11 通过；没有�
 
 TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有调用真实 Agent、没有模型或外部费用。当前状态为 `SLICE_2C_COLLECTOR_READY / REAL_BENCHMARK_PENDING`。下一小批次只执行一个 Web 任务的领先 Agent 直连真实样本；其零新增费用、workspace-write sandbox 和证据门通过后，才执行同任务的正式 Talk 编排臂。不并行跑四类任务，不宣称 95%、Owner 验收、打包、push、发布或部署。
 
+### Slice 2C-5 开发检查点（2026-11-26）
+
+`2C-WEB-01` 领先 Agent 直连单臂真实通过：本机 Codex CLI `0.171.0-alpha.13.2` 使用既有 ChatGPT 登录，在独立 Git 副本以官方 `workspace-write` / Windows `unelevated` sandbox、approval `never` 和 ephemeral session 完成修复；只修改 `src/price-card.cjs`。基线测试真实失败，采集器在 Agent 退出后独立运行默认注册测试 1/1 通过，零越界写入，`real_process` 证据通过正式校验。
+
+没有 API Key、购买、充值或按量付费，按现有权益记零新增外部收费；订阅额度消耗不可见，不写零配额消耗。第一次启动在 CLI 参数解析阶段停止，未进入模型、未改文件并已清理；修正参数层级后用全新副本完成唯一一次真实运行。当前状态为 `SLICE_2C_WEB_DIRECT_PASS / WEB_ORCHESTRATED_PENDING`，仍不是双臂、四类覆盖、95%、Owner 验收、打包、push、发布或部署。下一小批次只做同一 Web 任务的 2digime 正式 Talk 编排臂。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

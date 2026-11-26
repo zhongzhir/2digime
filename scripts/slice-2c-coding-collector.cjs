@@ -183,6 +183,7 @@ async function prepare(values) {
       version: agentVersion,
       executableDigest: sha256(await fsp.readFile(agentExecutable)),
     },
+    agentExecutablePath: agentExecutable,
     baselineTest: { ...baseline.evidence, matchedRegisteredFailure: true },
     dirtyProof,
     cost: {
@@ -264,7 +265,11 @@ async function collect(values) {
     workspaceId: plan.runId,
     fixtureDigest: plan.fixtureDigest,
     projectRevision: plan.projectRevision,
-    agent: plan.agent,
+    agent: {
+      executorId: plan.agent.executorId,
+      version: plan.agent.version,
+      executableDigest: plan.agent.executableDigest,
+    },
     baselineTest: plan.baselineTest,
     finalTest: final.evidence,
     changedFiles,

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "slice-2c-coding-run-evidence/1",
+  "source": "real_process",
+  "taskId": "2C-WEB-01",
+  "projectClass": "web",
+  "arm": "leading_agent_direct",
+  "workspaceId": "run-1795691317480-e6ef5370",
+  "fixtureDigest": "2595425886ee84caa67d7e3374094eb96831be1b03b6194104bce53b16f1ee93",
+  "projectRevision": "837087e052097d545e262e2108c5632e8317e533",
+  "agent": {
+    "executorId": "codex-cli",
+    "version": "0.171.0-alpha.13.2",
+    "executableDigest": "2a1ec3f1dd463fd30224be4c0c67d3fe83d3d863a3d7539ccad366952436d2aa"
+  },
+  "baselineTest": {
+    "commandDigest": "3d8682062ffaac1357e4e71023e426a6114edd0372ff9f825716386acd7e5e77",
+    "outputDigest": "bb195c756155cb7262ffab6726a971eb6c6047cde4792ef6c7757815f864d774",
+    "exitCode": 1,
+    "startedAt": "2026-11-26T11:08:40.614Z",
+    "finishedAt": "2026-11-26T11:08:40.821Z",
+    "matchedRegisteredFailure": true
+  },
+  "finalTest": {
+    "commandDigest": "3d8682062ffaac1357e4e71023e426a6114edd0372ff9f825716386acd7e5e77",
+    "outputDigest": "9f7ee2229cf5076c8eace7c5b08a6b22173ac3dea2c2efe5cb87ff0d3776b185",
+    "exitCode": 0,
+    "startedAt": "2026-11-26T11:10:20.163Z",
+    "finishedAt": "2026-11-26T11:10:20.362Z"
+  },
+  "changedFiles": [
+    "src/price-card.cjs"
+  ],
+  "outsideScopeWrites": [],
+  "cost": {
+    "basis": "existing_entitlement_no_incremental_charge",
+    "externalChargeIncurred": false,
+    "amountCny": 0
+  }
+}

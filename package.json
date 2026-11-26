@@ -26,6 +26,7 @@
     "benchmark:coding:preflight": "node scripts/preflight-slice-2c-coding-benchmark.cjs",
     "benchmark:coding:evidence": "npm run build && node scripts/check-slice-2c-coding-evidence.cjs",
     "benchmark:coding:collector": "node scripts/slice-2c-coding-collector.cjs",
+    "benchmark:coding:codex-direct": "node scripts/run-slice-2c-codex-direct.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
   },
   "dependencies": {

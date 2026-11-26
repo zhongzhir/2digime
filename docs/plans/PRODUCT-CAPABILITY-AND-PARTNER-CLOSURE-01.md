@@ -277,6 +277,16 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 
 下一小批次先只跑一个 Web 任务的领先 Agent 直连真实样本，验证本机 Agent、零新增费用事实、workspace-write sandbox 和采集证据；该单臂样本通过后，才运行同任务的 2digime 正式 Talk 编排臂。一次一臂，不并行跑四类任务。
 
+#### Slice 2C-5 开发检查点（2026-11-26）
+
+- `2C-WEB-01` 领先 Agent 直连真实样本已通过：Codex CLI `0.171.0-alpha.13.2` 使用既有 ChatGPT 登录，以官方 `workspace-write` / Windows `unelevated` sandbox、approval `never` 和 ephemeral session 在独立 Git 副本完成修复；
+- 预注册基线测试真实失败；Agent 只修改 `src/price-card.cjs`；采集器独立运行默认注册测试 1/1 通过，零越界写入，正式 `real_process` 证据通过 2C-3 校验；
+- 未使用 API Key、未购买、充值或开启按量付费，按现有权益记零新增外部收费；供应商没有返回订阅额度消耗回执，不宣称零配额消耗；
+- 第一次启动在 CLI 参数解析阶段失败，未进入模型、未改文件并已清理；修正全局/子命令参数层级后使用全新副本完成唯一一次真实 Agent 运行；
+- 该结果只是 Web 直连单臂，不是双臂、四类覆盖、相对 95% 或 Owner 验收。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-WEB-DIRECT-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-WEB-DIRECT-01.md)。
+
+下一小批次只运行同一 Web 任务的 2digime 正式 Talk 编排臂，并要求同一 Codex build、独立副本、真实 Thread/Execution/Artifact 回执。该臂未通过前不评分，也不转入桌面、后端或脏工作区。
+
 ### 2D. 第三方系统
 
 - 统一接入 MCP、OAuth/OIDC API、官方 Connector/Skill；不为每个网站写关键词路由或页面脚本；
