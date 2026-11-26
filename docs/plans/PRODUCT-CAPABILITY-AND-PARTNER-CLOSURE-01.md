@@ -267,6 +267,16 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 
 下一小批次在上述门上实现一次性、可清理的真实运行采集器；先只允许本机已连接且已能证明无新增外部收费的成熟 Agent。采集器未成立前不手工拼证据，不宣称 95%。
 
+#### Slice 2C-4 开发检查点（2026-11-26）
+
+- 一次性采集器已实现 `prepare → collect → cleanup`：准备阶段冻结任务、复制隔离工作区、初始化独立 Git 基线、复现预注册失败并记录 Agent 可执行文件摘要；采集阶段运行最终测试、读取真实 Git 增量、核对脏改动、sandbox 回执与 Talk 回执；
+- 真实模式只接受 `local_no_model` 或经操作者明确确认的 `existing_entitlement_no_incremental_charge`，拒绝外部计费和缺少零新增费用确认；本批开发验证没有调用真实 Agent；
+- 机械替身仅验证采集器本身，证据强制标记为 `mechanical_fixture / scorable=false`，并被 2C-3 正式证据门拒绝，不能冒充真实运行；
+- 每个运行只能采集一次；运行根只允许项目专用目录或系统临时目录中的专用前缀；清理前必须核对专用 marker、根目录和 `run-*` 子目录，避免广泛递归删除；
+- TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过。没有真实 Agent 调用、模型费用、95% 结论或 Owner 验收。
+
+下一小批次先只跑一个 Web 任务的领先 Agent 直连真实样本，验证本机 Agent、零新增费用事实、workspace-write sandbox 和采集证据；该单臂样本通过后，才运行同任务的 2digime 正式 Talk 编排臂。一次一臂，不并行跑四类任务。
+
 ### 2D. 第三方系统
 
 - 统一接入 MCP、OAuth/OIDC API、官方 Connector/Skill；不为每个网站写关键词路由或页面脚本；

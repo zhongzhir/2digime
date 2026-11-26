@@ -145,6 +145,12 @@ TypeScript 构建通过，2C-1 评分合同与 2C-2 材料门联合测试 6/6 �
 
 TypeScript 构建通过，2C-1～2C-3 联合聚焦测试 11/11 通过；没有启动真实 Agent、没有模型或外部费用。当前状态为 `SLICE_2C_EVIDENCE_GATE_READY / REAL_BENCHMARK_PENDING`。下一小批次只做一次性真实运行采集器，并继续限制为本机已连接、可证明无新增收费的成熟 Agent；不手工拼证据，不宣称 95%、Owner 验收、打包、push、发布或部署。
 
+### Slice 2C-4 开发检查点（2026-11-26）
+
+一次性 `prepare → collect → cleanup` 采集器已实现：准备阶段建立隔离 Git 工作副本并记录预注册基线失败和 Agent 可执行文件摘要；真实运行后采集最终测试、Git 增量、既有脏改动保护、sandbox 回执和 Talk 回执。外部计费、费用未确认、重复采集、非专用运行根和无 marker 的清理均拒绝。机械替身证据固定为 `mechanical_fixture / scorable=false`，正式证据门会拒绝，不能冒充真实 Agent。
+
+TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有调用真实 Agent、没有模型或外部费用。当前状态为 `SLICE_2C_COLLECTOR_READY / REAL_BENCHMARK_PENDING`。下一小批次只执行一个 Web 任务的领先 Agent 直连真实样本；其零新增费用、workspace-write sandbox 和证据门通过后，才执行同任务的正式 Talk 编排臂。不并行跑四类任务，不宣称 95%、Owner 验收、打包、push、发布或部署。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
