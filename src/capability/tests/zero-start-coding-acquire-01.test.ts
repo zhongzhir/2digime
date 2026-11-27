@@ -12,6 +12,9 @@ import { defaultCodingRuntimeCandidates } from '../coding-runtime-candidates';
 import { startLocalChatModelBridge } from '../chat-model-http-bridge';
 import {
   createAcquiredCodingExecutorAdapter,
+  buildAcquiredCodexInvocationEnv,
+  consumeTimedOutCodingCompletion,
+  validateTimedOutCodingCompletion,
   writeAcquiredCodexProviderConfig,
   writeAcquiredCodingProviderConfig,
 } from '../adapters/acquired-coding-executor';
@@ -24,6 +27,24 @@ import { CapabilityRegistry } from '../registry';
 import { routeCodingAgent } from '../coding-agent-route';
 
 describe('zero-start-coding-acquire-01', () => {
+  it('获取后的 Codex 在授权工作区使用一次性 home，而不暴露真实用户目录', () => {
+    const workspace = path.resolve('C:\\authorized-workspace');
+    const built = buildAcquiredCodexInvocationEnv({
+      exe: 'C:\\runtime\\codex.exe',
+      workingDirectory: workspace,
+      completionNonce: 'nonce-1',
+      codexHome: 'C:\\runtime\\codex-home',
+      modelToken: 'bridge-token',
+    });
+
+    assert.equal(path.dirname(built.invocationHome), workspace);
+    assert.equal(built.env.HOME, built.invocationHome);
+    assert.equal(built.env.USERPROFILE, built.invocationHome);
+    assert.equal(built.env.APPDATA, path.join(built.invocationHome, 'AppData', 'Roaming'));
+    assert.equal(built.env.LOCALAPPDATA, path.join(built.invocationHome, 'AppData', 'Local'));
+    assert.notEqual(built.env.USERPROFILE, process.env.USERPROFILE);
+  });
+
   it('首选候选是可自动获取且具备工作区沙箱的 Codex runtime', () => {
     const candidates = defaultCodingRuntimeCandidates();
     assert.equal(candidates[0]?.id, 'codex-windows-cli');
@@ -156,6 +177,73 @@ describe('zero-start-coding-acquire-01', () => {
     } finally {
       await bridge.close();
     }
+  });
+
+  it('最终模型回复超时只接受 nonce、真实变更清单与成功验证事件一致的一次性收据', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-coding-closeout-'));
+    const receiptPath = path.join(root, '.2digime-coding-completion-test.json');
+    const receipt = {
+      schemaVersion: '2digime-coding-completion/1',
+      nonce: 'nonce-1',
+      taskCompleted: true,
+      changedFiles: ['src/main.cjs'],
+      verificationCommand: 'node --test test/window-state.test.cjs',
+      verificationOutputMarker: 'moves an off-screen window',
+    };
+    await fs.mkdir(path.join(root, 'src'), { recursive: true });
+    await fs.writeFile(path.join(root, 'src', 'main.cjs'), 'module.exports = {};\n', 'utf8');
+    await fs.writeFile(receiptPath, JSON.stringify(receipt), 'utf8');
+    const stdout = `${JSON.stringify({
+      type: 'item.completed',
+      item: {
+        type: 'command_execution',
+        command: 'powershell -Command node --test test/window-state.test.cjs',
+        aggregated_output: 'ok 1 - moves an off-screen window',
+        exit_code: 0,
+        status: 'completed',
+      },
+    })}\n`;
+    const accepted = await validateTimedOutCodingCompletion({
+      stdout,
+      receiptPath,
+      nonce: 'nonce-1',
+      workingDirectory: root,
+    });
+    assert.deepEqual(accepted, {
+      ok: true,
+      changedFiles: ['src/main.cjs'],
+      verificationCommand: 'node --test test/window-state.test.cjs',
+    });
+    assert.equal((await consumeTimedOutCodingCompletion({
+      stdout,
+      receiptPath,
+      nonce: 'nonce-1',
+      workingDirectory: root,
+    })).ok, true);
+    await assert.rejects(fs.access(receiptPath));
+    await fs.writeFile(receiptPath, JSON.stringify(receipt), 'utf8');
+    assert.equal((await validateTimedOutCodingCompletion({
+      stdout,
+      receiptPath,
+      nonce: 'wrong-nonce',
+      workingDirectory: root,
+    })).ok, false);
+    assert.equal((await validateTimedOutCodingCompletion({
+      stdout: stdout.replace('moves an off-screen window', 'unrelated output'),
+      receiptPath,
+      nonce: 'nonce-1',
+      workingDirectory: root,
+    })).ok, false);
+    await fs.writeFile(receiptPath, JSON.stringify({
+      ...receipt,
+      changedFiles: [path.basename(receiptPath)],
+    }), 'utf8');
+    assert.equal((await validateTimedOutCodingCompletion({
+      stdout,
+      receiptPath,
+      nonce: 'nonce-1',
+      workingDirectory: root,
+    })).ok, false);
   });
 
   it('获取后的 runtime 配置拒绝授权项目外目录和内置联网工具', async () => {

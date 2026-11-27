@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, writeFileSync, promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import type {
   CapabilityAdapter,
@@ -63,7 +64,102 @@ export interface AcquiredCodingPreview {
   costNotice: string;
 }
 
-function renderAcquiredCodingPrompt(instruction: string, workingDirectory: string): string {
+const COMPLETION_RECEIPT_SCHEMA = '2digime-coding-completion/1';
+
+function completionReceiptName(nonce: string): string {
+  return `.2digime-coding-completion-${nonce}.json`;
+}
+
+function safeWorkspaceRelative(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.trim() || path.isAbsolute(value)) return false;
+  return !value.replace(/\\/g, '/').split('/').includes('..');
+}
+
+export async function validateTimedOutCodingCompletion(input: {
+  stdout: string;
+  receiptPath: string;
+  nonce: string;
+  workingDirectory: string;
+}): Promise<{ ok: boolean; changedFiles: string[]; verificationCommand?: string }> {
+  let receipt: {
+    schemaVersion?: unknown;
+    nonce?: unknown;
+    taskCompleted?: unknown;
+    changedFiles?: unknown;
+    verificationCommand?: unknown;
+    verificationOutputMarker?: unknown;
+  };
+  try {
+    const receiptStat = await fs.lstat(input.receiptPath);
+    if (!receiptStat.isFile() || receiptStat.isSymbolicLink()) return { ok: false, changedFiles: [] };
+    receipt = JSON.parse(await fs.readFile(input.receiptPath, 'utf8'));
+  } catch {
+    return { ok: false, changedFiles: [] };
+  }
+  const changedFiles = Array.isArray(receipt.changedFiles)
+    ? [...new Set(receipt.changedFiles.filter(safeWorkspaceRelative))]
+    : [];
+  const verificationCommand = typeof receipt.verificationCommand === 'string'
+    ? receipt.verificationCommand.trim()
+    : '';
+  const verificationOutputMarker = typeof receipt.verificationOutputMarker === 'string'
+    ? receipt.verificationOutputMarker.trim()
+    : '';
+  if (
+    receipt.schemaVersion !== COMPLETION_RECEIPT_SCHEMA
+    || receipt.nonce !== input.nonce
+    || receipt.taskCompleted !== true
+    || !changedFiles.length
+    || changedFiles.length > 100
+    || changedFiles.length !== (Array.isArray(receipt.changedFiles) ? receipt.changedFiles.length : 0)
+    || changedFiles.includes(path.basename(input.receiptPath))
+    || !verificationCommand
+    || verificationCommand.length > 500
+    || !verificationOutputMarker
+    || verificationOutputMarker.length > 500
+  ) return { ok: false, changedFiles: [] };
+  const root = path.resolve(input.workingDirectory);
+  if (changedFiles.some((row) => {
+    const resolved = path.resolve(root, row);
+    return resolved === root || !resolved.startsWith(root + path.sep);
+  })) return { ok: false, changedFiles: [] };
+  const verificationObserved = input.stdout.split(/\r?\n/).some((line) => {
+    try {
+      const row = JSON.parse(line) as {
+        type?: unknown;
+        item?: { type?: unknown; command?: unknown; aggregated_output?: unknown; exit_code?: unknown; status?: unknown };
+      };
+      const item = row.item;
+      return row.type === 'item.completed'
+        && item?.type === 'command_execution'
+        && item.exit_code === 0
+        && item.status === 'completed'
+        && String(item.command || '').includes(verificationCommand)
+        && String(item.aggregated_output || '').includes(verificationOutputMarker);
+    } catch {
+      return false;
+    }
+  });
+  return verificationObserved
+    ? { ok: true, changedFiles, verificationCommand }
+    : { ok: false, changedFiles: [] };
+}
+
+export async function consumeTimedOutCodingCompletion(input: {
+  stdout: string;
+  receiptPath: string;
+  nonce: string;
+  workingDirectory: string;
+}): Promise<{ ok: boolean; changedFiles: string[]; verificationCommand?: string }> {
+  try {
+    return await validateTimedOutCodingCompletion(input);
+  } finally {
+    await fs.rm(input.receiptPath, { force: true }).catch(() => undefined);
+  }
+}
+
+function renderAcquiredCodingPrompt(instruction: string, workingDirectory: string, completionNonce: string): string {
+  const receiptFile = completionReceiptName(completionNonce);
   return [
     instruction,
     '',
@@ -73,6 +169,9 @@ function renderAcquiredCodingPrompt(instruction: string, workingDirectory: strin
     '- 只能操作授权工作目录内的文件',
     '- Windows 环境不要调用 apply_patch、补丁管道、反引号或 here-string；请用 Node.js fs 或 .NET File API 直接写文件，并清理任务临时文件',
     '- 写入失败时不得宣称完成；结束前必须用 git diff 确认真实修改并运行用户要求的测试',
+    `- 只有在真实修改和验证都完成后，才用 Node.js fs 写入 ${receiptFile}；内容必须是单个 JSON 对象：`,
+    `  {"schemaVersion":"${COMPLETION_RECEIPT_SCHEMA}","nonce":"${completionNonce}","taskCompleted":true,"changedFiles":["相对路径"],"verificationCommand":"刚成功执行的验证命令核心文本","verificationOutputMarker":"该命令真实输出中的稳定非空片段"}`,
+    '- 完成收据不是用户成果，兔机米会自动核验并删除；任务未完成或验证失败时不得写收据',
     '- 不得读取或泄露 API Key、模型凭证或其它密钥',
     '- 未经用户明确要求不得 git push、发布、部署或其它对外不可逆操作',
   ].join('\n');
@@ -297,6 +396,38 @@ async function runAcquiredCli(input: {
   }
 }
 
+export function buildAcquiredCodexInvocationEnv(input: {
+  exe: string;
+  workingDirectory: string;
+  completionNonce: string;
+  codexHome: string;
+  modelToken: string;
+}): { env: NodeJS.ProcessEnv; invocationHome: string } {
+  const invocationHome = path.join(input.workingDirectory, `.2digime-coding-home-${input.completionNonce}`);
+  const homeRoot = path.parse(invocationHome).root;
+  const homeDrive = /^[A-Za-z]:\\$/.test(homeRoot) ? homeRoot.slice(0, 2) : undefined;
+  const homePath = homeDrive ? invocationHome.slice(homeDrive.length) || '\\' : undefined;
+  return {
+    invocationHome,
+    env: {
+      PATH: isolatedPath(path.dirname(input.exe)),
+      SystemRoot: process.env.SystemRoot || 'C:\\Windows',
+      COMSPEC: process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe',
+      PATHEXT: process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD',
+      TEMP: process.env.TEMP,
+      TMP: process.env.TMP,
+      HOME: invocationHome,
+      USERPROFILE: invocationHome,
+      ...(homeDrive ? { HOMEDRIVE: homeDrive } : {}),
+      ...(homePath ? { HOMEPATH: homePath } : {}),
+      APPDATA: path.join(invocationHome, 'AppData', 'Roaming'),
+      LOCALAPPDATA: path.join(invocationHome, 'AppData', 'Local'),
+      CODEX_HOME: input.codexHome,
+      DIGITALME_MODEL_TOKEN: input.modelToken,
+    },
+  };
+}
+
 async function runAcquiredCodexCli(input: {
   exe: string;
   prompt: string;
@@ -304,6 +435,7 @@ async function runAcquiredCodexCli(input: {
   modelId: string;
   chatComplete: ChatCompleteFn;
   timeoutMs: number;
+  completionNonce: string;
   signal?: AbortSignal;
 }): Promise<AcquiredCodingRunResult> {
   const bridge = await startLocalChatModelBridge({
@@ -314,23 +446,19 @@ async function runAcquiredCodexCli(input: {
   const runtimeBase = path.resolve(path.dirname(input.exe), '..', '..');
   const codexHome = path.join(runtimeBase, 'codex-home');
   const lastMessagePath = path.join(codexHome, 'last-message.txt');
+  const completionReceiptPath = path.join(input.workingDirectory, completionReceiptName(input.completionNonce));
+  const { env, invocationHome } = buildAcquiredCodexInvocationEnv({
+    exe: input.exe,
+    workingDirectory: input.workingDirectory,
+    completionNonce: input.completionNonce,
+    codexHome,
+    modelToken: bridge.apiKey,
+  });
+  await fs.rm(completionReceiptPath, { force: true });
+  await fs.rm(invocationHome, { recursive: true, force: true });
+  await fs.mkdir(path.join(invocationHome, 'AppData', 'Roaming'), { recursive: true });
+  await fs.mkdir(path.join(invocationHome, 'AppData', 'Local'), { recursive: true });
   writeAcquiredCodexProviderConfig(codexHome, input.modelId, bridge.baseUrl);
-  const env: NodeJS.ProcessEnv = {
-    PATH: isolatedPath(path.dirname(input.exe)),
-    SystemRoot: process.env.SystemRoot || 'C:\\Windows',
-    COMSPEC: process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe',
-    PATHEXT: process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD',
-    TEMP: process.env.TEMP,
-    TMP: process.env.TMP,
-    HOME: process.env.USERPROFILE,
-    USERPROFILE: process.env.USERPROFILE,
-    HOMEDRIVE: process.env.HOMEDRIVE,
-    HOMEPATH: process.env.HOMEPATH,
-    APPDATA: process.env.APPDATA,
-    LOCALAPPDATA: process.env.LOCALAPPDATA,
-    CODEX_HOME: codexHome,
-    DIGITALME_MODEL_TOKEN: bridge.apiKey,
-  };
   const args = [
     '--sandbox', 'workspace-write',
     '--ask-for-approval', 'never',
@@ -352,11 +480,12 @@ async function runAcquiredCodexCli(input: {
       }));
       let stdout = '';
       let stderr = '';
+      let timedOut = false;
       child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
       child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
       const timer = setTimeout(() => {
+        timedOut = true;
         child.kill();
-        reject(new Error('timeout'));
       }, input.timeoutMs);
       input.signal?.addEventListener('abort', () => child.kill(), { once: true });
       child.on('error', (err) => {
@@ -367,14 +496,27 @@ async function runAcquiredCodexCli(input: {
         clearTimeout(timer);
         const finalMessage = await fs.readFile(lastMessagePath, 'utf8').catch(() => '');
         const failureSummary = [stderr, stdout, finalMessage].filter(Boolean).join('\n').slice(-12000);
+        const timedOutCompletion = timedOut
+          ? await consumeTimedOutCodingCompletion({
+              stdout,
+              receiptPath: completionReceiptPath,
+              nonce: input.completionNonce,
+              workingDirectory: input.workingDirectory,
+            })
+          : { ok: false, changedFiles: [] as string[] };
+        if (!timedOut) await fs.rm(completionReceiptPath, { force: true }).catch(() => undefined);
         resolve({
-          exitCode: code,
-          summary: ((code === 0 ? finalMessage || stdout || stderr : failureSummary) || '已返回执行结果').slice(0, 12000),
+          exitCode: timedOutCompletion.ok ? 0 : timedOut && code !== 0 ? -1 : code,
+          summary: (timedOutCompletion.ok
+            ? `代码修改与验证已完成；最终说明等待超时，兔机米已用一次性完成收据和执行事件核验。\n验证命令：${timedOutCompletion.verificationCommand}`
+            : (code === 0 ? finalMessage || stdout || stderr : failureSummary) || (timedOut ? 'timeout' : '已返回执行结果')).slice(0, 12000),
+          ...(timedOutCompletion.ok ? { claimedChangedFiles: timedOutCompletion.changedFiles } : {}),
         });
       });
     });
   } finally {
     await bridge.close().catch(() => undefined);
+    await fs.rm(invocationHome, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -462,7 +604,8 @@ export function createAcquiredCodingExecutorAdapter(
       }
 
       const instruction = String(input.goal || '').trim();
-      const prompt = renderAcquiredCodingPrompt(instruction, workingDirectory);
+      const completionNonce = randomUUID();
+      const prompt = renderAcquiredCodingPrompt(instruction, workingDirectory, completionNonce);
       ctx.reportProgress('正在准备完成任务所需能力');
 
       let result: AcquiredCodingRunResult;
@@ -522,6 +665,7 @@ export function createAcquiredCodingExecutorAdapter(
             modelId: bridged.modelRef.split('/')[1] || bridged.modelRef,
             chatComplete: bridged.complete,
             timeoutMs,
+            completionNonce,
             signal: ctx.signal,
           });
         } else {

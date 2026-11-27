@@ -175,6 +175,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 编排臂最后一个干净样本同样只修改 `src/main.cjs` 且注册测试通过，但 Agent 在最终模型收尾请求上达到 10 分钟超时；Talk Execution 失败、Artifact 为空、用户面如实返回未完成，因此不得进入 pair validator。诊断期间托管免费额度从 66% 降至 42%，没有购买、充值或新增外部按量费用；为避免继续消耗，本轮停止真实重跑。当前状态为 `SLICE_2C_DESKTOP_DIRECT_PASS / DESKTOP_ORCHESTRATED_TIMEOUT`。下一小批次仍只解决桌面编排臂的无模型收尾可靠性门，不进入后端或脏工作区，不宣称四类 95%、Owner 验收、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-01.md)。
 
+### Slice 2C-9 开发检查点（2026-11-27）
+
+桌面编排臂增加了严格的一次性完成收据：只有 nonce、真实相对变更清单、验证命令和 Codex JSONL 中退出码为零且输出标记一致的命令事件同时成立，才允许把“任务已经做完、仅最终自然语言收尾超时”恢复为成功；收据在核验后自动删除，不能替代真实 Git 增量和最终测试。固定 Runtime 获取链同时修正了版本警告误判，并在 PowerShell 压缩模块不可加载时使用 Windows 自带 `tar.exe` 后备；固定来源、压缩包 hash 和版本门均未放宽。
+
+唯一一次真实编排复验没有进入收尾阶段：获取链和回环模型已工作，但 Windows `workspace-write` 中的统一命令进程因 home 位于授权工作区外而无法启动，未修改文件并被产物门拒绝；托管免费额度 42%→39%，没有购买、充值或新增外部按量费用。实现现已改为在授权工作区创建随机一次性 home，并在执行结束后清理，29 项本次相关测试与四类材料预检 4/4 通过；真实复验按单次调用上限留到下一小批次。当前状态为 `DESKTOP_ORCHESTRATED_HOME_FIXED / REAL_RERUN_PENDING`，仍不进入后端或脏工作区，不宣称桌面双臂通过、四类 95%、Owner 验收、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-CLOSEOUT-02.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-CLOSEOUT-02.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

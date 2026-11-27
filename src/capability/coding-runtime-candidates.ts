@@ -104,10 +104,18 @@ function findCodexExe(dir: string): string | null {
   return null;
 }
 
+export function parseCodexVersionOutput(output: string): string | null {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.find((line) => /^codex(?:-cli)?\s+\S+/i.test(line)) || null;
+}
+
 export function probeCodexVersion(exe: string): string | null {
   const result = spawnSync(exe, ['--version'], hiddenSpawnSyncOptions({ encoding: 'utf8', timeout: 20_000 }));
   const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
-  return result.status === 0 && text ? text.split(/\r?\n/)[0]!.trim() : null;
+  return result.status === 0 && text ? parseCodexVersionOutput(text) : null;
 }
 
 export function probeCachedCodexRuntime(
@@ -145,15 +153,27 @@ async function rmQuiet(dir: string): Promise<void> {
 export async function defaultExtractZip(zipPath: string, destDir: string): Promise<void> {
   await fs.mkdir(destDir, { recursive: true });
   const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
-  execFileSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
-    ],
-    { windowsHide: true, timeout: 120_000 },
-  );
+  try {
+    execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
+      ],
+      { windowsHide: true, timeout: 120_000 },
+    );
+  } catch {
+    // Restricted Windows profiles can block Microsoft.PowerShell.Archive autoload.
+    // Modern supported Windows includes bsdtar, so keep extraction local and retain
+    // the same pinned archive/hash/version gates instead of weakening acquisition.
+    await fs.rm(destDir, { recursive: true, force: true });
+    await fs.mkdir(destDir, { recursive: true });
+    execFileSync('tar.exe', ['-xf', zipPath, '-C', destDir], {
+      windowsHide: true,
+      timeout: 120_000,
+    });
+  }
 }
 
 function versionMatches(probed: string, expected: string): boolean {

@@ -6,12 +6,18 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { DownloadError, downloadVerifiedFile } from '../http-download';
 import { acquireCapability } from '../acquire-capability';
-import { createCodexWindowsCandidate, createOpenCodeWindowsCandidate } from '../coding-runtime-candidates';
+import {
+  createCodexWindowsCandidate,
+  createOpenCodeWindowsCandidate,
+  defaultExtractZip,
+  parseCodexVersionOutput,
+} from '../coding-runtime-candidates';
 import {
   CODEX_ASSET_SHA256,
   CODEX_GITHUB_ASSET_URL,
@@ -47,6 +53,31 @@ async function tmpDir(): Promise<string> {
 }
 
 describe('zero-start-acquisition-resilience-01', () => {
+  it('Codex 版本探针忽略受限环境先输出的非版本警告', () => {
+    const output = [
+      'WARNING: proceeding, even though we could not create PATH aliases: Could not find home directory',
+      `codex-cli ${CODEX_PINNED_VERSION}`,
+    ].join('\r\n');
+
+    assert.equal(parseCodexVersionOutput(output), `codex-cli ${CODEX_PINNED_VERSION}`);
+    assert.equal(parseCodexVersionOutput('WARNING: no version line'), null);
+  });
+
+  it('Windows 固定包在 PowerShell 压缩模块不可用时仍可本地解压', async () => {
+    if (process.platform !== 'win32') return;
+    const root = await tmpDir();
+    const source = path.join(root, 'source');
+    const dest = path.join(root, 'dest');
+    const zip = path.join(root, 'runtime.zip');
+    await fs.mkdir(source, { recursive: true });
+    await fs.writeFile(path.join(source, 'codex.exe'), 'fixed-runtime');
+    execFileSync('tar.exe', ['-a', '-cf', zip, '-C', source, 'codex.exe'], { windowsHide: true });
+
+    await defaultExtractZip(zip, dest);
+
+    assert.equal(await fs.readFile(path.join(dest, 'codex.exe'), 'utf8'), 'fixed-runtime');
+  });
+
   it('Codex 候选同样执行 hash、解压与版本三重校验', async () => {
     const body = Buffer.from('codex-zip');
     const root = await tmpDir();
