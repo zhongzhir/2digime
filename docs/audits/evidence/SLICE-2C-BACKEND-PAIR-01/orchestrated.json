@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "slice-2c-coding-run-evidence/1",
+  "source": "real_process",
+  "taskId": "2C-BACKEND-01",
+  "projectClass": "backend",
+  "arm": "2digime_orchestrated",
+  "workspaceId": "run-1795771990373-f9312369",
+  "fixtureDigest": "d4bbdaa202354bbc6cc3e463f02a894eb07a3750170c799def7e6b59ca761a7b",
+  "projectRevision": "de7598c08794e2b647eb9c7be689a05afa90b0b0",
+  "agent": {
+    "executorId": "openai-codex-public-release",
+    "version": "0.171.0-alpha.13.2",
+    "executableDigest": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+  },
+  "baselineTest": {
+    "commandDigest": "4f1bd23313c9ba84b7f7ff0d1e639a2c34cc59977d13e6f339fac7925d37ef0b",
+    "outputDigest": "8863bf15dea7ef12eb9cdae2261895d278da3fda87a4b352c2f9fafacbfd8b06",
+    "exitCode": 1,
+    "startedAt": "2026-11-27T09:33:17.873Z",
+    "finishedAt": "2026-11-27T09:33:18.744Z",
+    "matchedRegisteredFailure": true
+  },
+  "finalTest": {
+    "commandDigest": "4f1bd23313c9ba84b7f7ff0d1e639a2c34cc59977d13e6f339fac7925d37ef0b",
+    "outputDigest": "8001f48c18e1bda16be3e557886cf88cef88d9909d2ed83b8f91f9587333811e",
+    "exitCode": 0,
+    "startedAt": "2026-11-27T09:40:14.095Z",
+    "finishedAt": "2026-11-27T09:40:14.248Z"
+  },
+  "changedFiles": [
+    "src/retry-after.cjs",
+    "test/retry-after.edge.test.cjs"
+  ],
+  "outsideScopeWrites": [],
+  "cost": {
+    "basis": "existing_entitlement_no_incremental_charge",
+    "externalChargeIncurred": false,
+    "amountCny": 0
+  },
+  "talkReceipt": {
+    "threadId": "conv_mwysbq32be7675f6",
+    "executionId": "run_bd7574e9-f87f-4e0c-8180-a5afe55d102d",
+    "artifactRefs": [
+      "D:\\Projects\\Digital Me\\.task-worktrees\\main-integration-20261122\\scripts\\_slice-2c-coding-runs\\run-1795771990373-f9312369\\workspace\\test\\retry-after.edge.test.cjs",
+      "D:\\Projects\\Digital Me\\.task-worktrees\\main-integration-20261122\\scripts\\_slice-2c-coding-runs\\run-1795771990373-f9312369\\workspace\\src\\retry-after.cjs"
+    ],
+    "userVisibleSummary": "已经完成本次代码修复，并在授权项目中运行了预注册测试。"
+  }
+}

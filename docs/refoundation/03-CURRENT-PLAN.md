@@ -205,6 +205,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 当前状态为 `BACKEND_DIRECT_PASS / BACKEND_ORCHESTRATED_PENDING`。本检查点只关闭后端直接臂，不是后端双臂、四类 95% 或 Owner 验收；下一小批次只运行同一后端任务的兔机米正式 Talk 编排臂，复用当前已校验临时 Runtime，不进入脏工作区，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-DIRECT-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-DIRECT-01.md)。
 
+### Slice 2C-14 开发检查点（2026-11-27）
+
+`2C-BACKEND-01` 兔机米 Talk 编排臂已在普通用户宿主下真实通过：使用同一官方固定 Codex build，预注册测试由失败变为通过，同一 Talk 的 Thread、Execution、Artifact 与用户可见成功摘要成立。独立 Windows sandbox 负向探针证明授权工作区内可写、工作区外写入被拒绝且文件不存在。托管免费额度 35%→26%，没有购买、充值或新增外部按量费用。
+
+编排臂与已归档直接臂通过正式 pair validator，返回 `evidence_ready_for_scoring`。两臂冻结任务、项目类别、fixture digest、project revision、Agent executor/version/executable digest 一致，workspaceId 不同，最终预注册测试均通过且 `outsideScopeWrites=[]`。编排臂在实现修复之外增加一个边界测试文件，审计已如实保留该差异。当前状态为 `BACKEND_SAME_BUILD_PAIR_ADMITTED`。这只关闭后端项目类，不代表四类 95% 或 Owner 验收；下一小批次进入 `2C-DIRTY-01` 直接臂，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-PAIR-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-PAIR-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
