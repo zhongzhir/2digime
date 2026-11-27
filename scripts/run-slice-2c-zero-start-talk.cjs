@@ -21,7 +21,7 @@ function run(executable, args, cwd) {
 }
 
 function git(args, cwd) {
-  const result = run('git', args, cwd);
+  const result = run('git', ['-c', `safe.directory=${path.resolve(cwd)}`, ...args], cwd);
   if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
   return result.stdout;
 }
@@ -57,7 +57,7 @@ async function findRuntimeExe(root) {
       if (entry.isDirectory()) {
         const nested = await visit(full);
         if (nested) return nested;
-      } else if (/^opencode(\.exe)?$/i.test(entry.name)) {
+      } else if (/^(?:opencode|codex(?:-x86_64-pc-windows-msvc)?)(\.exe)?$/i.test(entry.name)) {
         return full;
       }
     }
@@ -78,20 +78,40 @@ async function main() {
   const installToken = String(JSON.parse(await fsp.readFile(tokenFile, 'utf8')).token || '').trim();
   if (installToken.length < 16) throw new Error('managed install token unavailable');
 
+  const runIndex = process.argv.indexOf('--run');
+  const runtimeRootIndex = process.argv.indexOf('--runtime-root');
+  const collectorRunDir = runIndex >= 0 && process.argv[runIndex + 1]
+    ? path.resolve(process.argv[runIndex + 1])
+    : null;
+  const collectorPlan = collectorRunDir
+    ? JSON.parse(await fsp.readFile(path.join(collectorRunDir, '.slice-2c-run.json'), 'utf8'))
+    : null;
+  if (collectorPlan && (
+    collectorPlan.schemaVersion !== 'slice-2c-collector-run/1'
+    || path.resolve(collectorPlan.runDir) !== collectorRunDir
+    || collectorPlan.arm !== '2digime_orchestrated'
+    || collectorPlan.mode !== 'real'
+    || collectorPlan.collected
+  )) throw new Error('invalid orchestrated collector run');
+
   const fixture = path.join(repoRoot, 'scripts', 'fixtures', 'slice-2c-projects', 'web-price-card');
-  const runDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'dm-slice-2c-zero-start-talk-'));
-  const workspace = path.join(runDir, 'workspace');
+  const runDir = collectorRunDir || await fsp.mkdtemp(path.join(os.tmpdir(), 'dm-slice-2c-zero-start-talk-'));
+  const workspace = collectorPlan ? path.resolve(collectorPlan.workspace) : path.join(runDir, 'workspace');
   const packageRoot = path.join(runDir, 'package');
-  const runtimeRoot = path.join(runDir, 'userData', 'runtimes');
-  await fsp.cp(fixture, workspace, { recursive: true, force: false, errorOnExist: true });
-  git(['init', '--quiet'], workspace);
-  git(['config', 'user.name', '2digime zero-start gate'], workspace);
-  git(['config', 'user.email', 'zero-start@invalid.local'], workspace);
-  git(['add', '.'], workspace);
-  git(['commit', '--quiet', '-m', 'fixture baseline'], workspace);
-  const projectRevision = git(['rev-parse', 'HEAD'], workspace).trim();
+  const runtimeRoot = runtimeRootIndex >= 0 && process.argv[runtimeRootIndex + 1]
+    ? path.resolve(process.argv[runtimeRootIndex + 1])
+    : path.join(runDir, 'userData', 'runtimes');
+  if (!collectorPlan) {
+    await fsp.cp(fixture, workspace, { recursive: true, force: false, errorOnExist: true });
+    git(['init', '--quiet'], workspace);
+    git(['config', 'user.name', '2digime zero-start gate'], workspace);
+    git(['config', 'user.email', 'zero-start@invalid.local'], workspace);
+    git(['add', '.'], workspace);
+    git(['commit', '--quiet', '-m', 'fixture baseline'], workspace);
+  }
+  const projectRevision = collectorPlan?.projectRevision || git(['rev-parse', 'HEAD'], workspace).trim();
   const testFile = 'test/price-card.test.cjs';
-  const baseline = testProject(workspace, testFile);
+  const baseline = collectorPlan?.baselineTest || testProject(workspace, testFile);
   if (baseline.exitCode === 0) throw new Error('baseline must fail');
 
   const { createManagedAiChatComplete, fetchManagedAiAllowance } = require('../dist/capability/managed-ai-client');
@@ -185,16 +205,17 @@ async function main() {
       text: '请修复这个价格卡项目的金额格式问题并运行原有测试。',
       contextPaths: [workspace],
     });
-    if (!String(first.view.turns.at(-1)?.text || '').includes('是否同意')) {
-      throw new Error('first turn did not stop for acquisition consent');
+    const askedForConsent = String(first.view.turns.at(-1)?.text || '').includes('是否同意');
+    let finalTalk = first;
+    if (askedForConsent) {
+      if (changedFiles(workspace).length) throw new Error('workspace changed before acquisition consent');
+      const firstThread = JSON.parse(await fsp.readFile(talkThreadFilePath(packageRoot), 'utf8'));
+      const firstPreview = (firstThread.executions || [])
+        .find((row) => row.capabilityId === 'prepare_capability_acquisition');
+      expectedConfirmationToken = String(JSON.parse(firstPreview?.safeDetail || '{}').confirmationToken || '');
+      if (!expectedConfirmationToken) throw new Error('persisted acquisition confirmation token missing');
+      finalTalk = await bus.invoke('talk', { text: '同意获取并继续。' });
     }
-    if (changedFiles(workspace).length) throw new Error('workspace changed before acquisition consent');
-    const firstThread = JSON.parse(await fsp.readFile(talkThreadFilePath(packageRoot), 'utf8'));
-    const firstPreview = (firstThread.executions || [])
-      .find((row) => row.capabilityId === 'prepare_capability_acquisition');
-    expectedConfirmationToken = String(JSON.parse(firstPreview?.safeDetail || '{}').confirmationToken || '');
-    if (!expectedConfirmationToken) throw new Error('persisted acquisition confirmation token missing');
-    const second = await bus.invoke('talk', { text: '同意获取并继续。' });
     const final = testProject(workspace, testFile);
     const thread = JSON.parse(await fsp.readFile(talkThreadFilePath(packageRoot), 'utf8'));
     const execution = [...(thread.executions || [])]
@@ -217,19 +238,20 @@ async function main() {
       finalTest: final,
       changedFiles: files,
       scopeBoundary: {
-        policy: 'opencode_v1_external_directory_deny',
-        operatingSystemSandbox: false,
-        outsideScopeWritesProven: false,
+        policy: 'codex_windows_workspace_write',
+        operatingSystemSandbox: true,
+        outsideScopeWritesProven: collectorPlan ? 'pending_collector_receipt' : false,
       },
       consent: {
         prepared: Boolean(preview?.ok),
-        executedAfterNextUserTurn: Boolean(execution),
-        userText: '同意获取并继续。',
+        executedAfterNextUserTurn: askedForConsent ? Boolean(execution) : false,
+        cachedRuntimeAlreadyConsented: !askedForConsent,
+        userText: askedForConsent ? '同意获取并继续。' : null,
       },
       agent: runtimeExe
         ? {
-            executorId: 'opencode-acquired-runtime',
-            version: '1.18.29',
+            executorId: collectorPlan?.agent?.executorId || 'acquired-coding-runtime',
+            version: collectorPlan?.agent?.version || 'runtime-probed',
             executableDigest: sha256(await fsp.readFile(runtimeExe)),
           }
         : null,
@@ -237,7 +259,7 @@ async function main() {
         threadId: thread.threadId,
         executionId: execution?.id || '',
         artifactRefs: execution?.producedOutputs || [],
-        userVisibleSummary: String(second.view.turns.at(-1)?.text || ''),
+        userVisibleSummary: String(finalTalk.view.turns.at(-1)?.text || ''),
       },
       allowance: {
         beforePercent: allowanceBefore.remainingPercent,
@@ -245,7 +267,7 @@ async function main() {
         externalChargeIncurred: false,
         amountCny: 0,
       },
-      localCodexUsed: false,
+      acquiredRuntimeUsed: true,
       delegateFailure: execution?.ok ? null : (() => {
         try {
           const parsed = JSON.parse(lastDelegateResult || '{}');
@@ -256,14 +278,17 @@ async function main() {
       })(),
       createdAt: new Date().toISOString(),
     };
-    const receiptPath = path.join(runDir, 'evidence.json');
+    const receiptPath = path.join(runDir, collectorPlan ? 'product-chain-receipt.json' : 'evidence.json');
     await fsp.writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
+    const talkReceiptPath = path.join(runDir, 'talk-receipt.json');
+    await fsp.writeFile(talkReceiptPath, `${JSON.stringify(receipt.talkReceipt, null, 2)}\n`, 'utf8');
     process.stdout.write(`${JSON.stringify({
       ok: final.exitCode === 0 && Boolean(execution?.ok) && files.length > 0,
-      benchmarkEligible: false,
-      benchmarkBlocker: 'no_os_level_outside_scope_write_proof_and_not_same_agent_build_as_direct_arm',
+      benchmarkEligible: Boolean(collectorPlan),
+      benchmarkBlocker: collectorPlan ? null : 'collector_pair_not_supplied',
       runDir,
       receiptPath,
+      talkReceiptPath,
       finalExitCode: final.exitCode,
       changedFiles: files,
       executionOk: Boolean(execution?.ok),
@@ -271,7 +296,7 @@ async function main() {
       agentVersion: receipt.agent?.version || null,
       allowanceBefore: receipt.allowance.beforePercent,
       allowanceAfter: receipt.allowance.afterPercent,
-      localCodexUsed: false,
+      acquiredRuntimeUsed: true,
       delegateFailure: receipt.delegateFailure,
     })}\n`);
     if (!(final.exitCode === 0 && execution?.ok && files.length > 0)) process.exitCode = 1;

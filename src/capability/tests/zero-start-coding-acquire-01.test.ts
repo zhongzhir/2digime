@@ -9,8 +9,10 @@ import * as path from 'node:path';
 import { acquireCapability, type AcquireCandidate } from '../acquire-capability';
 import { mapChatModelToProviderEnv } from '../chat-model-credential-bridge';
 import { defaultCodingRuntimeCandidates } from '../coding-runtime-candidates';
+import { startLocalChatModelBridge } from '../chat-model-http-bridge';
 import {
   createAcquiredCodingExecutorAdapter,
+  writeAcquiredCodexProviderConfig,
   writeAcquiredCodingProviderConfig,
 } from '../adapters/acquired-coding-executor';
 import { createExternalExecutorCodexAdapter } from '../adapters/external-executor-codex';
@@ -22,6 +24,64 @@ import { CapabilityRegistry } from '../registry';
 import { routeCodingAgent } from '../coding-agent-route';
 
 describe('zero-start-coding-acquire-01', () => {
+  it('首选候选是可自动获取且具备工作区沙箱的 Codex runtime', () => {
+    const candidates = defaultCodingRuntimeCandidates();
+    assert.equal(candidates[0]?.id, 'codex-windows-cli');
+    assert.equal(candidates.length, 1, '同一次明确授权不得静默换成未展示的候选');
+  });
+
+  it('Codex 隔离配置只连接本次回环 Responses 桥并启用 workspace-write', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-codex-config-'));
+    const configPath = writeAcquiredCodexProviderConfig(root, 'managed-ai', 'http://127.0.0.1:3210/v1');
+    const config = await fs.readFile(configPath, 'utf8');
+    assert.match(config, /model_provider = "2digime"/);
+    assert.match(config, /wire_api = "responses"/);
+    assert.match(config, /sandbox_mode = "workspace-write"/);
+    assert.equal(/network_proxy|network\.enabled/.test(config), false);
+    assert.match(config, /sandbox = "unelevated"/);
+    assert.equal(/sk-|api[_-]?key/i.test(config), false);
+  });
+
+  it('回环桥把 Responses 函数工具映射到现有聊天模型合同', async () => {
+    let sawTool = false;
+    const bridge = await startLocalChatModelBridge({
+      model: 'managed-ai',
+      complete: async (options) => {
+        sawTool = options.tools?.[0]?.function.name === 'shell';
+        assert.equal(options.messages.some((message) => message.content.includes('修改文件')), true);
+        return {
+          text: '',
+          toolCalls: [{
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'shell', arguments: '{"command":"echo ok"}' },
+          }],
+        };
+      },
+    });
+    try {
+      const response = await fetch(`${bridge.baseUrl}/responses`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${bridge.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'managed-ai',
+          stream: true,
+          instructions: '只在工作区内操作。',
+          input: [{ role: 'user', content: [{ type: 'input_text', text: '修改文件' }] }],
+          tools: [{ type: 'function', name: 'shell', description: 'run', parameters: { type: 'object' } }],
+        }),
+      });
+      assert.equal(response.status, 200);
+      const body = await response.text();
+      assert.equal(sawTool, true);
+      assert.match(body, /response\.completed/);
+      assert.match(body, /function_call/);
+      assert.match(body, /call_1/);
+    } finally {
+      await bridge.close();
+    }
+  });
+
   it('获取后的 runtime 配置拒绝授权项目外目录和内置联网工具', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-acquired-config-'));
     const configPath = writeAcquiredCodingProviderConfig(

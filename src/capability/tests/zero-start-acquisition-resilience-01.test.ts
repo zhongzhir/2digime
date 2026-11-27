@@ -11,8 +11,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { DownloadError, downloadVerifiedFile } from '../http-download';
 import { acquireCapability } from '../acquire-capability';
-import { createOpenCodeWindowsCandidate } from '../coding-runtime-candidates';
+import { createCodexWindowsCandidate, createOpenCodeWindowsCandidate } from '../coding-runtime-candidates';
 import {
+  CODEX_ASSET_SHA256,
+  CODEX_GITHUB_ASSET_URL,
+  CODEX_PINNED_VERSION,
   OPENCODE_PINNED_VERSION,
   OPENCODE_ASSET_SHA256,
   OPENCODE_GITHUB_ASSET_URL,
@@ -44,6 +47,29 @@ async function tmpDir(): Promise<string> {
 }
 
 describe('zero-start-acquisition-resilience-01', () => {
+  it('Codex 候选同样执行 hash、解压与版本三重校验', async () => {
+    const body = Buffer.from('codex-zip');
+    const root = await tmpDir();
+    const candidate = createCodexWindowsCandidate({
+      expectedSha256: sha256Hex(body),
+      sources: [{ id: 'official', url: 'https://example.invalid/codex.zip' }],
+      downloadTo: async ({ dest }) => {
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.writeFile(dest, body);
+        return { sha256: sha256Hex(body), bytes: body.length };
+      },
+      extractZip: async (_zip, dest) => {
+        await fs.mkdir(dest, { recursive: true });
+        await fs.writeFile(path.join(dest, 'codex.exe'), 'stub');
+      },
+      probeVersion: () => `codex-cli ${CODEX_PINNED_VERSION}`,
+    });
+    const result = await candidate.acquire({ runtimeRoot: root });
+    assert.equal(result.status, 'ready');
+    assert.equal(result.candidateId, 'codex-windows-cli');
+    assert.equal(result.version, CODEX_PINNED_VERSION);
+  });
+
   it('A 302 → 200 写出完整文件', async () => {
     const body = Buffer.from('opencode-zip-bytes');
     const expected = sha256Hex(body);
@@ -420,6 +446,9 @@ describe('zero-start-acquisition-resilience-01', () => {
   });
 
   it('清单冻结 1.18.29 与官方 SHA256，不追 latest', () => {
+    assert.equal(CODEX_PINNED_VERSION, '0.171.0-alpha.13.2');
+    assert.equal(CODEX_ASSET_SHA256, '82accf27a8fa00e489fa7182a0d454b254025d0564e2af91786f47eae44c4e6c');
+    assert.match(CODEX_GITHUB_ASSET_URL, /rust-v0\.171\.0-alpha\.13\.2\/codex-x86_64-pc-windows-msvc\.exe\.zip$/);
     assert.equal(OPENCODE_PINNED_VERSION, '1.18.29');
     assert.equal(
       OPENCODE_ASSET_SHA256,

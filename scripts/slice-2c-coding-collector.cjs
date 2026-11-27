@@ -143,7 +143,8 @@ async function prepare(values) {
   runGit(['config', 'user.email', 'benchmark@invalid.local'], workspace);
   runGit(['add', '.'], workspace);
   runGit(['commit', '--quiet', '-m', 'fixture baseline'], workspace);
-  const projectRevision = runGit(['rev-parse', 'HEAD'], workspace).trim();
+  // 独立工作区的基线 commit 时间不同；tree SHA 才表示两臂实际使用的同一代码版本。
+  const projectRevision = runGit(['rev-parse', 'HEAD^{tree}'], workspace).trim();
 
   let dirtyProof = null;
   if (material.dirtySetup) {

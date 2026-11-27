@@ -163,6 +163,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 `2C-WEB-01` 零起步真实产品链通过：基线失败，只修改 `src/price-card.cjs`，最终测试通过，同一 Talk 的 Execution/Artifact/用户可见摘要成立；本机 Codex 未参与，没有购买、充值或按量付费。免费额度百分比 89%→89% 不代表零模型消耗。OpenCode V1 配置已拒绝外部目录、内置网页工具和子 Agent，但不是 Windows OS 级 sandbox；同时既有直连样本使用 Codex，本次编排使用 OpenCode，不满足同一 Agent build。当前状态为 `ZERO_START_PRODUCT_CHAIN_PASS / FORMAL_BENCHMARK_INELIGIBLE`，不得据此计算 95%、宣称零越界写入或转入其余三类评分任务。下一小批次只解决 OS 级工作区边界与同一 build 准入。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-ZERO-START-TALK-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-ZERO-START-TALK-01.md)。
 
+### Slice 2C-7 开发检查点（2026-11-27）
+
+可获取 Coding Runtime 的 Windows OS 写边界和同一 Agent build 双臂准入已关闭。兔机米首选获取 OpenAI 官方固定 Codex Windows Release `0.171.0-alpha.13.2`，执行压缩包 hash、解压和版本三重校验；使用 Responses 回环桥复用兔机米当前托管模型，不要求用户预装、登录或配置 Codex。正式配置为官方 `workspace-write` / Windows `unelevated` restricted-token / approval `never` / 禁网；宿主负向探针证明授权目录内可写、目录外 `Access denied` 且文件不存在。
+
+`2C-WEB-01` 已取得新的正式双臂对：直接臂与兔机米 Talk 编排臂使用同一 fixture digest、确定性 Git tree、Agent executor/version/executable digest 和两个独立工作区；两臂均只修改 `src/price-card.cjs`，预注册测试均由失败变为通过，`outsideScopeWrites=[]`，pair validator 返回 `evidence_ready_for_scoring`。没有购买、充值或外部按量费用；编排臂使用既有托管额度 75%→66%，不得写成零模型消耗。当前状态为 `OS_BOUNDARY_PASS / SAME_BUILD_PAIR_ADMITTED`。这只是 Web 单项准入，不是四类 95% 评分；桌面、后端、脏工作区仍未运行，不是 Owner 验收、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-SAME-BUILD-ADMISSION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-SAME-BUILD-ADMISSION-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

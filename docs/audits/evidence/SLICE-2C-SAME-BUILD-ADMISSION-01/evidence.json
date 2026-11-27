@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "slice-2c-same-build-admission/1",
+  "source": "real_process",
+  "taskId": "2C-WEB-01",
+  "result": "OS_BOUNDARY_PASS / SAME_BUILD_PAIR_ADMITTED",
+  "runtime": {
+    "candidateId": "codex-windows-cli",
+    "version": "0.171.0-alpha.13.2",
+    "releaseTag": "rust-v0.171.0-alpha.13.2",
+    "archiveSha256": "82accf27a8fa00e489fa7182a0d454b254025d0564e2af91786f47eae44c4e6c",
+    "executableSha256": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+  },
+  "pair": {
+    "fixtureDigest": "2595425886ee84caa67d7e3374094eb96831be1b03b6194104bce53b16f1ee93",
+    "projectRevision": "406ff7d0eaeb3ef224a395c7927cbce9a8660f6d",
+    "agent": {
+      "executorId": "openai-codex-public-release",
+      "version": "0.171.0-alpha.13.2",
+      "executableDigest": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+    },
+    "direct": {
+      "workspaceId": "run-1795757718629-fc4b74d9",
+      "baselineExitCode": 1,
+      "finalExitCode": 0,
+      "changedFiles": ["src/price-card.cjs"],
+      "outsideScopeWrites": []
+    },
+    "orchestrated": {
+      "workspaceId": "run-1795757846721-bcad44ff",
+      "threadId": "conv_mwyjx37g1aaa106e",
+      "executionId": "run_c3286d4c-56ef-47d0-83c6-580351b88a0f",
+      "baselineExitCode": 1,
+      "finalExitCode": 0,
+      "changedFiles": ["src/price-card.cjs"],
+      "outsideScopeWrites": [],
+      "allowanceBeforePercent": 75,
+      "allowanceAfterPercent": 66
+    },
+    "validator": "evidence_ready_for_scoring"
+  },
+  "sandbox": {
+    "profile": ":workspace",
+    "network": "restricted",
+    "windowsImplementation": "unelevated-restricted-token",
+    "insideScopeWrite": "allowed",
+    "outsideScopeWrite": "access_denied",
+    "outsideFileExisted": false
+  },
+  "cost": {
+    "basis": "existing_entitlement_no_incremental_charge",
+    "externalChargeIncurred": false,
+    "amountCny": 0
+  },
+  "remaining": [
+    "desktop benchmark pair",
+    "backend benchmark pair",
+    "dirty-worktree benchmark pair",
+    "Owner acceptance"
+  ]
+}

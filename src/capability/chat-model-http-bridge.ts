@@ -1,6 +1,6 @@
 /**
  * 把兔机米已经连接的 ChatCompleteFn 临时投影成仅回环可访问的
- * OpenAI-compatible /chat/completions 端点，供本次获取的成熟 Agent 使用。
+ * OpenAI-compatible /chat/completions 与 /responses 端点，供本次获取的成熟 Agent 使用。
  *
  * 不落盘模型凭证，不把管理网关协议暴露给第三方 runtime；进程结束即关闭。
  */
@@ -66,6 +66,66 @@ function normalizeTools(value: unknown): ChatToolDefinition[] | undefined {
     return row.type === 'function' && Boolean(row.function?.name) && Boolean(row.function?.parameters);
   });
   return tools.length ? tools : undefined;
+}
+
+function normalizeResponsesTools(value: unknown): ChatToolDefinition[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const tools: ChatToolDefinition[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    if (row.type !== 'function' || typeof row.name !== 'string' || !row.name.trim()) continue;
+    tools.push({
+      type: 'function',
+      function: {
+        name: row.name,
+        description: typeof row.description === 'string' ? row.description : '',
+        parameters: row.parameters && typeof row.parameters === 'object' && !Array.isArray(row.parameters)
+          ? row.parameters as Record<string, unknown>
+          : { type: 'object', properties: {} },
+      },
+    });
+  }
+  return tools.length ? tools : undefined;
+}
+
+function normalizeResponsesInput(body: Record<string, unknown>): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  if (typeof body.instructions === 'string' && body.instructions.trim()) {
+    out.push({ role: 'system', content: body.instructions });
+  }
+  const rows = typeof body.input === 'string' ? [{ role: 'user', content: body.input }] : body.input;
+  if (!Array.isArray(rows)) return out;
+  for (const item of rows) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    if (row.type === 'function_call' && typeof row.name === 'string') {
+      out.push({
+        role: 'assistant',
+        content: '',
+        tool_calls: [{
+          id: String(row.call_id || row.id || ''),
+          type: 'function',
+          function: {
+            name: row.name,
+            arguments: typeof row.arguments === 'string' ? row.arguments : JSON.stringify(row.arguments || {}),
+          },
+        }],
+      });
+      continue;
+    }
+    if (row.type === 'function_call_output') {
+      out.push({ role: 'tool', content: textContent(row.output), tool_call_id: String(row.call_id || '') });
+      continue;
+    }
+    const role = String(row.role || '');
+    if (!['user', 'assistant', 'developer', 'system'].includes(role)) continue;
+    out.push({
+      role: role === 'developer' || role === 'system' ? 'system' : role as 'user' | 'assistant',
+      content: textContent(row.content),
+    });
+  }
+  return out;
 }
 
 async function readJson(req: IncomingMessage, limit = 8 * 1024 * 1024): Promise<Record<string, unknown>> {
@@ -163,6 +223,69 @@ function writeSse(
   res.end('data: [DONE]\n\n');
 }
 
+function responsesEnvelope(input: {
+  id: string;
+  model: string;
+  text: string;
+  toolCalls?: ChatToolCall[];
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+}) {
+  const output: Record<string, unknown>[] = [];
+  if (input.text) {
+    output.push({
+      id: `msg_${randomUUID().replace(/-/g, '')}`,
+      type: 'message',
+      status: 'completed',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: input.text, annotations: [] }],
+    });
+  }
+  for (const call of input.toolCalls || []) {
+    output.push({
+      id: `fc_${randomUUID().replace(/-/g, '')}`,
+      type: 'function_call',
+      status: 'completed',
+      call_id: call.id,
+      name: call.function.name,
+      arguments: call.function.arguments,
+    });
+  }
+  return {
+    id: input.id,
+    object: 'response',
+    created_at: Math.floor(Date.now() / 1000),
+    status: 'completed',
+    model: input.model,
+    output,
+    parallel_tool_calls: true,
+    ...(input.usage
+      ? {
+          usage: {
+            input_tokens: input.usage.inputTokens,
+            output_tokens: input.usage.outputTokens,
+            total_tokens: input.usage.totalTokens,
+          },
+        }
+      : {}),
+  };
+}
+
+function writeResponsesSse(res: ServerResponse, response: ReturnType<typeof responsesEnvelope>): void {
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+  });
+  const emit = (row: Record<string, unknown>) => res.write(`data: ${JSON.stringify(row)}\n\n`);
+  emit({ type: 'response.created', response: { ...response, status: 'in_progress', output: [] } });
+  for (const [output_index, item] of response.output.entries()) {
+    emit({ type: 'response.output_item.added', output_index, item });
+    emit({ type: 'response.output_item.done', output_index, item });
+  }
+  emit({ type: 'response.completed', response });
+  res.end();
+}
+
 export async function startLocalChatModelBridge(input: {
   complete: ChatCompleteFn;
   model: string;
@@ -177,7 +300,9 @@ export async function startLocalChatModelBridge(input: {
         return '';
       }
     })();
-    if (req.method !== 'POST' || pathname !== '/v1/chat/completions') {
+    const chatRequest = pathname === '/v1/chat/completions';
+    const responsesRequest = pathname === '/v1/responses';
+    if (req.method !== 'POST' || (!chatRequest && !responsesRequest)) {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'not_found' } }));
       return;
@@ -192,10 +317,10 @@ export async function startLocalChatModelBridge(input: {
     req.once('aborted', abort);
     try {
       const body = await readJson(req);
-      const messages = normalizeMessages(body.messages);
+      const messages = responsesRequest ? normalizeResponsesInput(body) : normalizeMessages(body.messages);
       if (!messages.length) throw new Error('messages_required');
       const model = String(body.model || input.model).trim() || input.model;
-      const tools = normalizeTools(body.tools);
+      const tools = responsesRequest ? normalizeResponsesTools(body.tools) : normalizeTools(body.tools);
       const result = await input.complete({
         baseUrl: 'http://127.0.0.1',
         model,
@@ -211,7 +336,7 @@ export async function startLocalChatModelBridge(input: {
         signal: ac.signal,
         stage: 'acquired-coding-runtime',
       });
-      const id = `chatcmpl_${randomUUID().replace(/-/g, '')}`;
+      const id = `${responsesRequest ? 'resp' : 'chatcmpl'}_${randomUUID().replace(/-/g, '')}`;
       const completeUsage =
         result.usage &&
         typeof result.usage.inputTokens === 'number' &&
@@ -230,7 +355,14 @@ export async function startLocalChatModelBridge(input: {
         ...(result.toolCalls?.length ? { toolCalls: result.toolCalls } : {}),
         ...(completeUsage ? { usage: completeUsage } : {}),
       };
-      if (body.stream === true) writeSse(res, payload);
+      if (responsesRequest) {
+        const response = responsesEnvelope(payload);
+        if (body.stream === true) writeResponsesSse(res, response);
+        else {
+          res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(response));
+        }
+      } else if (body.stream === true) writeSse(res, payload);
       else {
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(completionEnvelope(payload)));

@@ -74,3 +74,32 @@ test('collector prepares, collects once, marks fixture evidence non-scorable, an
     await fs.rm(runsRoot, { recursive: true, force: true });
   }
 });
+
+test('independent arms use the same deterministic project tree revision', async () => {
+  const runsRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-slice-2c-revision-test-'));
+  const runDirs: string[] = [];
+  try {
+    const revisions: string[] = [];
+    for (const arm of ['leading_agent_direct', '2digime_orchestrated']) {
+      const prepared = invoke([
+        'prepare', '--task', '2C-WEB-01', '--arm', arm, '--mode', 'mechanical_fixture',
+        '--runs-root', runsRoot, '--agent-executable', process.execPath,
+      ]);
+      assert.equal(prepared.status, 0, prepared.stderr || prepared.stdout);
+      const prep = JSON.parse(prepared.stdout) as { runDir: string };
+      runDirs.push(prep.runDir);
+      const marker = JSON.parse(await fs.readFile(path.join(prep.runDir, '.slice-2c-run.json'), 'utf8')) as {
+        projectRevision: string;
+      };
+      revisions.push(marker.projectRevision);
+    }
+    assert.equal(revisions[0], revisions[1]);
+    assert.match(revisions[0] || '', /^[0-9a-f]{40}$/);
+  } finally {
+    for (const runDir of runDirs) {
+      const cleaned = invoke(['cleanup', '--run', runDir]);
+      assert.equal(cleaned.status, 0, cleaned.stderr || cleaned.stdout);
+    }
+    await fs.rm(runsRoot, { recursive: true, force: true });
+  }
+});

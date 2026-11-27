@@ -15,20 +15,38 @@ import {
 import { DownloadError, downloadVerifiedFile } from './http-download';
 import { hiddenSpawnSyncOptions } from '../execution/hidden-spawn';
 import {
+  CODEX_ASSET_NAME,
+  CODEX_ASSET_SHA256,
+  CODEX_CANDIDATE_ID,
+  CODEX_PINNED_VERSION,
   OPENCODE_ASSET_NAME,
   OPENCODE_ASSET_SHA256,
   OPENCODE_CANDIDATE_ID,
   OPENCODE_PINNED_VERSION,
+  defaultCodexSources,
   defaultOpencodeSources,
   type RuntimeAcquireSource,
 } from './coding-runtime-manifest';
 
 export {
+  CODEX_CANDIDATE_ID,
+  CODEX_PINNED_VERSION,
+  CODEX_ASSET_NAME,
+  CODEX_ASSET_SHA256,
   OPENCODE_CANDIDATE_ID,
   OPENCODE_PINNED_VERSION,
   OPENCODE_ASSET_NAME,
   OPENCODE_ASSET_SHA256,
 } from './coding-runtime-manifest';
+
+export interface CodexAcquireDeps {
+  sources?: RuntimeAcquireSource[];
+  downloadTo?: typeof downloadVerifiedFile;
+  extractZip?: (zipPath: string, destDir: string) => Promise<void>;
+  probeVersion?: (exe: string) => string | null;
+  expectedSha256?: string;
+  expectedVersion?: string;
+}
 
 export interface OpenCodeAcquireDeps {
   sources?: RuntimeAcquireSource[];
@@ -66,6 +84,40 @@ function findExe(dir: string): string | null {
     return null;
   }
   return null;
+}
+
+function findCodexExe(dir: string): string | null {
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        const nested = findCodexExe(full);
+        if (nested) return nested;
+      } else if (/^codex(?:-x86_64-pc-windows-msvc)?\.exe$/i.test(entry.name)) {
+        return full;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function probeCodexVersion(exe: string): string | null {
+  const result = spawnSync(exe, ['--version'], hiddenSpawnSyncOptions({ encoding: 'utf8', timeout: 20_000 }));
+  const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
+  return result.status === 0 && text ? text.split(/\r?\n/)[0]!.trim() : null;
+}
+
+export function probeCachedCodexRuntime(
+  runtimeRoot: string,
+  expectedVersion: string = CODEX_PINNED_VERSION,
+): boolean {
+  const existing = findCodexExe(path.join(runtimeRoot, 'coding', CODEX_CANDIDATE_ID));
+  if (!existing) return false;
+  const version = probeCodexVersion(existing);
+  return Boolean(version && versionMatches(version, expectedVersion));
 }
 
 export function probeOpencodeVersion(exe: string): string | null {
@@ -211,6 +263,56 @@ export function createOpenCodeWindowsCandidate(deps: OpenCodeAcquireDeps = {}): 
   };
 }
 
-export function defaultCodingRuntimeCandidates(deps?: OpenCodeAcquireDeps): AcquireCandidate[] {
-  return [createOpenCodeWindowsCandidate(deps)];
+export function createCodexWindowsCandidate(deps: CodexAcquireDeps = {}): AcquireCandidate {
+  const expectedSha = (deps.expectedSha256 || CODEX_ASSET_SHA256).toLowerCase();
+  const expectedVersion = deps.expectedVersion || CODEX_PINNED_VERSION;
+  const sources = deps.sources || defaultCodexSources();
+  const downloadTo = deps.downloadTo || downloadVerifiedFile;
+  const extractZip = deps.extractZip || defaultExtractZip;
+  const probeVersion = deps.probeVersion || probeCodexVersion;
+  return {
+    id: CODEX_CANDIDATE_ID,
+    async acquire(ctx: AcquireContext): Promise<AcquireResult> {
+      const destDir = path.join(ctx.runtimeRoot, 'coding', CODEX_CANDIDATE_ID);
+      const existing = findCodexExe(destDir);
+      if (existing) {
+        const version = probeVersion(existing);
+        if (version && versionMatches(version, expectedVersion)) {
+          return readyAcquire({ candidateId: CODEX_CANDIDATE_ID, runtimePath: existing, version: expectedVersion, source: 'cached' });
+        }
+        await rmQuiet(destDir);
+      }
+      const sourceFailures: AcquireSourceFailure[] = [];
+      for (const source of sources) {
+        const zipPath = path.join(ctx.runtimeRoot, 'download', `${source.id}-${CODEX_ASSET_NAME}`);
+        try {
+          await downloadTo({ url: source.url, dest: zipPath, expectedSha256: expectedSha, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+          await extractZip(zipPath, destDir);
+          const exe = findCodexExe(destDir);
+          if (!exe) throw new Error('exe_missing');
+          const version = probeVersion(exe);
+          if (!version || !versionMatches(version, expectedVersion)) {
+            await unlinkQuiet(zipPath);
+            await rmQuiet(destDir);
+            sourceFailures.push({ source: source.id, failureKind: 'version', safeDetail: 'version_mismatch' });
+            continue;
+          }
+          return readyAcquire({ candidateId: CODEX_CANDIDATE_ID, runtimePath: exe, version: expectedVersion, source: source.id, ...(sourceFailures.length ? { sourceFailures } : {}) });
+        } catch (err) {
+          await unlinkQuiet(zipPath);
+          await rmQuiet(destDir);
+          sourceFailures.push(err instanceof DownloadError
+            ? { source: source.id, failureKind: err.failureKind, safeDetail: err.safeDetail }
+            : { source: source.id, failureKind: 'extract', safeDetail: err instanceof Error ? err.message.slice(0, 240) : 'source_failed' });
+        }
+      }
+      const last = sourceFailures[sourceFailures.length - 1];
+      return failedAcquire({ candidateId: CODEX_CANDIDATE_ID, failureKind: last?.failureKind || 'ACQUISITION FAILURE', safeDetail: last?.safeDetail || 'all_sources_failed', sourceFailures });
+    },
+  };
+}
+
+export function defaultCodingRuntimeCandidates(): AcquireCandidate[] {
+  // 同意页展示的是这个固定候选的版本、来源和 hash；不得在同一授权下静默换厂商。
+  return [createCodexWindowsCandidate()];
 }

@@ -15,11 +15,15 @@ import type {
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { acquireCapability, type AcquireCandidate, type AcquireResult } from '../acquire-capability';
-import { defaultCodingRuntimeCandidates, probeCachedOpencodeRuntime } from '../coding-runtime-candidates';
 import {
-  OPENCODE_ASSET_SHA256,
-  OPENCODE_PINNED_VERSION,
-  defaultOpencodeSources,
+  defaultCodingRuntimeCandidates,
+  probeCachedCodexRuntime,
+} from '../coding-runtime-candidates';
+import {
+  CODEX_ASSET_SHA256,
+  CODEX_CANDIDATE_ID,
+  CODEX_PINNED_VERSION,
+  defaultCodexSources,
 } from '../coding-runtime-manifest';
 import { mapChatModelToProviderEnv, type ChatModelConnection } from '../chat-model-credential-bridge';
 import { startLocalChatModelBridge } from '../chat-model-http-bridge';
@@ -77,7 +81,7 @@ export function acquiredCodingRuntimeStatus(options: AcquiredCodingExecutorOptio
   if (options.forceAvailability === 'unavailable' || options.forceAvailability === 'needs_setup') {
     return 'acquirable';
   }
-  return probeCachedOpencodeRuntime(options.runtimeRoot) ? 'ready' : 'acquirable';
+  return probeCachedCodexRuntime(options.runtimeRoot) ? 'ready' : 'acquirable';
 }
 
 export function acquiredCodingRuntimePreview(
@@ -85,12 +89,46 @@ export function acquiredCodingRuntimePreview(
 ): AcquiredCodingPreview | undefined {
   if (acquiredCodingRuntimeStatus(options) !== 'acquirable') return undefined;
   return {
-    displayName: 'OpenCode 成熟 Coding Runtime',
-    version: OPENCODE_PINNED_VERSION,
-    sources: defaultOpencodeSources().map((source) => source.url),
-    expectedSha256: OPENCODE_ASSET_SHA256,
+    displayName: '成熟代码执行能力（Windows 工作区保护）',
+    version: CODEX_PINNED_VERSION,
+    sources: defaultCodexSources().map((source) => source.url),
+    expectedSha256: CODEX_ASSET_SHA256,
     costNotice: '运行包下载本身不收费；模型调用沿用兔机米当前已经连接的模型与既有额度。',
   };
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+export function writeAcquiredCodexProviderConfig(
+  codexHome: string,
+  modelId: string,
+  baseUrl: string,
+): string {
+  const configPath = path.join(codexHome, 'config.toml');
+  const lines = [
+    `model = ${tomlString(modelId)}`,
+    'model_provider = "2digime"',
+    'approval_policy = "never"',
+    'sandbox_mode = "workspace-write"',
+    '',
+    '[model_providers.2digime]',
+    'name = "2digime managed model"',
+    `base_url = ${tomlString(baseUrl.replace(/\/+$/, ''))}`,
+    'env_key = "DIGITALME_MODEL_TOKEN"',
+    'wire_api = "responses"',
+    'request_max_retries = 1',
+    'stream_max_retries = 1',
+    'stream_idle_timeout_ms = 180000',
+    '',
+    '[windows]',
+    'sandbox = "unelevated"',
+    '',
+  ];
+  mkdirSync(codexHome, { recursive: true });
+  writeFileSync(configPath, lines.join('\n'), 'utf8');
+  return configPath;
 }
 
 function isolatedPath(runtimeDir: string): string {
@@ -252,6 +290,86 @@ async function runAcquiredCli(input: {
   }
 }
 
+async function runAcquiredCodexCli(input: {
+  exe: string;
+  prompt: string;
+  workingDirectory: string;
+  modelId: string;
+  chatComplete: ChatCompleteFn;
+  timeoutMs: number;
+  signal?: AbortSignal;
+}): Promise<AcquiredCodingRunResult> {
+  const bridge = await startLocalChatModelBridge({
+    complete: input.chatComplete,
+    model: input.modelId,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  const runtimeBase = path.resolve(path.dirname(input.exe), '..', '..');
+  const codexHome = path.join(runtimeBase, 'codex-home');
+  const lastMessagePath = path.join(codexHome, 'last-message.txt');
+  writeAcquiredCodexProviderConfig(codexHome, input.modelId, bridge.baseUrl);
+  const env: NodeJS.ProcessEnv = {
+    PATH: isolatedPath(path.dirname(input.exe)),
+    SystemRoot: process.env.SystemRoot || 'C:\\Windows',
+    COMSPEC: process.env.COMSPEC || 'C:\\Windows\\System32\\cmd.exe',
+    PATHEXT: process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD',
+    TEMP: process.env.TEMP,
+    TMP: process.env.TMP,
+    HOME: process.env.USERPROFILE,
+    USERPROFILE: process.env.USERPROFILE,
+    HOMEDRIVE: process.env.HOMEDRIVE,
+    HOMEPATH: process.env.HOMEPATH,
+    APPDATA: process.env.APPDATA,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
+    CODEX_HOME: codexHome,
+    DIGITALME_MODEL_TOKEN: bridge.apiKey,
+  };
+  const args = [
+    '--sandbox', 'workspace-write',
+    '--ask-for-approval', 'never',
+    '--cd', input.workingDirectory,
+    '-c', 'windows.sandbox="unelevated"',
+    'exec',
+    '--ephemeral',
+    '--skip-git-repo-check',
+    '--json',
+    '--output-last-message', lastMessagePath,
+    input.prompt,
+  ];
+  try {
+    return await new Promise((resolve, reject) => {
+      const child = spawn(input.exe, args, hiddenSpawnOptions({
+        cwd: input.workingDirectory,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }));
+      let stdout = '';
+      let stderr = '';
+      child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
+      child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('timeout'));
+      }, input.timeoutMs);
+      input.signal?.addEventListener('abort', () => child.kill(), { once: true });
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.on('close', async (code) => {
+        clearTimeout(timer);
+        const finalMessage = await fs.readFile(lastMessagePath, 'utf8').catch(() => '');
+        resolve({
+          exitCode: code,
+          summary: ((code === 0 ? finalMessage || stdout || stderr : stderr || stdout || finalMessage) || '已返回执行结果').slice(0, 12000),
+        });
+      });
+    });
+  } finally {
+    await bridge.close().catch(() => undefined);
+  }
+}
+
 export function createAcquiredCodingExecutorAdapter(
   options: AcquiredCodingExecutorOptions,
 ): CapabilityAdapter {
@@ -380,17 +498,37 @@ export function createAcquiredCodingExecutorAdapter(
           });
         }
         ctx.reportProgress('正在修改项目文件');
-        result = await runAcquiredCli({
-          exe: acquired.runtimePath,
-          prompt,
-          workingDirectory,
-          modelRef: bridged.modelRef,
-          providerBaseUrl: bridged.baseUrl,
-          ...(bridged.complete ? { chatComplete: bridged.complete } : {}),
-          extraEnv: bridged.env,
-          timeoutMs,
-          signal: ctx.signal,
-        });
+        if (acquired.candidateId === CODEX_CANDIDATE_ID) {
+          if (!bridged.complete) {
+            throw Object.assign(new Error('当前模型连接还不能用于受保护的代码执行。'), {
+              stage: 'capability' as const,
+              actionable: '请使用兔机米当前托管的聊天模型后再试。',
+              failureKind: 'MODEL FAILURE',
+              safeDetail: 'responses_bridge_unavailable',
+            });
+          }
+          result = await runAcquiredCodexCli({
+            exe: acquired.runtimePath,
+            prompt,
+            workingDirectory,
+            modelId: bridged.modelRef.split('/')[1] || bridged.modelRef,
+            chatComplete: bridged.complete,
+            timeoutMs,
+            signal: ctx.signal,
+          });
+        } else {
+          result = await runAcquiredCli({
+            exe: acquired.runtimePath,
+            prompt,
+            workingDirectory,
+            modelRef: bridged.modelRef,
+            providerBaseUrl: bridged.baseUrl,
+            ...(bridged.complete ? { chatComplete: bridged.complete } : {}),
+            extraEnv: bridged.env,
+            timeoutMs,
+            signal: ctx.signal,
+          });
+        }
       }
 
       const summaryPath = path.join(ctx.workDir, 'summary.md');
@@ -404,6 +542,7 @@ export function createAcquiredCodingExecutorAdapter(
         throw Object.assign(new Error('代码修改未能完成。'), {
           stage: 'capability' as const,
           actionable: '这次代码修改没有完成。可以稍后再试，或补充更具体的目标。',
+          safeDetail: result.summary.slice(0, 2000),
         });
       }
       return {
