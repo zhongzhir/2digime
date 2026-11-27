@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "slice-2c-desktop-host-nesting-audit/1",
+  "date": "2026-11-27",
+  "taskId": "2C-DESKTOP-01",
+  "runtimeVersion": "0.171.0-alpha.13.2",
+  "realRun": {
+    "hostToken": "outer_restricted_token",
+    "executionOk": false,
+    "failureKind": "nested_windows_profile_unavailable",
+    "changedFiles": [],
+    "finalTestExitCode": 1,
+    "artifactCount": 0,
+    "allowanceBeforePercent": 39,
+    "allowanceAfterPercent": 37,
+    "externalChargeIncurred": false
+  },
+  "mechanicalProbe": {
+    "externalModelCalls": 0,
+    "outerRestrictedTokenExitCode": -1,
+    "outerRestrictedTokenMarker": "no home dir",
+    "normalUserTokenExitCode": 0,
+    "normalUserTokenMarker": "probe-ok"
+  },
+  "admission": "qualified_real_rerun_pending"
+}

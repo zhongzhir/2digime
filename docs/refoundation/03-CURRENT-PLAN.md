@@ -181,6 +181,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 唯一一次真实编排复验没有进入收尾阶段：获取链和回环模型已工作，但 Windows `workspace-write` 中的统一命令进程因 home 位于授权工作区外而无法启动，未修改文件并被产物门拒绝；托管免费额度 42%→39%，没有购买、充值或新增外部按量费用。实现现已改为在授权工作区创建随机一次性 home，并在执行结束后清理，29 项本次相关测试与四类材料预检 4/4 通过；真实复验按单次调用上限留到下一小批次。当前状态为 `DESKTOP_ORCHESTRATED_HOME_FIXED / REAL_RERUN_PENDING`，仍不进入后端或脏工作区，不宣称桌面双臂通过、四类 95%、Owner 验收、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-CLOSEOUT-02.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-CLOSEOUT-02.md)。
 
+### Slice 2C-10 开发检查点（2026-11-27）
+
+修正后真实复验仍在命令执行前返回 `no home dir`，无文件增量、最终测试失败，产品门继续正确拒绝；托管免费额度 39%→37%，没有外部收费。随后用同一固定 Runtime、同一回环协议、同一 `workspace-write / unelevated / 禁网` 配置和本地机械响应执行零模型探针：在当前 Codex 外层受限令牌内稳定复现失败，改在普通用户令牌下则 `cmd /c echo probe-ok` 退出码为 0。官方源码显示失败点是 Windows sandbox 禁网环境调用 `dirs_next::home_dir()` 创建 `.sbx-denybin`；该 API 读取 Windows Profile Known Folder，不读取进程传入的 `HOME`。因此本轮真实样本属于测试宿主“沙箱套沙箱”，不能评价正常桌面产品链。
+
+固定包首次安全扫描可能超过旧 20 秒版本探针窗口，现将等待上限收窄调整为 60 秒；固定来源、SHA-256 和精确版本匹配均未放宽，定向测试 29/29 通过。当前状态为 `HOST_NESTING_DIAGNOSED / QUALIFIED_REAL_RERUN_PENDING`。下一小批次仍只在普通用户令牌（模拟用户双击启动）下执行一次合格的桌面编排真实复验；成功后才做边界探针、采集和同 build 配对，失败则停止。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-HOST-NESTING-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-HOST-NESTING-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

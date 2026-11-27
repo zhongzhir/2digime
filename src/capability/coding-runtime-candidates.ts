@@ -113,7 +113,10 @@ export function parseCodexVersionOutput(output: string): string | null {
 }
 
 export function probeCodexVersion(exe: string): string | null {
-  const result = spawnSync(exe, ['--version'], hiddenSpawnSyncOptions({ encoding: 'utf8', timeout: 20_000 }));
+  // A freshly extracted signed executable can spend tens of seconds in the
+  // first Windows security scan. Keep the exact version gate, but do not turn
+  // that one-time scan into a false version mismatch.
+  const result = spawnSync(exe, ['--version'], hiddenSpawnSyncOptions({ encoding: 'utf8', timeout: 60_000 }));
   const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
   return result.status === 0 && text ? parseCodexVersionOutput(text) : null;
 }
