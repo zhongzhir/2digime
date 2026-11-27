@@ -247,6 +247,12 @@ TypeScript 构建和 renderer 语法检查通过；Slice 3B 专项真实 Electro
 
 TypeScript 构建、renderer 语法检查、Relay/E2EE 双 Electron 正式链路 1/1、既有本地协作领域回归 2/2、Slice 3A 回归 1/1、Slice 3-2A 回归 1/1 全部通过。专项链路验证了接受并形成 agreement/Grant、响应方结束并撤销、第二条请求拒绝，以及用户确认文案不暴露内部协议术语。当前状态为 `SLICE_3_COLLABORATION_MANAGEMENT_CONTROLS_DEVELOPER_VALIDATED / RESULT_DECISION_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批次只进入 Slice 3-2C，复用既有成果交付与决定命令补齐真实 Artifact 的查看、采用或退回，不进入自动化，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-CONTROLS-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-CONTROLS-01.md)。
 
+### Slice 3-2C 开发检查点（2026-11-27）
+
+“数字之我”右侧已补齐真实协作成果决定：发起方在成果交付后可直接看到既有 Artifact 摘要，并选择“采用结果”或“退回结果”；采用、退回及对端同步全部复用正式 `decideResult` 与同一 CollaborationRecord，操作后重新读取权威投影。结果采用显示“已完成”，结果退回显示“结果已退回”，不与请求阶段拒绝混淆。本批没有新增 Store、状态机、一级入口或修改结果的新流程。
+
+首次正式验证暴露 Windows 下协作履行高频轮询 Job 文件与原子写入竞争，导致成果任务停在材料准备阶段。现改为由既有 `job.updated` 终态事件唤醒、再读取一次权威 Job；事件不持久化也不承载事实。TypeScript 构建、renderer 语法检查、Relay/E2EE 双 Electron 真实成果专项 1/1、Slice 3-2B 管理动作回归 1/1、Slice 3-2A 投影回归 1/1、既有本地协作领域回归 2/2 全部通过。当前状态为 `SLICE_3_COLLABORATION_RESULT_DECISION_DEVELOPER_VALIDATED / AUTOMATION_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批次只审计并接入已经成立的自动化事实，先关闭一条人在环自动化主链，不建立 workflow 产品或第二事实源，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-RESULTS-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-RESULTS-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

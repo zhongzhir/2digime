@@ -63,6 +63,7 @@
     if (status === 'delivered') return role === 'initiator' ? '需要你确认结果' : '等待对方确认结果';
     if (status === 'authorized' || status === 'agreed') return '协作已建立';
     if (item && (item.ownerDecision === 'accept' || status === 'completed')) return '已完成';
+    if (item && item.ownerDecision === 'reject' && item.returnedExcerpt) return '结果已退回';
     if (item && (item.ownerDecision === 'reject' || status === 'rejected')) return '暂未建立协作';
     return role === 'responder' ? '待你确认协作' : '等待开始';
   }
@@ -83,9 +84,13 @@
     );
   }
 
+  function collaborationCanDecideResult(item) {
+    return Boolean(item && item.role === 'initiator' && item.status === 'delivered');
+  }
+
   function collaborationCanStop(item) {
     if (!item) return false;
-    if (collaborationCanRespond(item)) return false;
+    if (collaborationCanRespond(item) || collaborationCanDecideResult(item)) return false;
     return ![
       'completed',
       'rejected',
@@ -107,6 +112,14 @@
       prompt = `确认拒绝与${peer}的这次协作吗？`;
       success = `已拒绝与${peer}的这次协作。`;
       input = { action: 'respond', recordId: item.recordId, decision: 'reject' };
+    } else if (action === 'accept_result') {
+      prompt = `确认采用${peer}交付的这份协作结果吗？`;
+      success = `已采用${peer}交付的协作结果。`;
+      input = { action: 'decideResult', recordId: item.recordId, decision: 'accept' };
+    } else if (action === 'reject_result') {
+      prompt = `退回后，这份结果不会被采用。确认退回${peer}交付的协作结果吗？`;
+      success = `已退回${peer}交付的协作结果。`;
+      input = { action: 'decideResult', recordId: item.recordId, decision: 'reject' };
     } else {
       prompt = `结束后，对方不能再使用本次授权继续处理。确认结束与${peer}的协作吗？`;
       success = `已结束与${peer}的协作。`;
@@ -130,7 +143,7 @@
   function appendCollaborationAction(actions, label, item, action, row) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = action === 'accept' ? 'primary' : 'ghost';
+    button.className = action === 'accept' || action === 'accept_result' ? 'primary' : 'ghost';
     button.textContent = label;
     button.addEventListener('click', () => runCollaborationAction(item, action, row));
     actions.appendChild(button);
@@ -177,12 +190,19 @@
         result.textContent = `结果：${String(item.returnedExcerpt).slice(0, 100)}`;
         li.appendChild(result);
       }
-      if (collaborationCanRespond(item) || collaborationCanStop(item)) {
+      if (
+        collaborationCanRespond(item) ||
+        collaborationCanDecideResult(item) ||
+        collaborationCanStop(item)
+      ) {
         const actions = document.createElement('div');
         actions.className = 'ds-collaboration-actions';
         if (collaborationCanRespond(item)) {
           appendCollaborationAction(actions, '接受', item, 'accept', li);
           appendCollaborationAction(actions, '拒绝', item, 'reject', li);
+        } else if (collaborationCanDecideResult(item)) {
+          appendCollaborationAction(actions, '采用结果', item, 'accept_result', li);
+          appendCollaborationAction(actions, '退回结果', item, 'reject_result', li);
         } else if (collaborationCanStop(item)) {
           const stopLabel = item.status === 'proposed' ? '取消请求' : '结束协作';
           appendCollaborationAction(actions, stopLabel, item, 'revoke', li);

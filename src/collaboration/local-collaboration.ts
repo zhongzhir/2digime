@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { newId, nowIso } from '../shared/ids';
 import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';
-import { waitForJobTerminal } from '../work-runtime/job-runner';
+import type { ExecutionJob } from '../work-runtime/execution-job';
 import type { ContextRef } from '../work-runtime/task';
 import { OPENAI_COMPATIBLE_CAPABILITY_ID } from '../capability/adapters/openai-compatible';
 import { isRemoteEndpointRef } from '../subject-comm/endpoint';
@@ -45,6 +45,52 @@ import {
   type InteractionRequest,
   type SubjectRef,
 } from './schema';
+
+async function waitForCollaborationJobTerminal(
+  runtime: DigitalMeRuntime,
+  jobId: string,
+  timeoutMs: number,
+): Promise<ExecutionJob> {
+  const terminal = new Set<ExecutionJob['status']>(['succeeded', 'failed', 'cancelled']);
+  return new Promise<ExecutionJob>((resolve, reject) => {
+    let settled = false;
+    let reading = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let unsubscribe: () => void = () => undefined;
+    const finish = (outcome: { job?: ExecutionJob; error?: unknown }) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+      if (outcome.job) resolve(outcome.job);
+      else reject(outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error)));
+    };
+    const readAuthority = async () => {
+      if (settled || reading) return;
+      reading = true;
+      try {
+        const job = await runtime.workRuntime.getJob(jobId);
+        if (job && terminal.has(job.status)) finish({ job });
+      } catch (error) {
+        finish({ error });
+      } finally {
+        reading = false;
+      }
+    };
+    unsubscribe = runtime.eventBus.subscribe((event) => {
+      if (event.kind !== 'job.updated' || event.jobId !== jobId || !terminal.has(event.status)) {
+        return;
+      }
+      void readAuthority();
+    });
+    timer = setTimeout(
+      () => finish({ error: new Error(`timeout waiting for job ${jobId}`) }),
+      timeoutMs,
+    );
+    // 订阅后读取一次，覆盖「Job 在订阅前已结束」的竞态；后续仅由领域事件唤醒。
+    void readAuthority();
+  });
+}
 
 export interface CollabPeerPreview {
   displayName: string;
@@ -1124,7 +1170,7 @@ export class LocalCollaborationHost {
       };
       record = await this.appendLocalOnly(record, [jobLink]);
 
-      const job = await waitForJobTerminal(executionRuntime.workRuntime, submitted.jobId, 180_000);
+      const job = await waitForCollaborationJobTerminal(executionRuntime, submitted.jobId, 180_000);
       if (job.status !== 'succeeded' || !job.artifactId) {
         const failMessage = job.progress?.note?.trim() || String(job.status);
         const failEv: CollaborationEvent = {
@@ -1372,7 +1418,7 @@ export class LocalCollaborationHost {
           status: 'failed',
         };
       }
-      const job = await waitForJobTerminal(opened.runtime.workRuntime, submitted.jobId, 180_000);
+      const job = await waitForCollaborationJobTerminal(opened.runtime, submitted.jobId, 180_000);
       if (job.status !== 'succeeded' || !job.artifactId) {
         await opened.stop();
         return { recordId: record.recordId, status: 'failed' };
