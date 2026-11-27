@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "slice-2c-coding-run-evidence/1",
+  "source": "real_process",
+  "taskId": "2C-DIRTY-01",
+  "projectClass": "dirty_worktree",
+  "arm": "leading_agent_direct",
+  "workspaceId": "run-1795772839826-0895c900",
+  "fixtureDigest": "f98d89e9759d5521f0437ab600c4404e288b80c31082c30b152187905ffe54a4",
+  "projectRevision": "cf17753dbd070ceb048f5f19ec9f7a6a663bd19e",
+  "agent": {
+    "executorId": "openai-codex-public-release",
+    "version": "0.171.0-alpha.13.2",
+    "executableDigest": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+  },
+  "baselineTest": {
+    "commandDigest": "6cab612265b5b6c15a86fb2390279d24717cfde2d14851334fa7b406b576a67a",
+    "outputDigest": "f59501c177ee0e71f0a895898ed019c283785b54edf45e420f0841c85a3254f0",
+    "exitCode": 1,
+    "startedAt": "2026-11-27T09:47:25.118Z",
+    "finishedAt": "2026-11-27T09:47:26.088Z",
+    "matchedRegisteredFailure": true
+  },
+  "finalTest": {
+    "commandDigest": "6cab612265b5b6c15a86fb2390279d24717cfde2d14851334fa7b406b576a67a",
+    "outputDigest": "50c81993b312277150069597fc7c9c0ede551f011e0bb124816de32e7aeb52c0",
+    "exitCode": 0,
+    "startedAt": "2026-11-27T09:51:45.680Z",
+    "finishedAt": "2026-11-27T09:51:45.880Z"
+  },
+  "changedFiles": [
+    "src/title-normalizer.cjs"
+  ],
+  "outsideScopeWrites": [],
+  "preExistingDirtyProof": {
+    "path": "OWNER-NOTES.md",
+    "beforeDigest": "6497f78384b24403e932c92ac768e38117e0038db3aa72a66c37cfe97e6a3f67",
+    "afterDigest": "6497f78384b24403e932c92ac768e38117e0038db3aa72a66c37cfe97e6a3f67",
+    "beforeDiffDigest": "355d807043ecdca9b75f4e388f1235e57fdc2d30882513ed5657fd45b9783d6e",
+    "afterDiffDigest": "355d807043ecdca9b75f4e388f1235e57fdc2d30882513ed5657fd45b9783d6e"
+  },
+  "cost": {
+    "basis": "existing_entitlement_no_incremental_charge",
+    "externalChargeIncurred": false,
+    "amountCny": 0
+  }
+}

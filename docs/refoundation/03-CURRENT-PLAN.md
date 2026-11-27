@@ -211,6 +211,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 编排臂与已归档直接臂通过正式 pair validator，返回 `evidence_ready_for_scoring`。两臂冻结任务、项目类别、fixture digest、project revision、Agent executor/version/executable digest 一致，workspaceId 不同，最终预注册测试均通过且 `outsideScopeWrites=[]`。编排臂在实现修复之外增加一个边界测试文件，审计已如实保留该差异。当前状态为 `BACKEND_SAME_BUILD_PAIR_ADMITTED`。这只关闭后端项目类，不代表四类 95% 或 Owner 验收；下一小批次进入 `2C-DIRTY-01` 直接臂，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-PAIR-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-PAIR-01.md)。
 
+### Slice 2C-15 开发检查点（2026-11-27）
+
+`2C-DIRTY-01` 领先 Agent 直接臂已真实通过：独立 Git 副本预置 `OWNER-NOTES.md` 未提交改动，执行器只修改 `src/title-normalizer.cjs`，预注册测试由失败变为通过。采集器确认 Owner 文件内容 digest 与 Git diff digest 前后一致，既有改动没有被覆盖、回退、重写或计入本次成果；独立边界探针证明工作区外写入被拒绝且文件不存在。运行使用现有 ChatGPT 登录权益，没有购买、充值或新增外部按量费用。
+
+首次 CLI 启动因新副本信任策略降级为只读并以零改动结束；重读失败史与产品/开发宪法、复核 Owner 哈希后，使用固定 CLI 官方自动审查工作区模式取得上述有效样本，没有要求 Owner 参与调试，也没有放宽路径围栏。当前状态为 `DIRTY_DIRECT_PASS / DIRTY_ORCHESTRATED_PENDING`。下一小批次只运行同一冻结任务的兔机米 Talk 编排臂；成功后做边界探针、正式 pair validator 和四类统一评分，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-DIRECT-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-DIRECT-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
