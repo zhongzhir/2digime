@@ -235,6 +235,12 @@ Web、桌面、后端、脏工作区四类真实同 build pair 已进入统一�
 
 TypeScript 构建通过；专项真实 Electron 入口测试 1/1 通过，并验证桌面左右双栏、窄窗口单栏、管理入口复用设置页，以及隐藏整个右侧投影后 Digital Self 事实仍可继续形成且主体标识不变。当前状态为 `SLICE_3_IDENTITY_AUTHORIZATION_PROJECTION_DEVELOPER_VALIDATED / OWNER_ACCEPTANCE_PENDING`。本批未加入协作关系或自动化管理，不是打包、push、发布或部署。下一小批次只接现有真实协作关系投影。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3A-IDENTITY-AUTHORIZATION-PROJECTION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3A-IDENTITY-AUTHORIZATION-PROJECTION-01.md)。
 
+### Slice 3-2A 开发检查点（2026-11-27）
+
+“数字之我”右侧已加入协作关系只读投影：直接读取既有 `collab.interact action:list` 正式记录，显示对象、自然语言目标、本人角色、用户态状态和已有结果摘要；不展示内部 ID、原始状态、A2A 或 exchange，也未新增关系 Store、缓存或一级入口。“发起协作”只回到同一 Talk 并等待用户表达完整目标，不预建空记录。
+
+TypeScript 构建和 renderer 语法检查通过；Slice 3B 专项真实 Electron 测试 1/1、Slice 3A 回归 1/1 通过。测试以独立伙伴 Subject 和真实协作记录验证投影，并证明隐藏右侧后协作记录保持不变。当前状态为 `SLICE_3_COLLABORATION_READ_PROJECTION_DEVELOPER_VALIDATED / MANAGEMENT_ACTIONS_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批次只复用既有命令补充接受、拒绝、停止/撤销等必要管理动作，不进入自动化管理，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-PROJECTION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-PROJECTION-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

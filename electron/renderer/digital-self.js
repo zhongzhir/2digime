@@ -50,6 +50,68 @@
     if (el) el.textContent = text || '';
   }
 
+  function collaborationLabel(item) {
+    const role = item && item.role === 'responder' ? 'responder' : 'initiator';
+    const status = item ? item.status : '';
+    if (status === 'revoked' || status === 'withdrawn') return '已结束';
+    if (status === 'failed') return '未完成';
+    if (status === 'running') return role === 'responder' ? '你正在完成' : '对方正在处理';
+    if (status === 'awaiting_owner') return role === 'responder' ? '等待你确认' : '等待对方确认';
+    if (status === 'awaiting_clarification') return '等待补充说明';
+    if (status === 'counter_proposed') return role === 'responder' ? '等待你确认调整' : '对方提出调整';
+    if (status === 'proposed') return role === 'responder' ? '待你确认协作' : '等待对方确认';
+    if (status === 'delivered') return role === 'initiator' ? '需要你确认结果' : '等待对方确认结果';
+    if (status === 'authorized' || status === 'agreed') return '协作已建立';
+    if (item && (item.ownerDecision === 'accept' || status === 'completed')) return '已完成';
+    if (item && (item.ownerDecision === 'reject' || status === 'rejected')) return '暂未建立协作';
+    return role === 'responder' ? '待你确认协作' : '等待开始';
+  }
+
+  function collaborationNeedsAttention(item) {
+    const status = item ? item.status : '';
+    if (status === 'awaiting_owner' || status === 'counter_proposed') return true;
+    if (status === 'proposed') return item && item.role === 'responder';
+    if (status === 'delivered') return !item || item.role !== 'responder';
+    return false;
+  }
+
+  function renderCollaborations(items) {
+    const list = $('ds-collaboration-list');
+    const empty = $('ds-collaboration-empty');
+    const rows = Array.isArray(items) ? items : [];
+    const attention = rows.filter(collaborationNeedsAttention).length;
+    setText(
+      'ds-collaboration-summary',
+      rows.length ? `${rows.length} 项协作${attention ? ` · ${attention} 项需要处理` : ''}` : '0 项协作',
+    );
+    if (empty) empty.hidden = rows.length > 0;
+    if (!list) return;
+    list.textContent = '';
+    for (const item of rows.slice(0, 3)) {
+      const li = document.createElement('li');
+      li.className = 'ds-collaboration-item';
+      const title = document.createElement('p');
+      title.className = 'ds-collaboration-title';
+      title.textContent = item.peerDisplayName || item.granteeDisplayName || '协作对象';
+      const goal = document.createElement('p');
+      goal.className = 'ds-collaboration-goal';
+      goal.textContent = item.subtaskGoal || '协作事项';
+      const meta = document.createElement('p');
+      meta.className = 'muted tiny';
+      meta.textContent = `${item.role === 'responder' ? '对方发来' : '你发起'} · ${collaborationLabel(item)}`;
+      li.appendChild(title);
+      li.appendChild(goal);
+      li.appendChild(meta);
+      if (item.returnedExcerpt) {
+        const result = document.createElement('p');
+        result.className = 'ds-collaboration-result';
+        result.textContent = `结果：${String(item.returnedExcerpt).slice(0, 100)}`;
+        li.appendChild(result);
+      }
+      list.appendChild(li);
+    }
+  }
+
   async function refreshCapabilityProjection() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') {
@@ -65,8 +127,9 @@
       typeof client.getInstitutionStatus === 'function'
         ? client.getInstitutionStatus()
         : Promise.reject(new Error('institution status unavailable')),
+      client.invoke('collab.interact', { action: 'list' }),
     ];
-    const [identity, authorization, institution] = await Promise.allSettled(requests);
+    const [identity, authorization, institution, collaboration] = await Promise.allSettled(requests);
 
     if (identity.status === 'fulfilled' && identity.value) {
       setText('ds-identity-name', identity.value.displayName || '我的数字之我');
@@ -104,6 +167,34 @@
       setText('ds-authorization-detail', '读取失败不表示没有授权，请稍后重试。');
       setProjectionNotice('部分身份或授权信息暂时无法读取，请稍后重试。');
     }
+
+    if (collaboration.status === 'fulfilled' && collaboration.value) {
+      renderCollaborations(collaboration.value.items);
+    } else {
+      setText('ds-collaboration-summary', '暂时无法读取');
+      setText('ds-collaboration-empty', '读取失败不表示没有协作，请稍后重试。');
+      const empty = $('ds-collaboration-empty');
+      if (empty) empty.hidden = false;
+      const list = $('ds-collaboration-list');
+      if (list) list.textContent = '';
+      setProjectionNotice('部分身份、授权或协作信息暂时无法读取，请稍后重试。');
+    }
+  }
+
+  function openTalkForCollaboration() {
+    const nav = $('nav-chat');
+    if (nav) nav.click();
+    window.setTimeout(() => {
+      const input = $('chat-input');
+      if (!input) return;
+      if (!String(input.value || '').trim()) input.value = '我想发起一项协作：';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      if (typeof input.setSelectionRange === 'function') {
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
+    }, 0);
   }
 
   function showTellForm(show) {
@@ -336,6 +427,7 @@
     const closeLedger = $('btn-ds-close-ledger');
     const search = $('ds-fact-search');
     const openSettings = $('btn-ds-open-settings');
+    const startCollaboration = $('btn-ds-start-collaboration');
     if (tellBtn) {
       tellBtn.addEventListener('click', () => showTellForm(true));
     }
@@ -407,6 +499,9 @@
         const nav = $('nav-settings');
         if (nav) nav.click();
       });
+    }
+    if (startCollaboration) {
+      startCollaboration.addEventListener('click', openTalkForCollaboration);
     }
     if (page) {
       page.addEventListener('click', async (evt) => {

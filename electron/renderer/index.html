@@ -574,8 +574,8 @@
           </section>
           <aside id="ds-capability-panel" class="ds-capability-panel" aria-labelledby="ds-capability-title">
             <div class="ds-capability-heading">
-              <h2 id="ds-capability-title">身份与授权</h2>
-              <p>这里是已有身份和授权事实的摘要，不另建一套资料。</p>
+              <h2 id="ds-capability-title">身份、授权与协作</h2>
+              <p>这里是已有身份、授权和协作事实的摘要，不另建一套资料。</p>
             </div>
             <section class="ds-capability-card" aria-labelledby="ds-identity-title">
               <p class="ds-capability-kicker">身份</p>
@@ -592,6 +592,15 @@
               <p id="ds-authorization-detail" class="muted tiny">授权可随时撤销。</p>
             </section>
             <button type="button" id="btn-ds-open-settings" class="ghost ds-capability-manage">管理身份与授权</button>
+            <section class="ds-capability-card" aria-labelledby="ds-collaboration-title">
+              <p class="ds-capability-kicker">协作</p>
+              <h3 id="ds-collaboration-title">我的协作</h3>
+              <p id="ds-collaboration-summary" class="ds-capability-value">正在读取…</p>
+              <ul id="ds-collaboration-list" class="ds-collaboration-list" aria-label="最近协作"></ul>
+              <p id="ds-collaboration-empty" class="muted tiny" hidden>还没有协作记录。</p>
+              <button type="button" id="btn-ds-start-collaboration" class="ghost ds-capability-manage">发起协作</button>
+              <p class="muted tiny ds-collaboration-help">说清想与谁完成什么，兔机米会回到同一对话继续。</p>
+            </section>
             <p id="ds-capability-notice" class="meta" aria-live="polite"></p>
           </aside>
           </div>

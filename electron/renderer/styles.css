@@ -1039,6 +1039,48 @@ select {
   justify-self: start;
 }
 
+.ds-collaboration-list {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.ds-collaboration-item {
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+}
+
+.ds-collaboration-title,
+.ds-collaboration-goal,
+.ds-collaboration-result {
+  margin-bottom: 4px;
+}
+
+.ds-collaboration-title {
+  font-weight: 650;
+}
+
+.ds-collaboration-goal,
+.ds-collaboration-result {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--font-sm);
+  line-height: var(--line-height);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ds-collaboration-result {
+  color: var(--muted);
+}
+
+.ds-collaboration-help {
+  margin: 9px 0 0;
+}
+
 @media (max-width: 900px) {
   .digital-self-layout {
     grid-template-columns: minmax(0, 1fr);
