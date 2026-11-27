@@ -187,6 +187,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 固定包首次安全扫描可能超过旧 20 秒版本探针窗口，现将等待上限收窄调整为 60 秒；固定来源、SHA-256 和精确版本匹配均未放宽，定向测试 29/29 通过。当前状态为 `HOST_NESTING_DIAGNOSED / QUALIFIED_REAL_RERUN_PENDING`。下一小批次仍只在普通用户令牌（模拟用户双击启动）下执行一次合格的桌面编排真实复验；成功后才做边界探针、采集和同 build 配对，失败则停止。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-HOST-NESTING-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-HOST-NESTING-01.md)。
 
+### Slice 2C-11 开发检查点（2026-11-27）
+
+`2C-DESKTOP-01` 合格桌面编排臂已在普通用户宿主下真实通过：兔机米自行使用获取后的官方固定 Codex Runtime 和当前托管模型，只修改 `src/main.cjs`；预注册测试由失败变为通过，同一 Talk 的 Execution、Artifact 与用户可见成功摘要成立。独立 Windows sandbox 负向探针证明授权工作区内可写、工作区外 `Access denied` 且文件不存在；正式单臂证据通过 `validateCodingRunEvidence`。托管免费额度 37%→35%，没有购买、充值或新增外部按量费用。
+
+上一批次桌面直接臂已真实通过，但当时只归档了审计摘要，没有保留 pair validator 所需的完整原始 JSON，不能用摘要补造命令摘要和时间戳。当前状态为 `DESKTOP_ORCHESTRATED_PASS / DIRECT_RAW_EVIDENCE_REFRESH_PENDING`，尚未宣称桌面双臂 admitted。下一小批次只使用同一固定 Agent build 刷新一次直接臂完整证据并运行 pair validator；不再调用兔机米托管模型，不进入后端或脏工作区。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-ORCHESTRATED-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-ORCHESTRATED-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
