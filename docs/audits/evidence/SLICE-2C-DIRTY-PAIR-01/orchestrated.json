@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "slice-2c-coding-run-evidence/1",
+  "source": "real_process",
+  "taskId": "2C-DIRTY-01",
+  "projectClass": "dirty_worktree",
+  "arm": "2digime_orchestrated",
+  "workspaceId": "run-1795773337212-a0ce28c8",
+  "fixtureDigest": "f98d89e9759d5521f0437ab600c4404e288b80c31082c30b152187905ffe54a4",
+  "projectRevision": "cf17753dbd070ceb048f5f19ec9f7a6a663bd19e",
+  "agent": {
+    "executorId": "openai-codex-public-release",
+    "version": "0.171.0-alpha.13.2",
+    "executableDigest": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+  },
+  "baselineTest": {
+    "commandDigest": "6cab612265b5b6c15a86fb2390279d24717cfde2d14851334fa7b406b576a67a",
+    "outputDigest": "a596d55b2ce71a1db3b1565f2c473aff2b1b9487036cae2c73a8a1eb7dfd27f4",
+    "exitCode": 1,
+    "startedAt": "2026-11-27T09:55:47.511Z",
+    "finishedAt": "2026-11-27T09:55:48.548Z",
+    "matchedRegisteredFailure": true
+  },
+  "finalTest": {
+    "commandDigest": "6cab612265b5b6c15a86fb2390279d24717cfde2d14851334fa7b406b576a67a",
+    "outputDigest": "9292017abf91566ada5f5b8d05a40564fcd0f54a40110a4c34d27ad2ee1f2484",
+    "exitCode": 0,
+    "startedAt": "2026-11-27T10:00:35.019Z",
+    "finishedAt": "2026-11-27T10:00:35.186Z"
+  },
+  "changedFiles": [
+    "src/title-normalizer.cjs"
+  ],
+  "outsideScopeWrites": [],
+  "preExistingDirtyProof": {
+    "path": "OWNER-NOTES.md",
+    "beforeDigest": "6497f78384b24403e932c92ac768e38117e0038db3aa72a66c37cfe97e6a3f67",
+    "afterDigest": "6497f78384b24403e932c92ac768e38117e0038db3aa72a66c37cfe97e6a3f67",
+    "beforeDiffDigest": "355d807043ecdca9b75f4e388f1235e57fdc2d30882513ed5657fd45b9783d6e",
+    "afterDiffDigest": "355d807043ecdca9b75f4e388f1235e57fdc2d30882513ed5657fd45b9783d6e"
+  },
+  "cost": {
+    "basis": "existing_entitlement_no_incremental_charge",
+    "externalChargeIncurred": false,
+    "amountCny": 0
+  },
+  "talkReceipt": {
+    "threadId": "conv_mwyt4vhta896e808",
+    "executionId": "run_d666fa5e-fdb4-4f6c-ae3a-3ff0c0a40a5a",
+    "artifactRefs": [
+      "D:\\Projects\\Digital Me\\.task-worktrees\\main-integration-20261122\\scripts\\_slice-2c-coding-runs\\run-1795773337212-a0ce28c8\\workspace\\src\\title-normalizer.cjs"
+    ],
+    "userVisibleSummary": "已经完成本次代码修复，并在授权项目中运行了预注册测试。"
+  }
+}

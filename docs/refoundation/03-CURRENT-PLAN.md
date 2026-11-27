@@ -217,6 +217,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 首次 CLI 启动因新副本信任策略降级为只读并以零改动结束；重读失败史与产品/开发宪法、复核 Owner 哈希后，使用固定 CLI 官方自动审查工作区模式取得上述有效样本，没有要求 Owner 参与调试，也没有放宽路径围栏。当前状态为 `DIRTY_DIRECT_PASS / DIRTY_ORCHESTRATED_PENDING`。下一小批次只运行同一冻结任务的兔机米 Talk 编排臂；成功后做边界探针、正式 pair validator 和四类统一评分，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-DIRECT-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-DIRECT-01.md)。
 
+### Slice 2C-16 开发检查点（2026-11-27）
+
+`2C-DIRTY-01` 兔机米 Talk 编排臂已真实通过：使用同一官方固定 Codex build，只修改 `src/title-normalizer.cjs`，预注册测试由失败变为通过，同一 Talk 的 Thread、Execution、Artifact 与用户可见成功摘要成立。采集器确认预置 `OWNER-NOTES.md` 的内容 digest 与 Git diff digest 前后一致；独立 Windows sandbox 负向探针证明工作区外写入被拒绝且文件不存在。托管免费额度 26%→24%，没有购买、充值或新增外部按量费用。
+
+编排臂与已归档直接臂通过正式 pair validator，返回 `evidence_ready_for_scoring`。当前状态为 `DIRTY_SAME_BUILD_PAIR_ADMITTED`，至此 Web、桌面、后端、脏工作区四类均有合格同 build pair。下一小批次只执行四类统一评分与 Slice 2C 结论审计，不再调用模型，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-PAIR-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-PAIR-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

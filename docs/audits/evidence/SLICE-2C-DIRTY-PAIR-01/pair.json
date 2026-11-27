@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "slice-2c-coding-pair-admission/1",
+  "taskId": "2C-DIRTY-01",
+  "directEvidence": "../SLICE-2C-DIRTY-DIRECT-01/evidence.json",
+  "orchestratedEvidence": "orchestrated.json",
+  "validator": "scripts/check-slice-2c-coding-evidence.cjs",
+  "valid": true,
+  "status": "evidence_ready_for_scoring"
+}
