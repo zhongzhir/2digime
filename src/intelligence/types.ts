@@ -12,6 +12,8 @@ export interface TalkTurn {
   id: string;
   at: string;
   role: 'user' | 'assistant';
+  /** user role is the model protocol role; origin preserves who actually initiated it. */
+  origin?: 'owner' | 'automation';
   text: string;
   executionIds?: string[];
   /** 本回合实际发生的 Subject ↔ Subject 交换，不是协作阶段。 */
@@ -82,6 +84,7 @@ export interface TalkView {
   outcome?: TalkTurnOutcome;
   turns: Array<{
     role: 'user' | 'assistant';
+    origin?: 'owner' | 'automation';
     text: string;
     result?: { title: string; path?: string };
     /** Provider execution facts exposed for diagnostics; never prompt, key, reasoning or page body. */

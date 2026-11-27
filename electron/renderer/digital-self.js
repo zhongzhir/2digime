@@ -225,7 +225,7 @@
     if (!item) return '';
     if (item.lifecycle === 'paused') return '已暂停';
     if (item.lifecycle === 'revoked') return '已撤销';
-    return '运行中';
+    return item.humanInLoop === 'none' ? '运行中 · 自动执行' : '运行中';
   }
 
   async function runAutomationAction(item, action, receipt, row) {
@@ -278,7 +278,7 @@
       (count, item) => count + (
         item.lifecycle === 'active' &&
         Array.isArray(item.receipts) &&
-        item.receipts.some((receipt) => !receipt.confirmedAt)
+        item.receipts.some((receipt) => !receipt.confirmedAt && !receipt.executionClaimedAt)
           ? 1
           : 0
       ),
@@ -307,7 +307,7 @@
       li.appendChild(goal);
       li.appendChild(meta);
       const receipts = Array.isArray(item.receipts) ? item.receipts : [];
-      const pendingReceipt = receipts.find((receipt) => !receipt.confirmedAt);
+      const pendingReceipt = receipts.find((receipt) => !receipt.confirmedAt && !receipt.executionClaimedAt);
       const latest = receipts[0];
       if (pendingReceipt || latest) {
         const result = document.createElement('p');
@@ -318,6 +318,8 @@
             : item.lifecycle === 'paused'
               ? '有一次新触发；恢复后可由你确认。'
               : '有一次新触发，正在等你确认。'
+          : latest.failureReason
+            ? '最近一次未完成，详情在对话中。'
           : latest.artifactPaths && latest.artifactPaths.length
             ? '最近一次已完成，结果在对话中。'
             : '最近一次已处理，详情在对话中。';
@@ -450,7 +452,7 @@
       const input = $('chat-input');
       if (!input) return;
       if (!String(input.value || '').trim()) {
-        input.value = '我想设置一项自动化：当已连接的机构发来……时，先等我确认，再帮我……';
+        input.value = '我想设置一项自动化：当已连接的机构发来……时，帮我……；每次先确认（或：无需每次确认，只生成本机成果）。';
       }
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.focus();

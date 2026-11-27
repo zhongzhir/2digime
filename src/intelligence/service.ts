@@ -177,13 +177,35 @@ export class TalkService {
     },
     externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
+    return this.invokeQueued(input, 'owner', externalSignal);
+  }
+
+  /** Runtime-only entry. Renderer commands cannot claim an automation origin. */
+  async invokeAutomation(
+    input: { text: string; allowedCapabilityIds: string[]; automationLabel: string },
+    externalSignal?: AbortSignal | null,
+  ): Promise<{ view: TalkView }> {
+    return this.invokeQueued(input, 'automation', externalSignal);
+  }
+
+  private async invokeQueued(
+    input: {
+      text?: string;
+      contextPaths?: string[];
+      discoveryGoal?: TalkThread['discoveryGoal'];
+      allowedCapabilityIds?: string[];
+      automationLabel?: string;
+    },
+    requestOrigin: 'owner' | 'automation',
+    externalSignal?: AbortSignal | null,
+  ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
       return { view: projectView(emptyThread(this.now()), '还没有可用的数字之我。') };
     }
     const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
     const prev = this.writeChains.get(threadId) || Promise.resolve();
-    const run = prev.then(() => this.invokeNow(input, threadId, externalSignal));
+    const run = prev.then(() => this.invokeNow(input, threadId, requestOrigin, externalSignal));
     this.writeChains.set(
       threadId,
       run.then(
@@ -203,6 +225,7 @@ export class TalkService {
       automationLabel?: string;
     },
     threadId: string,
+    requestOrigin: 'owner' | 'automation',
     externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
@@ -217,7 +240,7 @@ export class TalkService {
     if (!text) {
       return { view: projectView(thread) };
     }
-    if (spoken) {
+    if (spoken && requestOrigin === 'owner') {
       try {
         touchConversationSessionSync(pkg.rootDir, { titleFromUserText: spoken });
       } catch {
@@ -232,7 +255,7 @@ export class TalkService {
     let learnedGoalUpdate: TalkLearnResult['goalUpdate'];
     // DIGITAL_SELF_LEARNING_BLOCKS_TALK = YES
     // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
-    if (spoken && this.learnFromUtterance) {
+    if (spoken && requestOrigin === 'owner' && this.learnFromUtterance) {
       try {
         const learned = await this.learnFromUtterance(
           spoken,
@@ -344,6 +367,7 @@ export class TalkService {
       const ran = await runTalkTurn({
         thread,
         userText: text,
+        requestOrigin,
         selfContext,
         goalReceipt,
         persistGoalUpdate: async (target, update) => {
@@ -423,6 +447,7 @@ export class TalkService {
           id: `turn_${randomUUID()}`,
           at: now,
           role: 'user',
+          ...(requestOrigin === 'automation' ? { origin: 'automation' as const } : {}),
           text,
         });
       }
@@ -692,6 +717,7 @@ function projectView(
     ...(outcome ? { outcome } : {}),
     turns: thread.turns.map((turn) => ({
       role: turn.role,
+      ...(turn.origin ? { origin: turn.origin } : {}),
       text: turn.text,
       ...(turn.result ? { result: turn.result } : {}),
       ...(turn.capabilityTrace ? { capabilityTrace: turn.capabilityTrace } : {}),

@@ -598,6 +598,39 @@ export class DigitalMeRuntime {
     const pkg = this.subject.requireActive();
     const service = await AutomationService.open(pkg.rootDir);
     const readView = async () => (await this.getDigitalSelfService().invoke({ action: 'read' })).view;
+    const executeThroughTalk = async (
+      definition: import('../automation/automation-service').AutomationDefinition,
+      origin: 'owner' | 'automation',
+      request: { goal: string; allowedCapabilityIds: string[] },
+    ) => {
+      const before = await readThread(pkg.rootDir, nowIso());
+      const beforeIds = new Set(before.executions.map((row) => row.id));
+      if (origin === 'automation') {
+        await this.getTalkService().invokeAutomation({
+          text: `自动化“${definition.title}”收到一次已授权机构事件。现在完成这个目标，并把可交付结果保存到应用成果区：${request.goal}`,
+          allowedCapabilityIds: request.allowedCapabilityIds,
+          automationLabel: definition.title,
+        });
+      } else {
+        await this.getTalkService().invoke({
+          text: `我确认运行“${definition.title}”。现在完成这个目标，并把可交付结果保存到应用成果区：${request.goal}`,
+          allowedCapabilityIds: request.allowedCapabilityIds,
+          automationLabel: definition.title,
+        });
+      }
+      const after = await readThread(pkg.rootDir, nowIso(), before.threadId);
+      const executions = after.executions.filter((row) => !beforeIds.has(row.id));
+      const successful = executions.filter((row) => row.ok);
+      const artifactPaths = successful.flatMap((row) => row.producedOutputs || []);
+      if (request.allowedCapabilityIds.includes('write_artifact') && !artifactPaths.length) {
+        throw new Error('这次自动化没有产生可核验的应用成果');
+      }
+      return {
+        threadId: after.threadId,
+        executionIds: executions.map((row) => row.id),
+        artifactPaths,
+      };
+    };
     if (input.action === 'automationList') {
       const definitions = await service.list(pkg.id);
       return {
@@ -643,29 +676,27 @@ export class DigitalMeRuntime {
         eventKey: input.eventKey,
         triggerType: input.triggerType,
       });
-      return { view: await readView(), automation: result.definition, receipt: result.receipt, duplicate: result.duplicate };
+      if (result.duplicate || result.definition.humanInLoop !== 'none') {
+        return { view: await readView(), automation: result.definition, receipt: result.receipt, duplicate: result.duplicate };
+      }
+      const executed = await service.executePreauthorizedTrigger({
+        automationId: result.definition.id,
+        receiptId: result.receipt.id,
+        execute: (request) => executeThroughTalk(result.definition, 'automation', request),
+      });
+      return {
+        view: await readView(),
+        automation: result.definition,
+        receipt: executed.receipt,
+        duplicate: executed.duplicate,
+      };
     }
     if (!input.receiptId) throw new Error('缺少待确认的自动化触发');
     const definition = await service.get(input.automationId);
     const confirmed = await service.confirmTrigger({
       automationId: input.automationId,
       receiptId: input.receiptId,
-      execute: async ({ goal, allowedCapabilityIds }) => {
-        const before = await readThread(pkg.rootDir, nowIso());
-        const beforeIds = new Set(before.executions.map((row) => row.id));
-        await this.getTalkService().invoke({
-          text: `我确认运行“${definition.title}”。现在完成这个目标，并把可交付结果保存到应用成果区：${goal}`,
-          allowedCapabilityIds,
-          automationLabel: definition.title,
-        });
-        const after = await readThread(pkg.rootDir, nowIso(), before.threadId);
-        const executions = after.executions.filter((row) => !beforeIds.has(row.id));
-        return {
-          threadId: after.threadId,
-          executionIds: executions.map((row) => row.id),
-          artifactPaths: executions.flatMap((row) => row.producedOutputs || []),
-        };
-      },
+      execute: (request) => executeThroughTalk(definition, 'owner', request),
     });
     return { view: await readView(), automation: definition, receipt: confirmed.receipt, duplicate: confirmed.duplicate };
   }
@@ -3359,7 +3390,7 @@ export class DigitalMeRuntime {
           const cards = await net.listCards(pkg.subjectId);
           if (!cards.length) return null;
           return {
-            createInstitutionEvent: async ({ title, goal, eventType, sourceSubjectId }) => {
+            createInstitutionEvent: async ({ title, goal, eventType, sourceSubjectId, runAutomatically }) => {
               if (!cards.some((card) => card.subjectId === sourceSubjectId)) {
                 throw new Error('这家机构还没有作为已连接主体接入，暂时不能建立事件自动化。');
               }
@@ -3371,6 +3402,7 @@ export class DigitalMeRuntime {
                   item.goalTemplate === goal &&
                   item.trigger.type === 'institution_event' &&
                   item.trigger.institutionEventType === eventType &&
+                  item.humanInLoop === (runAutomatically ? 'none' : 'before_execution') &&
                   item.allowedSubjectIds.includes(sourceSubjectId),
               );
               if (existing) return { automationId: existing.id, title: existing.title };
@@ -3384,7 +3416,7 @@ export class DigitalMeRuntime {
                 allowedSubjectIds: [sourceSubjectId],
                 validUntil,
                 maxCostCny: 0,
-                humanInLoop: 'before_execution',
+                humanInLoop: runAutomatically ? 'none' : 'before_execution',
                 risk: 'low',
               });
               return { automationId: created.id, title: created.title };

@@ -5966,12 +5966,12 @@
     for (const turn of turns) {
       const li = document.createElement("li");
       const roleLabel =
-        turn.role === "user" ? "你" : turn.role === "assistant" ? "数字之我" : "提示";
-      li.className = `chat-turn chat-turn-${turn.role || "system"}`;
+        turn.origin === "automation" ? "自动化" : turn.role === "user" ? "你" : turn.role === "assistant" ? "数字之我" : "提示";
+      li.className = `chat-turn chat-turn-${turn.origin === "automation" ? "automation" : turn.role || "system"}`;
       li.innerHTML = `<div class="chat-role">${escapeHtml(roleLabel)}</div>
         <div class="chat-text">${escapeHtml(turn.text || "")}</div>`;
       els.chatTurns.appendChild(li);
-      if (turn.role === "user" && turn.text) lastChatUserText = turn.text;
+      if (turn.role === "user" && turn.origin !== "automation" && turn.text) lastChatUserText = turn.text;
     }
     const pendingQuestion =
       chatGuideMode === "growth_guided" &&

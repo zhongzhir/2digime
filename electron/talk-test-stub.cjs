@@ -369,6 +369,21 @@ async function chat({ messages, tools }) {
       ],
     };
   }
+  if (hasArtifact && /低风险自动成果验证/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [
+        {
+          id: 'call_low_risk_automation_1',
+          name: 'write_artifact',
+          arguments: JSON.stringify({
+            fileName: '低风险自动成果验证.md',
+            content: '# 低风险自动成果验证\n\n这是由测试机构事件触发的本机成果。',
+          }),
+        },
+      ],
+    };
+  }
 
   const hasTools = Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'delegate');
 

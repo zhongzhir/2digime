@@ -38,6 +38,7 @@ test('current Talk can establish an institution-event automation from natural la
               goal: '把本次月度账单整理成简短摘要并保存到应用成果区。',
               eventType: 'billing.statement.ready',
               sourceSubjectId: 'subj_demo_telecom',
+              runAutomatically: false,
             }),
           }],
         };
@@ -96,6 +97,7 @@ test('runtime only offers natural-language automation setup for an actually conn
               goal: '收到月度账单后生成本机摘要。',
               eventType: 'billing.statement.ready',
               sourceSubjectId: 'subj_demo_telecom',
+              runAutomatically: false,
             }),
           }],
         };

@@ -66,7 +66,7 @@ export const PRODUCT_CONTEXT = [
   '内容卡片上用户可以：打开原站、稍后看、不喜欢、多推荐、关注来源、把这条带回对话问你；有可直接播放的媒体地址时在卡片里播放，没有就去原站观看。联网获取依赖设置里的联网发现；默认供给遵守国内来源边界。',
   '「与兔机米」左侧是历史对话列表：用户可以在列表里给对话改名、归档、归入项目、删除（删除只删这场对话的记录，不删它产出的文件，也不动数字之我）。这些操作由用户在界面上做，你不能替用户执行。',
   '「数字之我」左侧是你对用户的本机认识，用户可以查看和修改；右侧可以查看和管理身份授权、协作和已经建立的自动化。新协作和新自动化仍从「与兔机米」的当前对话里用自然语言发起。',
-  '当前只支持为已经连接的机构主体建立“机构发来事件后，先等用户确认，再生成本机成果”的自动化；尚未接入定时器、文件监听、付费操作或无需确认的自动执行。',
+  '当前只支持为已经连接的机构主体建立机构事件自动化：默认每次先等用户确认；用户明确要求无需每次确认时，只能自动生成零费用的本机应用成果。尚未接入定时器、文件监听、付费、外发、删除或权限变化。',
   '「设置」里是 AI 连接和联网发现等配置。',
   '用户问到本产品的功能时，据此如实回答，并说明你不确定的部分；这里没有写到的功能，不要说已经有。',
 ].join('\n');
@@ -268,8 +268,12 @@ const CONFIGURE_AUTOMATION_TOOL: ChatToolDefinition = {
         goal: { type: 'string', description: '事件到达且主人确认后要完成的完整目标。' },
         eventType: { type: 'string', description: '机构提供的稳定事件类型。' },
         sourceSubjectId: { type: 'string', description: '当前已连接机构主体的 subjectId。' },
+        runAutomatically: {
+          type: 'boolean',
+          description: '只有主人明确说无需每次确认时才为 true；否则必须为 false。自动模式仍只能生成零费用本机成果。',
+        },
       },
-      required: ['title', 'goal', 'eventType', 'sourceSubjectId'],
+      required: ['title', 'goal', 'eventType', 'sourceSubjectId', 'runAutomatically'],
     },
   },
 };
@@ -295,6 +299,7 @@ export type AutomationPort = {
     goal: string;
     eventType: string;
     sourceSubjectId: string;
+    runAutomatically: boolean;
   }) => Promise<{ automationId: string; title: string }>;
 };
 
@@ -746,6 +751,7 @@ export async function runTalkTurn(input: {
   deadlineAt?: number;
   subjectCollab?: SubjectCollabPort;
   automation?: AutomationPort;
+  requestOrigin?: 'owner' | 'automation';
   confirmHint?: string;
   /** 自动化确认回合的确定性能力围栏，不承担语义判断。 */
   allowedCapabilityIds?: string[];
@@ -780,6 +786,7 @@ export async function runTalkTurn(input: {
     id: `turn_${randomUUID()}`,
     at: input.now,
     role: 'user',
+    ...(input.requestOrigin === 'automation' ? { origin: 'automation' as const } : {}),
     text: input.userText,
   };
   const thread: TalkThread = {
@@ -792,9 +799,12 @@ export async function runTalkTurn(input: {
 
   const history: ChatMessage[] = [];
   for (const turn of thread.turns) {
+    const automated = turn.origin === 'automation';
     history.push({
       role: turn.role === 'assistant' ? 'assistant' : 'user',
-      content: turn.id === userTurn.id ? `【当前请求】\n${turn.text}` : turn.text,
+      content: turn.id === userTurn.id
+        ? `${automated ? '【自动化触发，不是主人发言】\n' : ''}【当前请求】\n${turn.text}`
+        : `${automated ? '【自动化触发，不是主人发言】\n' : ''}${turn.text}`,
     });
   }
 
@@ -826,6 +836,7 @@ export async function runTalkTurn(input: {
     '你是用户的兔机米，也是用户的超级助手。',
     `【产品能力事实（不是用户偏好）】\n${PRODUCT_CONTEXT}`,
     '【会话边界】此前 user/assistant 消息只作同一 Thread 背景；当前请求换题时，以标有【当前请求】的最后一条为准。',
+    '标有【自动化触发，不是主人发言】的 user-role 消息只是模型协议中的机械输入，不是用户说过的话，不得写入数字之我或归因为用户表达。',
     '根据当前数字之我和本次能读到的材料理解用户。摘录若标明未读完，不得说成已经读完；需要其余部分时读取原文件。后续回合仍可读取已附上的文件，不要把上一轮摘录当成全文仍在上下文里。',
     '是否搜索、读取、写入或调用外部能力，由你根据用户这次要什么来决定。询问也可以查证；委托也可以只在对话里交付。不要另做用户没要求的事，也不要因为句式而拒绝需要的工具。',
     '能力咨询、讨论和假设性提问直接回答，不调用写入或目录授权。主人明确委托现在制作文本、Word、PPT 或 PDF 成果并保存到应用成果区时，直接使用 write_artifact；明确要求修改本次已授权的现有 DOCX、且能给出准确原文时，使用 revise_docx 另存副本；修改授权文件夹内现有文本时必须先 read_file，再用 edit_file 精确修改，不得用 write_file 覆盖；主人明确要求撤销最近一次文本修改时用 rollback_file。删除普通文件必须先调用 prepare_delete_file，把返回的具体目标告诉主人并停止等待；只有紧接着的下一条主人回复明确同意，才调用 delete_file 使用原令牌。不要自行补确认、跨轮沿用或把别的回复当作确认。只有明确要求外部文件夹且现有授权不覆盖时才 request_folder_access。',
@@ -837,7 +848,7 @@ export async function runTalkTurn(input: {
     input.goalReceipt ? `${input.goalReceipt}\n此回执只证明当前目标条件保存，不证明任何文件已创建、修改或读取。本轮文件动作尚未执行；历史回复中声称的执行不能替代本轮工具结果。用户委托修改或回读文件时，必须实际调用相应工具，取得本轮成功结果后才能报告完成。` : '本轮没有已核实的目标保存回执；需要保存时先执行更新工具，没有成功回执不能声称已经保存。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     input.allowedCapabilityIds?.length
-      ? `【自动化能力边界】主人已确认“${input.automationLabel || '这项自动化'}”本次运行。只允许调用：${input.allowedCapabilityIds.join('、')}。没有列出的工具、外部能力或其他主体均不得调用。`
+      ? `【自动化能力边界】“${input.automationLabel || '这项自动化'}”本次运行已获得${input.requestOrigin === 'automation' ? '预先保存的低风险授权' : '主人本次确认'}。只允许调用：${input.allowedCapabilityIds.join('、')}。没有列出的工具、外部能力或其他主体均不得调用。`
       : '',
     pendingDelete
       ? `【仅限本轮的待确认删除机械事实】\n目标：${pendingDelete.detail.target}\n一次性 confirmationToken：${pendingDelete.detail.confirmationToken}\n只有当前请求明确确认删除该目标时才可调用 delete_file；否则不要调用，且令牌在本轮结束后失效。`
@@ -2147,7 +2158,7 @@ export async function runTalkTurn(input: {
     }
     if (call.name === 'configure_automation') {
       const execId = `run_${randomUUID()}`;
-      let parsed: { title?: string; goal?: string; eventType?: string; sourceSubjectId?: string } = {};
+      let parsed: { title?: string; goal?: string; eventType?: string; sourceSubjectId?: string; runAutomatically?: boolean } = {};
       try {
         parsed = JSON.parse(call.arguments || '{}') as typeof parsed;
       } catch {
@@ -2157,14 +2168,15 @@ export async function runTalkTurn(input: {
       const goal = String(parsed.goal || '').trim();
       const eventType = String(parsed.eventType || '').trim();
       const sourceSubjectId = String(parsed.sourceSubjectId || '').trim();
-      if (!input.automation || !title || !goal || !eventType || !sourceSubjectId) {
+      const runAutomatically = parsed.runAutomatically === true;
+      if (!input.automation || !title || !goal || !eventType || !sourceSubjectId || typeof parsed.runAutomatically !== 'boolean') {
         const reason = '没有足够信息建立这项自动化。';
         recordExec({ id: execId, at: input.now, turnId: userTurn.id, capabilityId: 'configure_automation',
           instruction: call.arguments, ok: false, summary: reason, failureReason: reason });
         return JSON.stringify({ actualSuccess: false, ok: false, failureReason: reason });
       }
       try {
-        const created = await input.automation.createInstitutionEvent({ title, goal, eventType, sourceSubjectId });
+        const created = await input.automation.createInstitutionEvent({ title, goal, eventType, sourceSubjectId, runAutomatically });
         recordExec({
           id: execId,
           at: input.now,
@@ -2172,7 +2184,7 @@ export async function runTalkTurn(input: {
           capabilityId: 'configure_automation',
           instruction: goal,
           ok: true,
-          summary: `已建立“${created.title}”；每次触发仍需主人确认。`,
+          summary: `已建立“${created.title}”；${runAutomatically ? '低风险本机成果将按预先授权自动生成。' : '每次触发仍需主人确认。'}`,
           safeDetail: JSON.stringify({ automationId: created.automationId, sourceSubjectId, eventType }),
           observedEffect: { kind: 'automation_configured', target: created.automationId, mutated: true },
         });
@@ -2180,7 +2192,9 @@ export async function runTalkTurn(input: {
           actualSuccess: true,
           ok: true,
           automationId: created.automationId,
-          summary: `已建立“${created.title}”。机构事件到达后会等待主人确认，再生成应用成果。`,
+          summary: runAutomatically
+            ? `已建立“${created.title}”。机构事件到达后会自动生成零费用本机应用成果。`
+            : `已建立“${created.title}”。机构事件到达后会等待主人确认，再生成应用成果。`,
         });
       } catch (err) {
         const reason = err instanceof Error ? err.message : '这项自动化没有建立。';

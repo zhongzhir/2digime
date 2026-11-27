@@ -112,12 +112,17 @@ test('automation Talk refuses a tool outside the stored capability scope', async
       action: 'automationTrigger', automationId: created.automation!.id,
       eventKey: 'local-001', triggerType: 'institution_event',
     });
-    const confirmed = await runtime.digitalSelf({
-      action: 'automationConfirm', automationId: created.automation!.id,
-      receiptId: triggered.receipt!.id,
-    });
-    assert.equal(confirmed.receipt!.artifactPaths!.length, 0);
-    const thread = await readThread(root, new Date().toISOString(), confirmed.receipt!.threadId);
+    await assert.rejects(
+      runtime.digitalSelf({
+        action: 'automationConfirm', automationId: created.automation!.id,
+        receiptId: triggered.receipt!.id,
+      }),
+      /没有产生可核验的应用成果/,
+    );
+    const listed = await runtime.digitalSelf({ action: 'automationList' });
+    const failedReceipt = listed.automations?.[0]?.receipts?.[0];
+    assert.match(failedReceipt?.failureReason || '', /没有产生可核验的应用成果/);
+    const thread = await readThread(root, new Date().toISOString(), failedReceipt?.threadId);
     const denied = thread.executions.find((row) => row.capabilityId === 'web_search');
     assert.equal(denied?.ok, false);
     assert.match(denied?.failureReason || '', /没有获得/);

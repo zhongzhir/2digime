@@ -271,6 +271,12 @@ TypeScript 构建、自动化事实专项 2/2 和 diff 检查通过。当前状�
 
 同一条自动化连续 10 个独立机构事件均形成唯一回执、当前 Talk Execution 和可读取的独立应用成果；重复第十个事件及重复确认未增加模型调用或成果。TypeScript 构建通过；自然语言/连接约束/十次门 3/3、自动化与 Talk 联合回归 7/7、既有 Talk 能力回归 12/12、正式 Electron 入口与管理 1/1、renderer 语法和 diff 检查均通过。当前状态为 `SLICE_3_HUMAN_IN_LOOP_TEN_RUN_DEVELOPER_VALIDATED / LOW_RISK_AUTOMATIC_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只实现一条零费用、低风险、明确授权的自动执行链，必须在 Talk 中保留真实自动化发起来源，不得伪装 Owner 发言，也不开放定时器、文件监听、付费动作或外部发布。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-NATURAL-LANGUAGE-TEN-RUN-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-NATURAL-LANGUAGE-TEN-RUN-01.md)。
 
+### Slice 3-3D / Slice 3 开发退出检查点（2026-11-27）
+
+用户在统一 Talk 明确要求“无需每次确认”时，模型可为实际已连接机构建立一条低风险自动化；机械层强制零费用、低风险且只允许 `write_artifact` 写入本机应用成果区。自动触发在 Talk 中持久化并显示为“自动化”来源，不伪装 Owner 发言，也不进入 Digital Self 学习。没有真实 Artifact 时记录失败并拒绝假完成；同一事件无论成功或失败均不悄悄重放。
+
+同一低风险自动化连续 10 个独立事件均形成唯一回执、当前 Talk Execution 和可读取 Artifact；重复第十个事件没有新增模型调用。Slice 3 总回归中，自动化与既有 Talk 能力 23/23、身份授权/协作/成果/两类自动化正式 Electron 7/7 通过，构建、renderer 语法和 diff 检查通过。当前状态为 `SLICE_3_DEVELOPER_EXIT_GATE_PASS / OWNER_ACCEPTANCE_PENDING`。未开放定时器、文件监听、联网、外发、付费、删除或权限变化；未做真实银行/电信事件互操作；未打包、push、发布或部署。Slice 3 开发到此停止，不自动进入 Slice 4。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3-FINAL-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3-FINAL-DEVELOPER-CLOSURE-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

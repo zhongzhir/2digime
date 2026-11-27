@@ -380,10 +380,12 @@
     const turns = (lastView && lastView.turns) || [];
     for (const turn of turns) {
       const li = document.createElement('li');
-      li.className = turn.role === 'user' ? 'chat-turn chat-turn-user' : 'chat-turn chat-turn-assistant';
+      li.className = turn.origin === 'automation'
+        ? 'chat-turn chat-turn-automation'
+        : turn.role === 'user' ? 'chat-turn chat-turn-user' : 'chat-turn chat-turn-assistant';
       const role = document.createElement('p');
       role.className = 'talk-role';
-      role.textContent = turn.role === 'user' ? '你' : assistantRoleName;
+      role.textContent = turn.origin === 'automation' ? '自动化' : turn.role === 'user' ? '你' : assistantRoleName;
       li.appendChild(role);
       const p = document.createElement('p');
       p.className = 'chat-text';

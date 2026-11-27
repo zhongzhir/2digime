@@ -87,6 +87,7 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 #chat-turns { padding: 16px 4px; margin: 0; scrollbar-width: thin; }
 #chat-turns > li { margin: 0 0 24px; padding: 0; border: 0; border-radius: 0; background: none; }
 #chat-turns > .chat-turn-user { max-width: 88%; margin-left: auto; padding: 14px 18px; border-radius: 16px 16px 4px 16px; background: var(--accent-soft); }
+#chat-turns > .chat-turn-automation { padding: 14px 18px; border-left: 3px solid var(--line); background: var(--bg); }
 #chat-turns .chat-text { font-size: 15px; line-height: 1.8; margin: 6px 0 0; }
 .talk-role { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
 .talk-result-card { margin-top: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }

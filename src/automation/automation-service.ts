@@ -30,8 +30,8 @@ export interface AutomationDefinition {
 }
 
 /**
- * 触发回执只证明“哪个外部事实触发过、Owner 是否确认、进入了哪个 Task”。
- * Job/Artifact 的执行状态仍由既有 WorkRuntime 派生，不在这里镜像。
+ * 触发回执只证明哪个外部事实触发过、依据哪类授权领取执行，以及关联了哪些当前 Talk 事实。
+ * Execution/Artifact 的真实状态仍由 Talk 权威对象承担，不在这里镜像。
  */
 export interface AutomationTriggerReceipt {
   id: string;
@@ -39,9 +39,12 @@ export interface AutomationTriggerReceipt {
   eventKey: string;
   triggeredAt: string;
   confirmedAt?: string;
+  executionClaimedAt?: string;
+  executionAuthority?: 'owner_confirmation' | 'stored_low_risk_authorization';
   threadId?: string;
   executionIds?: string[];
   artifactPaths?: string[];
+  failureReason?: string;
 }
 
 export interface AutomationCreateInput {
@@ -78,10 +81,25 @@ function validateTrigger(trigger: AutomationDefinition['trigger']): void {
   }
 }
 
+function assertStoredAutomaticAuthorization(input: {
+  humanInLoop: AutomationHumanInLoop;
+  risk: 'low';
+  maxCostCny: number;
+  allowedCapabilityIds: string[];
+}): void {
+  if (input.humanInLoop !== 'none') return;
+  if (input.risk !== 'low' || input.maxCostCny !== 0) {
+    throw new Error('自动执行只允许零费用低风险动作');
+  }
+  if (!input.allowedCapabilityIds.length || input.allowedCapabilityIds.some((id) => id !== 'write_artifact')) {
+    throw new Error('当前自动执行只允许写入本机应用成果区');
+  }
+}
+
 export class AutomationService {
   private readonly definitions: JsonObjectStore<AutomationDefinition>;
   private readonly receipts: JsonObjectStore<AutomationTriggerReceipt>;
-  private readonly confirmationLocks = new Map<string, Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }>>();
+  private readonly executionLocks = new Map<string, Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }>>();
 
   private constructor(
     definitions: JsonObjectStore<AutomationDefinition>,
@@ -122,6 +140,12 @@ export class AutomationService {
     if (input.humanInLoop === 'none' && input.risk !== 'low') {
       throw new Error('只有明确低风险动作可以完全自动执行');
     }
+    assertStoredAutomaticAuthorization({
+      humanInLoop: input.humanInLoop,
+      risk: input.risk,
+      maxCostCny: input.maxCostCny,
+      allowedCapabilityIds,
+    });
     const definition: AutomationDefinition = {
       id: `auto_${randomUUID()}`,
       subjectId: input.subjectId,
@@ -202,20 +226,10 @@ export class AutomationService {
     }>;
     now?: string;
   }): Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }> {
-    const previous = this.confirmationLocks.get(input.receiptId);
-    if (previous) return previous;
-    const run = this.confirmTriggerOnce(input);
-    this.confirmationLocks.set(input.receiptId, run);
-    try {
-      return await run;
-    } finally {
-      if (this.confirmationLocks.get(input.receiptId) === run) {
-        this.confirmationLocks.delete(input.receiptId);
-      }
-    }
+    return this.executeTrigger(input, 'owner_confirmation');
   }
 
-  private async confirmTriggerOnce(input: {
+  async executePreauthorizedTrigger(input: {
     automationId: string;
     receiptId: string;
     execute: (request: { goal: string; allowedCapabilityIds: string[] }) => Promise<{
@@ -225,23 +239,80 @@ export class AutomationService {
     }>;
     now?: string;
   }): Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }> {
+    return this.executeTrigger(input, 'stored_low_risk_authorization');
+  }
+
+  private async executeTrigger(
+    input: {
+      automationId: string;
+      receiptId: string;
+      execute: (request: { goal: string; allowedCapabilityIds: string[] }) => Promise<{
+        threadId: string;
+        executionIds: string[];
+        artifactPaths: string[];
+      }>;
+      now?: string;
+    },
+    authority: 'owner_confirmation' | 'stored_low_risk_authorization',
+  ): Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }> {
+    const previous = this.executionLocks.get(input.receiptId);
+    if (previous) return previous;
+    const run = this.executeTriggerOnce(input, authority);
+    this.executionLocks.set(input.receiptId, run);
+    try {
+      return await run;
+    } finally {
+      if (this.executionLocks.get(input.receiptId) === run) {
+        this.executionLocks.delete(input.receiptId);
+      }
+    }
+  }
+
+  private async executeTriggerOnce(input: {
+    automationId: string;
+    receiptId: string;
+    execute: (request: { goal: string; allowedCapabilityIds: string[] }) => Promise<{
+      threadId: string;
+      executionIds: string[];
+      artifactPaths: string[];
+    }>;
+    now?: string;
+  }, authority: 'owner_confirmation' | 'stored_low_risk_authorization'): Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }> {
     const now = input.now || new Date().toISOString();
     const definition = await this.get(input.automationId);
     const receipt = await this.receipts.get(input.receiptId);
     if (!receipt || receipt.automationId !== definition.id) throw new Error('没有找到这次触发');
-    if (receipt.confirmedAt) return { receipt, duplicate: true };
+    if (receipt.executionClaimedAt || receipt.confirmedAt) return { receipt, duplicate: true };
     if (definition.lifecycle !== 'active') throw new Error('这项自动化当前未运行');
     if (Date.parse(definition.validUntil) <= Date.parse(now)) throw new Error('这项自动化已经过期');
-    // 先固化 Owner 决定，进程崩溃或重复点击也不能再次执行同一事件。
+    if (authority === 'owner_confirmation' && definition.humanInLoop !== 'before_execution') {
+      throw new Error('这项自动化不等待逐次确认');
+    }
+    if (authority === 'stored_low_risk_authorization') {
+      assertStoredAutomaticAuthorization(definition);
+    }
+    // 先固化执行权来源，进程崩溃或重复触发也不能再次执行同一事件。
     const claimed: AutomationTriggerReceipt = {
       ...receipt,
-      confirmedAt: now,
+      ...(authority === 'owner_confirmation' ? { confirmedAt: now } : {}),
+      executionClaimedAt: now,
+      executionAuthority: authority,
     };
     await this.receipts.put(claimed);
-    const completed = await input.execute({
-      goal: definition.goalTemplate,
-      allowedCapabilityIds: definition.allowedCapabilityIds.slice(),
-    });
+    let completed: { threadId: string; executionIds: string[]; artifactPaths: string[] };
+    try {
+      completed = await input.execute({
+        goal: definition.goalTemplate,
+        allowedCapabilityIds: definition.allowedCapabilityIds.slice(),
+      });
+    } catch (err) {
+      const failed = {
+        ...claimed,
+        failureReason: err instanceof Error ? err.message : '这次自动化没有完成',
+      };
+      await this.receipts.put(failed);
+      throw err;
+    }
     const next: AutomationTriggerReceipt = {
       ...claimed,
       threadId: completed.threadId,
