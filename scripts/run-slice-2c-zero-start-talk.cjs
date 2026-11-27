@@ -110,7 +110,12 @@ async function main() {
     git(['commit', '--quiet', '-m', 'fixture baseline'], workspace);
   }
   const projectRevision = collectorPlan?.projectRevision || git(['rev-parse', 'HEAD'], workspace).trim();
-  const testFile = 'test/price-card.test.cjs';
+  const taskId = collectorPlan?.taskId || '2C-WEB-01';
+  const projectClass = collectorPlan?.projectClass || 'web';
+  const taskGoal = collectorPlan?.goal
+    || '修复现有价格卡格式化缺陷，保持现有模块形状；确认价格始终保留两位小数。';
+  const testFile = collectorPlan?.testFile || 'test/price-card.test.cjs';
+  const codingInstruction = `${taskGoal} 运行预注册测试 ${testFile}。不要修改测试、提交、推送或联网搜索。`;
   const baseline = collectorPlan?.baselineTest || testProject(workspace, testFile);
   if (baseline.exitCode === 0) throw new Error('baseline must fail');
 
@@ -141,7 +146,7 @@ async function main() {
     if (/"capabilityId":"cap_acquired_coding_runtime"/.test(lastToolText)) {
       lastDelegateResult = lastToolText;
       return { text: /"actualSuccess":true/.test(lastToolText)
-        ? '已经完成价格格式修复，并在授权项目中运行了原有聚焦测试。'
+        ? '已经完成本次代码修复，并在授权项目中运行了预注册测试。'
         : '这次代码执行没有完成，项目没有被当作成功交付。' };
     }
     if (/待确认第三方能力获取机械事实/.test(system)) {
@@ -157,7 +162,7 @@ async function main() {
           name: 'delegate',
           arguments: JSON.stringify({
             capabilityId: 'cap_acquired_coding_runtime',
-            instruction: '修复现有价格卡格式化缺陷，保持现有模块形状；运行项目已有聚焦测试，确认价格始终保留两位小数。不要修改测试、提交、推送或联网搜索。',
+            instruction: codingInstruction,
             acquisitionConfirmationToken: token,
           }),
         }],
@@ -173,7 +178,7 @@ async function main() {
         name: 'delegate',
         arguments: JSON.stringify({
           capabilityId: 'cap_acquired_coding_runtime',
-          instruction: '修复现有价格卡格式化缺陷，保持现有模块形状；运行项目已有聚焦测试，确认价格始终保留两位小数。不要修改测试、提交、推送或联网搜索。',
+          instruction: codingInstruction,
         }),
       }],
     };
@@ -202,7 +207,7 @@ async function main() {
   try {
     await bus.invoke('subject.createPackage', { displayName: 'Slice 2C Zero-start', targetDir: packageRoot });
     const first = await bus.invoke('talk', {
-      text: '请修复这个价格卡项目的金额格式问题并运行原有测试。',
+      text: `请完成 ${taskId} 预注册修复任务并运行原有测试。`,
       contextPaths: [workspace],
     });
     const askedForConsent = String(first.view.turns.at(-1)?.text || '').includes('是否同意');
@@ -228,8 +233,8 @@ async function main() {
     const receipt = {
       schemaVersion: 'slice-2c-zero-start-talk/1',
       source: 'real_process',
-      taskId: '2C-WEB-01',
-      projectClass: 'web',
+      taskId,
+      projectClass,
       arm: '2digime_orchestrated',
       runDir,
       workspace,

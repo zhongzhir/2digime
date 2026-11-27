@@ -71,6 +71,8 @@ function renderAcquiredCodingPrompt(instruction: string, workingDirectory: strin
     '',
     '机械边界：',
     '- 只能操作授权工作目录内的文件',
+    '- Windows 环境不要调用 apply_patch、补丁管道、反引号或 here-string；请用 Node.js fs 或 .NET File API 直接写文件，并清理任务临时文件',
+    '- 写入失败时不得宣称完成；结束前必须用 git diff 确认真实修改并运行用户要求的测试',
     '- 不得读取或泄露 API Key、模型凭证或其它密钥',
     '- 未经用户明确要求不得 git push、发布、部署或其它对外不可逆操作',
   ].join('\n');
@@ -118,9 +120,14 @@ export function writeAcquiredCodexProviderConfig(
     `base_url = ${tomlString(baseUrl.replace(/\/+$/, ''))}`,
     'env_key = "DIGITALME_MODEL_TOKEN"',
     'wire_api = "responses"',
+    'supports_websockets = false',
     'request_max_retries = 1',
     'stream_max_retries = 1',
     'stream_idle_timeout_ms = 180000',
+    '',
+    '[features]',
+    'plugins = false',
+    'apps = false',
     '',
     '[windows]',
     'sandbox = "unelevated"',
@@ -359,9 +366,10 @@ async function runAcquiredCodexCli(input: {
       child.on('close', async (code) => {
         clearTimeout(timer);
         const finalMessage = await fs.readFile(lastMessagePath, 'utf8').catch(() => '');
+        const failureSummary = [stderr, stdout, finalMessage].filter(Boolean).join('\n').slice(-12000);
         resolve({
           exitCode: code,
-          summary: ((code === 0 ? finalMessage || stdout || stderr : stderr || stdout || finalMessage) || '已返回执行结果').slice(0, 12000),
+          summary: ((code === 0 ? finalMessage || stdout || stderr : failureSummary) || '已返回执行结果').slice(0, 12000),
         });
       });
     });
@@ -535,14 +543,14 @@ export function createAcquiredCodingExecutorAdapter(
       await fs.mkdir(ctx.workDir, { recursive: true });
       await fs.writeFile(
         summaryPath,
-        ['# 代码修改摘要', '', result.summary.slice(0, 8000)].join('\n'),
+        ['# 代码修改摘要', '', result.summary.slice(-8000)].join('\n'),
         'utf8',
       );
       if (result.exitCode !== 0) {
         throw Object.assign(new Error('代码修改未能完成。'), {
           stage: 'capability' as const,
           actionable: '这次代码修改没有完成。可以稍后再试，或补充更具体的目标。',
-          safeDetail: result.summary.slice(0, 2000),
+          safeDetail: result.summary.slice(-2000),
         });
       }
       return {

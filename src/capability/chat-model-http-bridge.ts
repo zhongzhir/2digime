@@ -68,25 +68,32 @@ function normalizeTools(value: unknown): ChatToolDefinition[] | undefined {
   return tools.length ? tools : undefined;
 }
 
-function normalizeResponsesTools(value: unknown): ChatToolDefinition[] | undefined {
-  if (!Array.isArray(value)) return undefined;
+function normalizeResponsesTools(value: unknown): {
+  tools?: ChatToolDefinition[];
+  customToolNames: Set<string>;
+} {
+  if (!Array.isArray(value)) return { customToolNames: new Set() };
   const tools: ChatToolDefinition[] = [];
+  const customToolNames = new Set<string>();
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
     const row = item as Record<string, unknown>;
-    if (row.type !== 'function' || typeof row.name !== 'string' || !row.name.trim()) continue;
+    if (!['function', 'custom'].includes(String(row.type || '')) || typeof row.name !== 'string' || !row.name.trim()) continue;
+    if (row.type === 'custom') customToolNames.add(row.name);
     tools.push({
       type: 'function',
       function: {
         name: row.name,
         description: typeof row.description === 'string' ? row.description : '',
-        parameters: row.parameters && typeof row.parameters === 'object' && !Array.isArray(row.parameters)
-          ? row.parameters as Record<string, unknown>
-          : { type: 'object', properties: {} },
+        parameters: row.type === 'custom'
+          ? { type: 'object', properties: { input: { type: 'string' } }, required: ['input'] }
+          : row.parameters && typeof row.parameters === 'object' && !Array.isArray(row.parameters)
+            ? row.parameters as Record<string, unknown>
+            : { type: 'object', properties: {} },
       },
     });
   }
-  return tools.length ? tools : undefined;
+  return { ...(tools.length ? { tools } : {}), customToolNames };
 }
 
 function normalizeResponsesInput(body: Record<string, unknown>): ChatMessage[] {
@@ -99,22 +106,26 @@ function normalizeResponsesInput(body: Record<string, unknown>): ChatMessage[] {
   for (const item of rows) {
     if (!item || typeof item !== 'object') continue;
     const row = item as Record<string, unknown>;
-    if (row.type === 'function_call' && typeof row.name === 'string') {
-      out.push({
-        role: 'assistant',
-        content: '',
-        tool_calls: [{
-          id: String(row.call_id || row.id || ''),
-          type: 'function',
-          function: {
-            name: row.name,
-            arguments: typeof row.arguments === 'string' ? row.arguments : JSON.stringify(row.arguments || {}),
-          },
-        }],
-      });
+    if (['function_call', 'custom_tool_call'].includes(String(row.type || '')) && typeof row.name === 'string') {
+      const toolCall: ChatToolCall = {
+        id: String(row.call_id || row.id || ''),
+        type: 'function',
+        function: {
+          name: row.name,
+          arguments: row.type === 'custom_tool_call'
+            ? JSON.stringify({ input: typeof row.input === 'string' ? row.input : '' })
+            : typeof row.arguments === 'string' ? row.arguments : JSON.stringify(row.arguments || {}),
+        },
+      };
+      const previous = out.at(-1);
+      if (previous?.role === 'assistant' && previous.content === '' && Array.isArray(previous.tool_calls)) {
+        previous.tool_calls.push(toolCall);
+      } else {
+        out.push({ role: 'assistant', content: '', tool_calls: [toolCall] });
+      }
       continue;
     }
-    if (row.type === 'function_call_output') {
+    if (['function_call_output', 'custom_tool_call_output'].includes(String(row.type || ''))) {
       out.push({ role: 'tool', content: textContent(row.output), tool_call_id: String(row.call_id || '') });
       continue;
     }
@@ -228,6 +239,7 @@ function responsesEnvelope(input: {
   model: string;
   text: string;
   toolCalls?: ChatToolCall[];
+  customToolNames?: Set<string>;
   usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
 }) {
   const output: Record<string, unknown>[] = [];
@@ -241,6 +253,24 @@ function responsesEnvelope(input: {
     });
   }
   for (const call of input.toolCalls || []) {
+    if (input.customToolNames?.has(call.function.name)) {
+      let customInput = call.function.arguments;
+      try {
+        const parsed = JSON.parse(call.function.arguments) as { input?: unknown };
+        if (typeof parsed.input === 'string') customInput = parsed.input;
+      } catch {
+        // Preserve the model's raw arguments so the runtime receives a truthful failure if malformed.
+      }
+      output.push({
+        id: `ctc_${randomUUID().replace(/-/g, '')}`,
+        type: 'custom_tool_call',
+        status: 'completed',
+        call_id: call.id,
+        name: call.function.name,
+        input: customInput,
+      });
+      continue;
+    }
     output.push({
       id: `fc_${randomUUID().replace(/-/g, '')}`,
       type: 'function_call',
@@ -320,7 +350,8 @@ export async function startLocalChatModelBridge(input: {
       const messages = responsesRequest ? normalizeResponsesInput(body) : normalizeMessages(body.messages);
       if (!messages.length) throw new Error('messages_required');
       const model = String(body.model || input.model).trim() || input.model;
-      const tools = responsesRequest ? normalizeResponsesTools(body.tools) : normalizeTools(body.tools);
+      const responsesTools = responsesRequest ? normalizeResponsesTools(body.tools) : undefined;
+      const tools = responsesRequest ? responsesTools?.tools : normalizeTools(body.tools);
       const result = await input.complete({
         baseUrl: 'http://127.0.0.1',
         model,
@@ -353,6 +384,7 @@ export async function startLocalChatModelBridge(input: {
         model,
         text: String(result.text || ''),
         ...(result.toolCalls?.length ? { toolCalls: result.toolCalls } : {}),
+        ...(responsesTools?.customToolNames.size ? { customToolNames: responsesTools.customToolNames } : {}),
         ...(completeUsage ? { usage: completeUsage } : {}),
       };
       if (responsesRequest) {

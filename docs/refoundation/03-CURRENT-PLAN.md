@@ -169,6 +169,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 `2C-WEB-01` 已取得新的正式双臂对：直接臂与兔机米 Talk 编排臂使用同一 fixture digest、确定性 Git tree、Agent executor/version/executable digest 和两个独立工作区；两臂均只修改 `src/price-card.cjs`，预注册测试均由失败变为通过，`outsideScopeWrites=[]`，pair validator 返回 `evidence_ready_for_scoring`。没有购买、充值或外部按量费用；编排臂使用既有托管额度 75%→66%，不得写成零模型消耗。当前状态为 `OS_BOUNDARY_PASS / SAME_BUILD_PAIR_ADMITTED`。这只是 Web 单项准入，不是四类 95% 评分；桌面、后端、脏工作区仍未运行，不是 Owner 验收、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-SAME-BUILD-ADMISSION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-SAME-BUILD-ADMISSION-01.md)。
 
+### Slice 2C-8 开发检查点（2026-11-27）
+
+`2C-DESKTOP-01` 直接臂已真实通过：同一官方 Codex build 在独立工作区只修改 `src/main.cjs`，预注册桌面测试由失败变为通过，OS 负向探针继续证明无工作区外写入。为运行编排臂，本轮关闭了 Responses custom tool、并行 function call 历史、自定义 provider HTTP-only、插件初始化、Windows 文件写入和失败尾部诊断等实际缺口。
+
+编排臂最后一个干净样本同样只修改 `src/main.cjs` 且注册测试通过，但 Agent 在最终模型收尾请求上达到 10 分钟超时；Talk Execution 失败、Artifact 为空、用户面如实返回未完成，因此不得进入 pair validator。诊断期间托管免费额度从 66% 降至 42%，没有购买、充值或新增外部按量费用；为避免继续消耗，本轮停止真实重跑。当前状态为 `SLICE_2C_DESKTOP_DIRECT_PASS / DESKTOP_ORCHESTRATED_TIMEOUT`。下一小批次仍只解决桌面编排臂的无模型收尾可靠性门，不进入后端或脏工作区，不宣称四类 95%、Owner 验收、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

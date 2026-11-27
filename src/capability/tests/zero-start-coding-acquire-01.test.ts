@@ -36,6 +36,8 @@ describe('zero-start-coding-acquire-01', () => {
     const config = await fs.readFile(configPath, 'utf8');
     assert.match(config, /model_provider = "2digime"/);
     assert.match(config, /wire_api = "responses"/);
+    assert.match(config, /supports_websockets = false/);
+    assert.match(config, /\[features\][\s\S]*plugins = false[\s\S]*apps = false/);
     assert.match(config, /sandbox_mode = "workspace-write"/);
     assert.equal(/network_proxy|network\.enabled/.test(config), false);
     assert.match(config, /sandbox = "unelevated"/);
@@ -77,6 +79,80 @@ describe('zero-start-coding-acquire-01', () => {
       assert.match(body, /response\.completed/);
       assert.match(body, /function_call/);
       assert.match(body, /call_1/);
+    } finally {
+      await bridge.close();
+    }
+  });
+
+  it('回环桥把 Responses custom tool 双向映射为既有函数工具合同', async () => {
+    let sawCustomTool = false;
+    const bridge = await startLocalChatModelBridge({
+      model: 'managed-ai',
+      complete: async (options) => {
+        const required = options.tools?.[0]?.function.parameters.required;
+        sawCustomTool = options.tools?.[0]?.function.name === 'apply_patch'
+          && Array.isArray(required)
+          && required[0] === 'input';
+        return {
+          text: '',
+          toolCalls: [{
+            id: 'call_patch',
+            type: 'function',
+            function: { name: 'apply_patch', arguments: '{"input":"*** Begin Patch\\n*** End Patch"}' },
+          }],
+        };
+      },
+    });
+    try {
+      const response = await fetch(`${bridge.baseUrl}/responses`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${bridge.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'managed-ai',
+          stream: true,
+          input: [{ role: 'user', content: [{ type: 'input_text', text: '修复文件' }] }],
+          tools: [{ type: 'custom', name: 'apply_patch', description: 'apply a patch' }],
+        }),
+      });
+      const body = await response.text();
+      assert.equal(response.status, 200);
+      assert.equal(sawCustomTool, true);
+      assert.match(body, /custom_tool_call/);
+      assert.match(body, /\*\*\* Begin Patch/);
+      assert.doesNotMatch(body, /\\\"input\\\"/);
+    } finally {
+      await bridge.close();
+    }
+  });
+
+  it('回环桥把 Responses 并行调用合并为一个 assistant 工具消息', async () => {
+    const bridge = await startLocalChatModelBridge({
+      model: 'managed-ai',
+      complete: async (options) => {
+        const assistantMessages = options.messages.filter((message) => message.role === 'assistant');
+        const toolMessages = options.messages.filter((message) => message.role === 'tool');
+        assert.equal(assistantMessages.length, 1);
+        assert.equal(assistantMessages[0]?.tool_calls?.length, 2);
+        assert.deepEqual(toolMessages.map((message) => message.tool_call_id), ['call_a', 'call_b']);
+        return { text: '继续完成。' };
+      },
+    });
+    try {
+      const response = await fetch(`${bridge.baseUrl}/responses`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${bridge.apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'managed-ai',
+          input: [
+            { type: 'function_call', call_id: 'call_a', name: 'exec_command', arguments: '{"cmd":"one"}' },
+            { type: 'function_call', call_id: 'call_b', name: 'exec_command', arguments: '{"cmd":"two"}' },
+            { type: 'function_call_output', call_id: 'call_a', output: 'first' },
+            { type: 'function_call_output', call_id: 'call_b', output: 'second' },
+          ],
+        }),
+      });
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /继续完成/);
     } finally {
       await bridge.close();
     }
@@ -171,6 +247,8 @@ describe('zero-start-coding-acquire-01', () => {
           sawPackage = /executor-task-package/.test(prompt);
           assert.equal(workingDirectory, path.resolve(dir));
           assert.match(prompt, /帮我修改这个程序，补上减法/);
+          assert.match(prompt, /Windows 环境不要调用 apply_patch、补丁管道、反引号或 here-string/);
+          assert.match(prompt, /git diff 确认真实修改/);
           assert.equal(/外部代码执行器/.test(prompt), false);
           assert.equal(/验收条件/.test(prompt), false);
           return { exitCode: 0, summary: 'done' };

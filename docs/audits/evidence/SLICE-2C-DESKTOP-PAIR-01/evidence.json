@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "slice-2c-desktop-pair-audit/1",
+  "taskId": "2C-DESKTOP-01",
+  "status": "DIRECT_PASS_ORCHESTRATED_NOT_ADMITTED",
+  "fixtureDigest": "12f4237eba53c6a589198fd38ae5c4ba4f656def3ea455d1ce7e7df92fc890f4",
+  "projectRevision": "f028d9e25b3fc2d844123e79fecb10b89e435901",
+  "agent": {
+    "executorId": "openai-codex-public-release",
+    "version": "0.171.0-alpha.13.2",
+    "executableDigest": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+  },
+  "direct": {
+    "source": "real_process",
+    "baselineExitCode": 1,
+    "finalExitCode": 0,
+    "changedFiles": ["src/main.cjs"],
+    "outsideScopeWrites": [],
+    "admitted": true
+  },
+  "orchestratedFinalCleanSample": {
+    "source": "real_process",
+    "baselineExitCode": 1,
+    "finalExitCode": 0,
+    "changedFiles": ["src/main.cjs"],
+    "executionOk": false,
+    "failureReason": "timeout",
+    "artifactRefs": [],
+    "userVisibleSummary": "这次代码执行没有完成，项目没有被当作成功交付。",
+    "allowanceBeforePercent": 58,
+    "allowanceAfterPercent": 42,
+    "admitted": false
+  },
+  "cost": {
+    "externalChargeIncurred": false,
+    "amountCny": 0,
+    "managedAllowanceStartPercent": 66,
+    "managedAllowanceEndPercent": 42
+  },
+  "pairValidatorRun": false,
+  "pairValidatorReason": "orchestrated Talk Execution failed and produced no Artifact",
+  "nextTask": "2C-DESKTOP-01 orchestrated closeout reliability",
+  "createdAt": "2026-11-27T07:24:00.000Z"
+}
