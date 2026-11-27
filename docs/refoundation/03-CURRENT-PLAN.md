@@ -241,6 +241,12 @@ TypeScript 构建通过；专项真实 Electron 入口测试 1/1 通过，并验
 
 TypeScript 构建和 renderer 语法检查通过；Slice 3B 专项真实 Electron 测试 1/1、Slice 3A 回归 1/1 通过。测试以独立伙伴 Subject 和真实协作记录验证投影，并证明隐藏右侧后协作记录保持不变。当前状态为 `SLICE_3_COLLABORATION_READ_PROJECTION_DEVELOPER_VALIDATED / MANAGEMENT_ACTIONS_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批次只复用既有命令补充接受、拒绝、停止/撤销等必要管理动作，不进入自动化管理，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-PROJECTION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-PROJECTION-01.md)。
 
+### Slice 3-2B 开发检查点（2026-11-27）
+
+“数字之我”右侧已复用正式 `collab.interact` 增加必要管理动作：收到请求可接受/拒绝，发出请求可取消，已成立或处理中协作可结束；操作后重新读取权威协作记录，UI 不保存协作状态。既有撤销命令已修正响应方操作时的对端选择，不再把结束通知错误发给自己。本批没有新增 Store、状态机、一级入口或旧协作中心，也未进入成果决定和自动化。
+
+TypeScript 构建、renderer 语法检查、Relay/E2EE 双 Electron 正式链路 1/1、既有本地协作领域回归 2/2、Slice 3A 回归 1/1、Slice 3-2A 回归 1/1 全部通过。专项链路验证了接受并形成 agreement/Grant、响应方结束并撤销、第二条请求拒绝，以及用户确认文案不暴露内部协议术语。当前状态为 `SLICE_3_COLLABORATION_MANAGEMENT_CONTROLS_DEVELOPER_VALIDATED / RESULT_DECISION_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批次只进入 Slice 3-2C，复用既有成果交付与决定命令补齐真实 Artifact 的查看、采用或退回，不进入自动化，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-CONTROLS-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-CONTROLS-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

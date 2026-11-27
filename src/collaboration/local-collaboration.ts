@@ -1636,7 +1636,12 @@ export class LocalCollaborationHost {
       at: nowIso(),
       ...(grantId ? { grantId } : {}),
     };
-    record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+    const selfId = this.issuer.subject.requireActive().id;
+    const peerEndpointRef =
+      selfId === record.initiator.subjectId
+        ? record.responder.endpointRef
+        : record.initiator.endpointRef;
+    record = await this.appendAndSync(record, [ev], peerEndpointRef);
     return {
       recordId: record.recordId,
       ...(grantId ? { grantId } : {}),

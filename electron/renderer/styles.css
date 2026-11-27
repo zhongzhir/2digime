@@ -1081,6 +1081,19 @@ select {
   margin: 9px 0 0;
 }
 
+.ds-collaboration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ds-collaboration-actions button {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: var(--font-sm);
+}
+
 @media (max-width: 900px) {
   .digital-self-layout {
     grid-template-columns: minmax(0, 1fr);

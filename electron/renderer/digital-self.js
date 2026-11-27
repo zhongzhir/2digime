@@ -75,6 +75,67 @@
     return false;
   }
 
+  function collaborationCanRespond(item) {
+    return Boolean(
+      item &&
+        item.role === 'responder' &&
+        (item.status === 'proposed' || item.status === 'awaiting_owner'),
+    );
+  }
+
+  function collaborationCanStop(item) {
+    if (!item) return false;
+    if (collaborationCanRespond(item)) return false;
+    return ![
+      'completed',
+      'rejected',
+      'revoked',
+      'withdrawn',
+    ].includes(item.status);
+  }
+
+  async function runCollaborationAction(item, action, row) {
+    const peer = item.peerDisplayName || item.granteeDisplayName || '协作对象';
+    let prompt = '';
+    let success = '';
+    let input;
+    if (action === 'accept') {
+      prompt = `接受后，兔机米会按当前目标和已选择的材料建立本次授权。确认接受与${peer}的协作吗？`;
+      success = `已接受与${peer}的协作。`;
+      input = { action: 'respond', recordId: item.recordId, decision: 'accept' };
+    } else if (action === 'reject') {
+      prompt = `确认拒绝与${peer}的这次协作吗？`;
+      success = `已拒绝与${peer}的这次协作。`;
+      input = { action: 'respond', recordId: item.recordId, decision: 'reject' };
+    } else {
+      prompt = `结束后，对方不能再使用本次授权继续处理。确认结束与${peer}的协作吗？`;
+      success = `已结束与${peer}的协作。`;
+      input = { action: 'revoke', recordId: item.recordId };
+    }
+    if (!window.confirm(prompt)) return;
+    const buttons = row ? Array.from(row.querySelectorAll('button')) : [];
+    for (const button of buttons) button.disabled = true;
+    setProjectionNotice('正在更新协作…');
+    try {
+      await api().invoke('collab.interact', input);
+      await refreshCapabilityProjection();
+      setProjectionNotice(success);
+    } catch (_err) {
+      setProjectionNotice('这次协作操作没有完成，原状态保持不变。');
+    } finally {
+      for (const button of buttons) button.disabled = false;
+    }
+  }
+
+  function appendCollaborationAction(actions, label, item, action, row) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = action === 'accept' ? 'primary' : 'ghost';
+    button.textContent = label;
+    button.addEventListener('click', () => runCollaborationAction(item, action, row));
+    actions.appendChild(button);
+  }
+
   function renderCollaborations(items) {
     const list = $('ds-collaboration-list');
     const empty = $('ds-collaboration-empty');
@@ -102,11 +163,31 @@
       li.appendChild(title);
       li.appendChild(goal);
       li.appendChild(meta);
+      if (Array.isArray(item.allowedMaterials)) {
+        const scope = document.createElement('p');
+        scope.className = 'muted tiny';
+        scope.textContent = item.allowedMaterials.length
+          ? `${item.role === 'responder' ? '对方计划提供' : '本次允许'} ${item.allowedMaterials.length} 份材料`
+          : '本次没有文件材料';
+        li.appendChild(scope);
+      }
       if (item.returnedExcerpt) {
         const result = document.createElement('p');
         result.className = 'ds-collaboration-result';
         result.textContent = `结果：${String(item.returnedExcerpt).slice(0, 100)}`;
         li.appendChild(result);
+      }
+      if (collaborationCanRespond(item) || collaborationCanStop(item)) {
+        const actions = document.createElement('div');
+        actions.className = 'ds-collaboration-actions';
+        if (collaborationCanRespond(item)) {
+          appendCollaborationAction(actions, '接受', item, 'accept', li);
+          appendCollaborationAction(actions, '拒绝', item, 'reject', li);
+        } else if (collaborationCanStop(item)) {
+          const stopLabel = item.status === 'proposed' ? '取消请求' : '结束协作';
+          appendCollaborationAction(actions, stopLabel, item, 'revoke', li);
+        }
+        li.appendChild(actions);
       }
       list.appendChild(li);
     }
