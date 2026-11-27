@@ -253,6 +253,12 @@ TypeScript 构建、renderer 语法检查、Relay/E2EE 双 Electron 正式链路
 
 首次正式验证暴露 Windows 下协作履行高频轮询 Job 文件与原子写入竞争，导致成果任务停在材料准备阶段。现改为由既有 `job.updated` 终态事件唤醒、再读取一次权威 Job；事件不持久化也不承载事实。TypeScript 构建、renderer 语法检查、Relay/E2EE 双 Electron 真实成果专项 1/1、Slice 3-2B 管理动作回归 1/1、Slice 3-2A 投影回归 1/1、既有本地协作领域回归 2/2 全部通过。当前状态为 `SLICE_3_COLLABORATION_RESULT_DECISION_DEVELOPER_VALIDATED / AUTOMATION_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批次只审计并接入已经成立的自动化事实，先关闭一条人在环自动化主链，不建立 workflow 产品或第二事实源，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-RESULTS-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3B-COLLABORATION-RESULTS-01.md)。
 
+### Slice 3-3A 开发检查点（2026-11-27）
+
+审计确认现有 Relay 自动收件、模型判断和自动响应没有计划要求的触发定义、授权边界及可暂停/撤销事实，不能冒充“我的自动化”。本批建立最小自动化定义与触发回执：仅允许定时、文件到达、机构事件三类触发；强制绑定 Goal 模板、Capability/Subject 范围、有效期、费用上限、人在环节点和低风险等级；重复外部事件以确定性回执去重。定义与回执只保存未来触发授权和 Task/Job 关联，不镜像 Execution/Artifact 状态，也不新增执行引擎。
+
+TypeScript 构建、自动化事实专项 2/2 和 diff 检查通过。当前状态为 `SLICE_3_AUTOMATION_FOUNDATION_DEVELOPER_VALIDATED / PRODUCT_ENTRY_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只把一条机构事件人在环自动化接入既有命令面与 WorkRuntime，并回读真实 Task/Job/Artifact；不进入文件观察、定时调度或低风险全自动链。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-AUTOMATION-FOUNDATION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-AUTOMATION-FOUNDATION-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
