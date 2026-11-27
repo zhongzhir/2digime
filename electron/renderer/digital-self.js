@@ -443,6 +443,24 @@
     }, 0);
   }
 
+  function openTalkForAutomation() {
+    const nav = $('nav-chat');
+    if (nav) nav.click();
+    window.setTimeout(() => {
+      const input = $('chat-input');
+      if (!input) return;
+      if (!String(input.value || '').trim()) {
+        input.value = '我想设置一项自动化：当已连接的机构发来……时，先等我确认，再帮我……';
+      }
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      if (typeof input.setSelectionRange === 'function') {
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
+    }, 0);
+  }
+
   function showTellForm(show) {
     const form = $('ds-tell-form');
     if (!form) return;
@@ -674,6 +692,7 @@
     const search = $('ds-fact-search');
     const openSettings = $('btn-ds-open-settings');
     const startCollaboration = $('btn-ds-start-collaboration');
+    const startAutomation = $('btn-ds-start-automation');
     if (tellBtn) {
       tellBtn.addEventListener('click', () => showTellForm(true));
     }
@@ -748,6 +767,9 @@
     }
     if (startCollaboration) {
       startCollaboration.addEventListener('click', openTalkForCollaboration);
+    }
+    if (startAutomation) {
+      startAutomation.addEventListener('click', openTalkForAutomation);
     }
     if (page) {
       page.addEventListener('click', async (evt) => {

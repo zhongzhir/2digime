@@ -65,7 +65,9 @@ export const PRODUCT_CONTEXT = [
   '「发现」是应用里的一个页面，不是别的产品，也不是你身上挂的某个外部能力：它从公开来源和本机内容目录里挑文章、新闻、音频、视频、图片，既有默认的「为你发现」信息流，也有搜索框可以说想看什么。',
   '内容卡片上用户可以：打开原站、稍后看、不喜欢、多推荐、关注来源、把这条带回对话问你；有可直接播放的媒体地址时在卡片里播放，没有就去原站观看。联网获取依赖设置里的联网发现；默认供给遵守国内来源边界。',
   '「与兔机米」左侧是历史对话列表：用户可以在列表里给对话改名、归档、归入项目、删除（删除只删这场对话的记录，不删它产出的文件，也不动数字之我）。这些操作由用户在界面上做，你不能替用户执行。',
-  '「数字之我」是你对用户的本机认识，用户可以查看和修改；「设置」里是 AI 连接和联网发现等配置。',
+  '「数字之我」左侧是你对用户的本机认识，用户可以查看和修改；右侧可以查看和管理身份授权、协作和已经建立的自动化。新协作和新自动化仍从「与兔机米」的当前对话里用自然语言发起。',
+  '当前只支持为已经连接的机构主体建立“机构发来事件后，先等用户确认，再生成本机成果”的自动化；尚未接入定时器、文件监听、付费操作或无需确认的自动执行。',
+  '「设置」里是 AI 连接和联网发现等配置。',
   '用户问到本产品的功能时，据此如实回答，并说明你不确定的部分；这里没有写到的功能，不要说已经有。',
 ].join('\n');
 /** 与 Relay complete timeout 对齐；不得把整轮 leftover deadline 当成单次 HTTP 等待。 */
@@ -253,6 +255,25 @@ const CONSULT_TOOL: ChatToolDefinition = {
   },
 };
 
+const CONFIGURE_AUTOMATION_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'configure_automation',
+    description:
+      '只有主人明确要求建立一项机构事件自动化时使用。第一版每次触发仍等待主人确认，只能把结果写入应用成果区，不联网、不发送、不付费。sourceSubjectId 必须来自当前已连接主体列表。',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '普通人能看懂的简短名称。' },
+        goal: { type: 'string', description: '事件到达且主人确认后要完成的完整目标。' },
+        eventType: { type: 'string', description: '机构提供的稳定事件类型。' },
+        sourceSubjectId: { type: 'string', description: '当前已连接机构主体的 subjectId。' },
+      },
+      required: ['title', 'goal', 'eventType', 'sourceSubjectId'],
+    },
+  },
+};
+
 export type SubjectCollabPort = {
   cards: PublicSubjectCard[];
   consult: (input: {
@@ -266,6 +287,15 @@ export type SubjectCollabPort = {
     disclosure: string;
     contextUnderstandingIds?: string[];
   }) => Promise<ConsultResult>;
+};
+
+export type AutomationPort = {
+  createInstitutionEvent: (input: {
+    title: string;
+    goal: string;
+    eventType: string;
+    sourceSubjectId: string;
+  }) => Promise<{ automationId: string; title: string }>;
 };
 
 function parseConsultArgs(raw: string): {
@@ -715,6 +745,7 @@ export async function runTalkTurn(input: {
   signal?: AbortSignal;
   deadlineAt?: number;
   subjectCollab?: SubjectCollabPort;
+  automation?: AutomationPort;
   confirmHint?: string;
   /** 自动化确认回合的确定性能力围栏，不承担语义判断。 */
   allowedCapabilityIds?: string[];
@@ -908,6 +939,7 @@ export async function runTalkTurn(input: {
   ensureReadTools();
   ensureDelegateTool();
   if (cards.length) tools.push(CONSULT_TOOL);
+  if (input.automation) tools.push(CONFIGURE_AUTOMATION_TOOL);
   // Beijing Responses supplies web_search/web_extractor as provider tools.
   // Legacy search functions stay available only to non-Responses transports.
   if (input.searchWeb && !tools.some((item) => item.function.name === 'web_search')) tools.push(WEB_SEARCH_TOOL);
@@ -2112,6 +2144,50 @@ export async function runTalkTurn(input: {
         summary: args.revoke ? '已撤销当前目标' : '已保存本目标的最新条件', observedEffect: { kind: 'content_modified', target: 'current_discovery_goal', mutated: true } });
       return JSON.stringify({ actualSuccess: true, currentGoal: thread.discoveryGoal || null,
         note: '发现和后续做事读取同一个 thread 目标；未写长期数字之我。' });
+    }
+    if (call.name === 'configure_automation') {
+      const execId = `run_${randomUUID()}`;
+      let parsed: { title?: string; goal?: string; eventType?: string; sourceSubjectId?: string } = {};
+      try {
+        parsed = JSON.parse(call.arguments || '{}') as typeof parsed;
+      } catch {
+        parsed = {};
+      }
+      const title = String(parsed.title || '').trim();
+      const goal = String(parsed.goal || '').trim();
+      const eventType = String(parsed.eventType || '').trim();
+      const sourceSubjectId = String(parsed.sourceSubjectId || '').trim();
+      if (!input.automation || !title || !goal || !eventType || !sourceSubjectId) {
+        const reason = '没有足够信息建立这项自动化。';
+        recordExec({ id: execId, at: input.now, turnId: userTurn.id, capabilityId: 'configure_automation',
+          instruction: call.arguments, ok: false, summary: reason, failureReason: reason });
+        return JSON.stringify({ actualSuccess: false, ok: false, failureReason: reason });
+      }
+      try {
+        const created = await input.automation.createInstitutionEvent({ title, goal, eventType, sourceSubjectId });
+        recordExec({
+          id: execId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'configure_automation',
+          instruction: goal,
+          ok: true,
+          summary: `已建立“${created.title}”；每次触发仍需主人确认。`,
+          safeDetail: JSON.stringify({ automationId: created.automationId, sourceSubjectId, eventType }),
+          observedEffect: { kind: 'automation_configured', target: created.automationId, mutated: true },
+        });
+        return JSON.stringify({
+          actualSuccess: true,
+          ok: true,
+          automationId: created.automationId,
+          summary: `已建立“${created.title}”。机构事件到达后会等待主人确认，再生成应用成果。`,
+        });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : '这项自动化没有建立。';
+        recordExec({ id: execId, at: input.now, turnId: userTurn.id, capabilityId: 'configure_automation',
+          instruction: goal, ok: false, summary: reason, failureReason: reason });
+        return JSON.stringify({ actualSuccess: false, ok: false, failureReason: reason });
+      }
     }
     if (call.name === 'set_expected_effects') {
       const effects = parseExpectedEffectsArgs(call.arguments);

@@ -265,6 +265,12 @@ TypeScript 构建、自动化事实专项 2/2 和 diff 检查通过。当前状�
 
 开发中发现“接入既有 Execution/Artifact”可能被误读成复活旧 WorkRuntime/Job，按 Yellow 门重新读取 02、00、01 后改接当前 `TalkService → TalkExecution → artifacts/talk` 主链，未实施旧路线。TypeScript 构建、自动化领域/Talk 专项 4/4、既有 Talk 回归 5/5、协作成果回归 1/1、自动化正式 Electron 1/1、Slice 3A 回归 1/1、renderer 语法与 diff 检查通过。当前状态为 `SLICE_3_HUMAN_IN_LOOP_AUTOMATION_DEVELOPER_VALIDATED / TEN_RUN_GATE_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只完成自然语言设置/管理入口与人在环连续 10 次门，不进入低风险全自动链。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-HUMAN-IN-LOOP-AUTOMATION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-HUMAN-IN-LOOP-AUTOMATION-01.md)。
 
+### Slice 3-3C 开发检查点（2026-11-27）
+
+当前 Talk 已能由模型理解用户自然语言后，为实际已连接的机构主体建立一条机构事件人在环自动化；定义固定为零费用、低风险、执行前确认和本机 `write_artifact` 范围。未连接主体不能建立定义。“数字之我”右侧增加“设置自动化”按钮，但只返回统一对话填写普通语言，不新增一级入口或表单式 workflow。
+
+同一条自动化连续 10 个独立机构事件均形成唯一回执、当前 Talk Execution 和可读取的独立应用成果；重复第十个事件及重复确认未增加模型调用或成果。TypeScript 构建通过；自然语言/连接约束/十次门 3/3、自动化与 Talk 联合回归 7/7、既有 Talk 能力回归 12/12、正式 Electron 入口与管理 1/1、renderer 语法和 diff 检查均通过。当前状态为 `SLICE_3_HUMAN_IN_LOOP_TEN_RUN_DEVELOPER_VALIDATED / LOW_RISK_AUTOMATIC_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只实现一条零费用、低风险、明确授权的自动执行链，必须在 Talk 中保留真实自动化发起来源，不得伪装 Owner 发言，也不开放定时器、文件监听、付费动作或外部发布。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-NATURAL-LANGUAGE-TEN-RUN-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-NATURAL-LANGUAGE-TEN-RUN-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

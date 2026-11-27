@@ -3351,6 +3351,46 @@ export class DigitalMeRuntime {
         () => this.resolveContentSearch(),
         () => async (query: string) =>
           this.filterSourceSearchHits(await fetchNewsHeadlines(query, fetch, new Date(), undefined, this.resolveContentSearch())),
+        async (pkg) => {
+          const injected = this.options.subjectNetwork;
+          if (!injected) await this.ensureRelaySubjectCollab();
+          const net = injected || this.relayCollab;
+          if (!net) return null;
+          const cards = await net.listCards(pkg.subjectId);
+          if (!cards.length) return null;
+          return {
+            createInstitutionEvent: async ({ title, goal, eventType, sourceSubjectId }) => {
+              if (!cards.some((card) => card.subjectId === sourceSubjectId)) {
+                throw new Error('这家机构还没有作为已连接主体接入，暂时不能建立事件自动化。');
+              }
+              const service = await AutomationService.open(pkg.rootDir);
+              const existing = (await service.list(pkg.subjectId)).find(
+                (item) =>
+                  item.lifecycle !== 'revoked' &&
+                  item.title === title &&
+                  item.goalTemplate === goal &&
+                  item.trigger.type === 'institution_event' &&
+                  item.trigger.institutionEventType === eventType &&
+                  item.allowedSubjectIds.includes(sourceSubjectId),
+              );
+              if (existing) return { automationId: existing.id, title: existing.title };
+              const validUntil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+              const created = await service.create({
+                subjectId: pkg.subjectId,
+                title,
+                goalTemplate: goal,
+                trigger: { type: 'institution_event', institutionEventType: eventType },
+                allowedCapabilityIds: ['write_artifact'],
+                allowedSubjectIds: [sourceSubjectId],
+                validUntil,
+                maxCostCny: 0,
+                humanInLoop: 'before_execution',
+                risk: 'low',
+              });
+              return { automationId: created.id, title: created.title };
+            },
+          };
+        },
       );
     }
     return this.talkService;

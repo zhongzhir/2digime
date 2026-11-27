@@ -16,6 +16,7 @@ import {
   NO_MODEL_NOTICE,
   pendingCapabilityAcquisitionWorkspace,
   runTalkTurn,
+  type AutomationPort,
   type SubjectCollabPort,
 } from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
@@ -146,6 +147,7 @@ export class TalkService {
           }>
         >)
       | undefined,
+    private readonly resolveAutomation?: (pkg: TalkPackageRef) => Promise<AutomationPort | null>,
   ) {}
 
   /** 与回合写入使用同一串行链，撤销不能被在途回合的迟到保存覆盖。 */
@@ -293,6 +295,7 @@ export class TalkService {
       }
     }
     const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
+    const automation = this.resolveAutomation ? await this.resolveAutomation(pkg) : null;
     if (collab && personalContextCandidates) {
       selfContext += [
         '',
@@ -363,6 +366,7 @@ export class TalkService {
         ...(effectiveContextPaths.length ? { contextPaths: effectiveContextPaths } : {}),
         ...(writeFolders.length ? { writeFolders } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
+        ...(automation ? { automation } : {}),
         ...(confirmHint ? { confirmHint } : {}),
         ...(input.allowedCapabilityIds?.length
           ? {
