@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "slice-2c-coding-pair-admission/1",
+  "taskId": "2C-DESKTOP-01",
+  "directEvidence": "direct.json",
+  "orchestratedEvidence": "../SLICE-2C-DESKTOP-ORCHESTRATED-01/evidence.json",
+  "validator": "scripts/check-slice-2c-coding-evidence.cjs",
+  "valid": true,
+  "status": "evidence_ready_for_scoring"
+}

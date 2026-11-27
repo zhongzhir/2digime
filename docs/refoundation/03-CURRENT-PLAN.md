@@ -193,6 +193,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 上一批次桌面直接臂已真实通过，但当时只归档了审计摘要，没有保留 pair validator 所需的完整原始 JSON，不能用摘要补造命令摘要和时间戳。当前状态为 `DESKTOP_ORCHESTRATED_PASS / DIRECT_RAW_EVIDENCE_REFRESH_PENDING`，尚未宣称桌面双臂 admitted。下一小批次只使用同一固定 Agent build 刷新一次直接臂完整证据并运行 pair validator；不再调用兔机米托管模型，不进入后端或脏工作区。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-ORCHESTRATED-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-ORCHESTRATED-01.md)。
 
+### Slice 2C-12 开发检查点（2026-11-27）
+
+`2C-DESKTOP-01` 直接臂完整原始证据已用同一官方固定 Agent build 刷新：独立工作区中只修改 `src/main.cjs`，预注册测试由失败变为通过；独立边界探针证明工作区外写入 `Access denied` 且文件不存在。直接臂使用现有 ChatGPT 登录权益，不调用兔机米托管模型，没有购买、充值或新增外部按量费用。
+
+直接臂与已归档的合格编排臂通过正式 pair validator，返回 `evidence_ready_for_scoring`：任务、项目类别、fixture digest、project revision、Agent executor/version/executable digest 全部一致，workspaceId 不同，两臂最终测试均通过、变更文件均为 `src/main.cjs`、`outsideScopeWrites=[]`。当前状态为 `DESKTOP_SAME_BUILD_PAIR_ADMITTED`。这只关闭桌面项目类，不代表四类 95% 评分或 Owner 验收；下一小批次进入 `2C-BACKEND-01` 直接臂，不并行启动脏工作区，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-02.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-02.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---
