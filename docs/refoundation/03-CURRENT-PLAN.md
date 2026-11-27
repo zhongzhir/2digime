@@ -229,6 +229,12 @@ Web、桌面、后端、脏工作区四类真实同 build pair 已进入统一�
 
 正式 `evaluateCodingBenchmark` 返回：领先 Agent 加权 90、兔机米编排加权 90、相对得分 100%、`developer_threshold_met_owner_pending`；TypeScript 构建通过，评分门和真实证据门专项测试 10/10 通过。当前状态为 `SLICE_2C_DEVELOPER_THRESHOLD_MET / OWNER_ACCEPTANCE_PENDING`，不是市场全部 Coding 场景 95 分位、发布或产品总验收。下一小批次按计划进入 Slice 3 第一批“双栏骨架 + 身份与授权摘要”，暂不接协作关系或自动化管理。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-UNIFIED-SCORE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-UNIFIED-SCORE-01.md)。
 
+### Slice 3-1 开发检查点（2026-11-27）
+
+“数字之我”第一批双栏骨架和身份/授权摘要已通过开发验证：左侧继续使用既有 Digital Self 权威和纠正入口；右侧只读取现有 `subject.getOverview`、文件夹 Grant 列表和机构连接状态，没有新增身份、授权或资料 Store。界面明确区分本机主体、机构账号连接与真实身份认证，读取失败也不解释成“没有”。
+
+TypeScript 构建通过；专项真实 Electron 入口测试 1/1 通过，并验证桌面左右双栏、窄窗口单栏、管理入口复用设置页，以及隐藏整个右侧投影后 Digital Self 事实仍可继续形成且主体标识不变。当前状态为 `SLICE_3_IDENTITY_AUTHORIZATION_PROJECTION_DEVELOPER_VALIDATED / OWNER_ACCEPTANCE_PENDING`。本批未加入协作关系或自动化管理，不是打包、push、发布或部署。下一小批次只接现有真实协作关系投影。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3A-IDENTITY-AUTHORIZATION-PROJECTION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3A-IDENTITY-AUTHORIZATION-PROJECTION-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

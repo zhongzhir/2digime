@@ -534,6 +534,7 @@
         </section>
 
         <section id="panel-subject" class="shell-panel" data-panel="subject" hidden>
+          <div class="digital-self-layout">
           <section id="digital-self-page" class="digital-self-page">
             <h1 class="page-title">数字之我</h1>
             <p id="ds-headline" class="ds-headline">兔机米现在怎样理解我</p>
@@ -571,6 +572,29 @@
             </div>
             <p id="ds-empty" class="empty-hint">还没有任何了解。在「与兔机米」里说话，或在这里补充一件事。</p>
           </section>
+          <aside id="ds-capability-panel" class="ds-capability-panel" aria-labelledby="ds-capability-title">
+            <div class="ds-capability-heading">
+              <h2 id="ds-capability-title">身份与授权</h2>
+              <p>这里是已有身份和授权事实的摘要，不另建一套资料。</p>
+            </div>
+            <section class="ds-capability-card" aria-labelledby="ds-identity-title">
+              <p class="ds-capability-kicker">身份</p>
+              <h3 id="ds-identity-title">本机主体</h3>
+              <p id="ds-identity-name" class="ds-capability-value">正在读取…</p>
+              <p id="ds-identity-state" class="ds-capability-state">正在确认本机主体状态…</p>
+              <p id="ds-institution-state" class="muted tiny">正在读取身份认证状态…</p>
+              <p id="ds-identity-detail" class="muted tiny">本机主体和真实身份认证是两件事。</p>
+            </section>
+            <section class="ds-capability-card" aria-labelledby="ds-authorization-title">
+              <p class="ds-capability-kicker">授权</p>
+              <h3 id="ds-authorization-title">当前允许范围</h3>
+              <p id="ds-authorization-count" class="ds-capability-value">正在读取…</p>
+              <p id="ds-authorization-detail" class="muted tiny">授权可随时撤销。</p>
+            </section>
+            <button type="button" id="btn-ds-open-settings" class="ghost ds-capability-manage">管理身份与授权</button>
+            <p id="ds-capability-notice" class="meta" aria-live="polite"></p>
+          </aside>
+          </div>
           <section id="growth-block" class="growth-block" hidden>
             <div id="growth-home" class="growth-home">
             <h2 id="growth-stage-name" class="growth-stage-name"></h2>

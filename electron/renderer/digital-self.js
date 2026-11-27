@@ -40,6 +40,72 @@
     el.textContent = text || '';
   }
 
+  function setProjectionNotice(text) {
+    const el = $('ds-capability-notice');
+    if (el) el.textContent = text || '';
+  }
+
+  function setText(id, text) {
+    const el = $(id);
+    if (el) el.textContent = text || '';
+  }
+
+  async function refreshCapabilityProjection() {
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') {
+      setProjectionNotice('暂时无法读取身份与授权摘要。');
+      return;
+    }
+    setProjectionNotice('');
+    const requests = [
+      client.invoke('subject.getOverview', {}),
+      typeof client.listFilesystemGrants === 'function'
+        ? client.listFilesystemGrants()
+        : Promise.reject(new Error('filesystem grants unavailable')),
+      typeof client.getInstitutionStatus === 'function'
+        ? client.getInstitutionStatus()
+        : Promise.reject(new Error('institution status unavailable')),
+    ];
+    const [identity, authorization, institution] = await Promise.allSettled(requests);
+
+    if (identity.status === 'fulfilled' && identity.value) {
+      setText('ds-identity-name', identity.value.displayName || '我的数字之我');
+      setText('ds-identity-state', '本机主体已建立');
+    } else {
+      setText('ds-identity-name', '暂时无法读取');
+      setText('ds-identity-state', '本次未能确认本机主体状态');
+      setProjectionNotice('部分身份或授权信息暂时无法读取，请稍后重试。');
+    }
+
+    if (institution.status === 'fulfilled' && institution.value) {
+      const info = institution.value;
+      if (info.enabled && info.institutionUserId) {
+        setText('ds-institution-state', `机构账号：已连接 ${info.organizationName || '机构服务'}`);
+        setText('ds-identity-detail', '机构账号连接不等于真实身份认证；当前仍只确认本机主体归属。');
+      } else {
+        setText('ds-institution-state', '真实身份认证：尚未接入');
+        setText('ds-identity-detail', '当前只确认本机主体归属；后续可在安全认证能力具备后连接真实身份。');
+      }
+    } else {
+      setText('ds-institution-state', '身份认证状态暂时无法读取');
+      setText('ds-identity-detail', '读取失败不表示未认证，请稍后重试。');
+      setProjectionNotice('部分身份或授权信息暂时无法读取，请稍后重试。');
+    }
+
+    if (authorization.status === 'fulfilled' && authorization.value && authorization.value.ok) {
+      const grants = Array.isArray(authorization.value.grants) ? authorization.value.grants : [];
+      setText('ds-authorization-count', grants.length ? `已授权 ${grants.length} 个文件夹` : '没有文件夹授权');
+      setText(
+        'ds-authorization-detail',
+        grants.length ? '这些文件夹可在设置中逐项撤销。' : '兔机米目前不能读取或修改你未授权的文件夹。',
+      );
+    } else {
+      setText('ds-authorization-count', '暂时无法读取');
+      setText('ds-authorization-detail', '读取失败不表示没有授权，请稍后重试。');
+      setProjectionNotice('部分身份或授权信息暂时无法读取，请稍后重试。');
+    }
+  }
+
   function showTellForm(show) {
     const form = $('ds-tell-form');
     if (!form) return;
@@ -256,6 +322,7 @@
     } catch (err) {
       setNotice('没能读取数字之我。');
     }
+    await refreshCapabilityProjection();
   }
 
   function bind() {
@@ -268,6 +335,7 @@
     const openLedger = $('btn-ds-open-ledger');
     const closeLedger = $('btn-ds-close-ledger');
     const search = $('ds-fact-search');
+    const openSettings = $('btn-ds-open-settings');
     if (tellBtn) {
       tellBtn.addEventListener('click', () => showTellForm(true));
     }
@@ -332,6 +400,12 @@
     if (search) {
       search.addEventListener('input', () => {
         if (lastGroups) renderLedger(lastGroups, search.value);
+      });
+    }
+    if (openSettings) {
+      openSettings.addEventListener('click', () => {
+        const nav = $('nav-settings');
+        if (nav) nav.click();
       });
     }
     if (page) {

@@ -963,10 +963,90 @@ select {
   margin-top: 10px;
 }
 
+.digital-self-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(17rem, 0.85fr);
+  gap: 28px;
+  align-items: start;
+  max-width: 76rem;
+}
+
 .digital-self-page {
   display: block;
-  max-width: 42em;
+  max-width: 44em;
   min-height: 12rem;
+}
+
+.ds-capability-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ds-capability-panel[hidden] {
+  display: none !important;
+}
+
+.ds-capability-heading h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.ds-capability-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-sm);
+  line-height: var(--line-height);
+}
+
+.ds-capability-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 16px;
+}
+
+.ds-capability-card h3 {
+  margin: 2px 0 10px;
+  font-size: var(--font-md);
+}
+
+.ds-capability-card p {
+  margin-top: 0;
+}
+
+.ds-capability-kicker {
+  margin-bottom: 2px;
+  color: var(--accent);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+
+.ds-capability-value {
+  margin-bottom: 5px;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ds-capability-state {
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-size: var(--font-sm);
+}
+
+.ds-capability-manage {
+  justify-self: start;
+}
+
+@media (max-width: 900px) {
+  .digital-self-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .digital-self-page {
+    max-width: 42em;
+  }
 }
 
 #growth-block {
