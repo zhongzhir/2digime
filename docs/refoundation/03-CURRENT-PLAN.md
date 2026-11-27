@@ -255,9 +255,15 @@ TypeScript 构建、renderer 语法检查、Relay/E2EE 双 Electron 正式链路
 
 ### Slice 3-3A 开发检查点（2026-11-27）
 
-审计确认现有 Relay 自动收件、模型判断和自动响应没有计划要求的触发定义、授权边界及可暂停/撤销事实，不能冒充“我的自动化”。本批建立最小自动化定义与触发回执：仅允许定时、文件到达、机构事件三类触发；强制绑定 Goal 模板、Capability/Subject 范围、有效期、费用上限、人在环节点和低风险等级；重复外部事件以确定性回执去重。定义与回执只保存未来触发授权和 Task/Job 关联，不镜像 Execution/Artifact 状态，也不新增执行引擎。
+审计确认现有 Relay 自动收件、模型判断和自动响应没有计划要求的触发定义、授权边界及可暂停/撤销事实，不能冒充“我的自动化”。本批建立最小自动化定义与触发回执：仅允许定时、文件到达、机构事件三类触发；强制绑定 Goal 模板、Capability/Subject 范围、有效期、费用上限、人在环节点和低风险等级；重复外部事件以确定性回执去重。定义与回执只保存未来触发授权和当前 Talk Thread/Execution 关联，不镜像执行或成果状态，也不新增执行引擎。
 
-TypeScript 构建、自动化事实专项 2/2 和 diff 检查通过。当前状态为 `SLICE_3_AUTOMATION_FOUNDATION_DEVELOPER_VALIDATED / PRODUCT_ENTRY_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只把一条机构事件人在环自动化接入既有命令面与 WorkRuntime，并回读真实 Task/Job/Artifact；不进入文件观察、定时调度或低风险全自动链。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-AUTOMATION-FOUNDATION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-AUTOMATION-FOUNDATION-01.md)。
+TypeScript 构建、自动化事实专项 2/2 和 diff 检查通过。当前状态为 `SLICE_3_AUTOMATION_FOUNDATION_DEVELOPER_VALIDATED / PRODUCT_ENTRY_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只把一条机构事件人在环自动化接入既有命令面与当前 Talk 主链，并回读真实 Talk Execution/应用成果；不得接回旧 WorkRuntime，不进入文件观察、定时调度或低风险全自动链。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-AUTOMATION-FOUNDATION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-AUTOMATION-FOUNDATION-01.md)。
+
+### Slice 3-3B 开发检查点（2026-11-27）
+
+机构事件先形成幂等触发回执，Owner 在“数字之我”右侧可确认运行、暂停、恢复或撤销。确认后以普通语言进入当前 Talk；本样本只开放 `write_artifact`，生成应用成果并回读，执行事实进入现有 Talk Execution。同一事件重复投递/确认不重复执行，模型越界提出联网调用会被授权围栏拒绝并留下失败事实；隐藏右侧不影响底层定义、回执、执行或成果。撤销后的未确认触发不再显示为待确认。
+
+开发中发现“接入既有 Execution/Artifact”可能被误读成复活旧 WorkRuntime/Job，按 Yellow 门重新读取 02、00、01 后改接当前 `TalkService → TalkExecution → artifacts/talk` 主链，未实施旧路线。TypeScript 构建、自动化领域/Talk 专项 4/4、既有 Talk 回归 5/5、协作成果回归 1/1、自动化正式 Electron 1/1、Slice 3A 回归 1/1、renderer 语法与 diff 检查通过。当前状态为 `SLICE_3_HUMAN_IN_LOOP_AUTOMATION_DEVELOPER_VALIDATED / TEN_RUN_GATE_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只完成自然语言设置/管理入口与人在环连续 10 次门，不进入低风险全自动链。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-3C-HUMAN-IN-LOOP-AUTOMATION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-3C-HUMAN-IN-LOOP-AUTOMATION-01.md)。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 

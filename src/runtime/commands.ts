@@ -1049,13 +1049,38 @@ export interface CommandMap {
         | 'confirm'
         | 'correct'
         | 'delete'
-        | 'ignore';
+        | 'ignore'
+        | 'automationCreate'
+        | 'automationList'
+        | 'automationPause'
+        | 'automationResume'
+        | 'automationRevoke'
+        | 'automationTrigger'
+        | 'automationConfirm';
       text?: string;
       understandingId?: string;
       filePath?: string;
+      automationId?: string;
+      receiptId?: string;
+      eventKey?: string;
+      title?: string;
+      goalTemplate?: string;
+      trigger?: import('../automation/automation-service').AutomationDefinition['trigger'];
+      triggerType?: import('../automation/automation-service').AutomationTriggerType;
+      allowedCapabilityIds?: string[];
+      allowedSubjectIds?: string[];
+      validUntil?: string;
+      maxCostCny?: number;
+      humanInLoop?: import('../automation/automation-service').AutomationHumanInLoop;
     };
     output: {
       view: import('../subject-core/digital-self').DigitalSelfView;
+      automations?: Array<import('../automation/automation-service').AutomationDefinition & {
+        receipts: import('../automation/automation-service').AutomationTriggerReceipt[];
+      }>;
+      automation?: import('../automation/automation-service').AutomationDefinition;
+      receipt?: import('../automation/automation-service').AutomationTriggerReceipt;
+      duplicate?: boolean;
     };
   };
   'talk': {

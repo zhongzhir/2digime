@@ -165,7 +165,14 @@ export class TalkService {
   }
 
   async invoke(
-    input: { text?: string; contextPaths?: string[]; discoveryGoal?: TalkThread['discoveryGoal'] },
+    input: {
+      text?: string;
+      contextPaths?: string[];
+      discoveryGoal?: TalkThread['discoveryGoal'];
+      /** 自动化确认回合的机械能力围栏；普通 Talk 不传。 */
+      allowedCapabilityIds?: string[];
+      automationLabel?: string;
+    },
     externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
@@ -186,7 +193,13 @@ export class TalkService {
   }
 
   private async invokeNow(
-    input: { text?: string; contextPaths?: string[]; discoveryGoal?: TalkThread['discoveryGoal'] },
+    input: {
+      text?: string;
+      contextPaths?: string[];
+      discoveryGoal?: TalkThread['discoveryGoal'];
+      allowedCapabilityIds?: string[];
+      automationLabel?: string;
+    },
     threadId: string,
     externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
@@ -336,7 +349,9 @@ export class TalkService {
           if (target.discoveryGoal) thread.discoveryGoal = target.discoveryGoal;
           else delete thread.discoveryGoal;
         },
-        agents: this.resolveAgents(pkg, turnCtx),
+        agents: this.resolveAgents(pkg, turnCtx).filter(
+          (agent) => !input.allowedCapabilityIds?.length || input.allowedCapabilityIds.includes(agent.id),
+        ),
         chat: boundedChat,
         workRoot: pkg.rootDir,
         now,
@@ -349,6 +364,12 @@ export class TalkService {
         ...(writeFolders.length ? { writeFolders } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
+        ...(input.allowedCapabilityIds?.length
+          ? {
+              allowedCapabilityIds: input.allowedCapabilityIds,
+              automationLabel: input.automationLabel || '这项自动化',
+            }
+          : {}),
         ...(this.requestFolderAccess ? { requestFolderAccess: this.requestFolderAccess } : {}),
         persistFolderGrant: (folder) =>
           saveFilesystemGrant({
@@ -357,7 +378,9 @@ export class TalkService {
             folder,
             now,
           }).then(() => undefined),
-        refreshAgents: (paths) => this.resolveAgents(pkg, { contextPaths: paths }),
+        refreshAgents: (paths) => this.resolveAgents(pkg, { contextPaths: paths }).filter(
+          (agent) => !input.allowedCapabilityIds?.length || input.allowedCapabilityIds.includes(agent.id),
+        ),
         ...(this.resolveWebSearch
           ? {
               searchWeb: async (query: string) => {

@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { JsonObjectStore } from '../infrastructure/json-store';
+import { AutomationService } from '../automation/automation-service';
 import { ContentStore } from '../infrastructure/content-store';
 import { CapabilityRegistry } from '../capability/registry';
 import {
@@ -580,7 +581,93 @@ export class DigitalMeRuntime {
   async digitalSelf(
     input: CommandMap['digitalSelf']['input'],
   ): Promise<CommandMap['digitalSelf']['output']> {
-    return this.getDigitalSelfService().invoke(input);
+    const automationActions = new Set([
+      'automationCreate',
+      'automationList',
+      'automationPause',
+      'automationResume',
+      'automationRevoke',
+      'automationTrigger',
+      'automationConfirm',
+    ]);
+    if (!automationActions.has(input.action)) {
+      return this.getDigitalSelfService().invoke(
+        input as import('../subject-core/digital-self/types').DigitalSelfCommandInput,
+      );
+    }
+    const pkg = this.subject.requireActive();
+    const service = await AutomationService.open(pkg.rootDir);
+    const readView = async () => (await this.getDigitalSelfService().invoke({ action: 'read' })).view;
+    if (input.action === 'automationList') {
+      const definitions = await service.list(pkg.id);
+      return {
+        view: await readView(),
+        automations: await Promise.all(
+          definitions.map(async (definition) => ({
+            ...definition,
+            receipts: (await service.listReceipts(definition.id)).slice(0, 10),
+          })),
+        ),
+      };
+    }
+    if (input.action === 'automationCreate') {
+      if (!input.trigger || !input.title || !input.goalTemplate || !input.validUntil) {
+        throw new Error('创建自动化需要名称、目标、触发条件和有效期');
+      }
+      const automation = await service.create({
+        subjectId: pkg.id,
+        title: input.title,
+        goalTemplate: input.goalTemplate,
+        trigger: input.trigger,
+        allowedCapabilityIds: input.allowedCapabilityIds || [],
+        allowedSubjectIds: input.allowedSubjectIds || [],
+        validUntil: input.validUntil,
+        maxCostCny: input.maxCostCny ?? 0,
+        humanInLoop: input.humanInLoop || 'before_execution',
+        risk: 'low',
+      });
+      return { view: await readView(), automation };
+    }
+    if (!input.automationId) throw new Error('缺少自动化标识');
+    if (input.action === 'automationPause' || input.action === 'automationResume' || input.action === 'automationRevoke') {
+      const automation = await service.setLifecycle(
+        input.automationId,
+        input.action === 'automationPause' ? 'pause' : input.action === 'automationResume' ? 'resume' : 'revoke',
+      );
+      return { view: await readView(), automation };
+    }
+    if (input.action === 'automationTrigger') {
+      if (!input.eventKey || !input.triggerType) throw new Error('触发事件缺少来源或唯一标识');
+      const result = await service.recordTrigger({
+        automationId: input.automationId,
+        eventKey: input.eventKey,
+        triggerType: input.triggerType,
+      });
+      return { view: await readView(), automation: result.definition, receipt: result.receipt, duplicate: result.duplicate };
+    }
+    if (!input.receiptId) throw new Error('缺少待确认的自动化触发');
+    const definition = await service.get(input.automationId);
+    const confirmed = await service.confirmTrigger({
+      automationId: input.automationId,
+      receiptId: input.receiptId,
+      execute: async ({ goal, allowedCapabilityIds }) => {
+        const before = await readThread(pkg.rootDir, nowIso());
+        const beforeIds = new Set(before.executions.map((row) => row.id));
+        await this.getTalkService().invoke({
+          text: `我确认运行“${definition.title}”。现在完成这个目标，并把可交付结果保存到应用成果区：${goal}`,
+          allowedCapabilityIds,
+          automationLabel: definition.title,
+        });
+        const after = await readThread(pkg.rootDir, nowIso(), before.threadId);
+        const executions = after.executions.filter((row) => !beforeIds.has(row.id));
+        return {
+          threadId: after.threadId,
+          executionIds: executions.map((row) => row.id),
+          artifactPaths: executions.flatMap((row) => row.producedOutputs || []),
+        };
+      },
+    });
+    return { view: await readView(), automation: definition, receipt: confirmed.receipt, duplicate: confirmed.duplicate };
   }
 
   async talk(

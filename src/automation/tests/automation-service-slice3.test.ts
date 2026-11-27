@@ -42,23 +42,21 @@ test('human-in-loop institution automation is scoped, idempotent, pausable and r
     const confirmed = await service.confirmTrigger({
       automationId: created.id,
       receiptId: first.receipt.id,
-      capabilityId: 'cap_fake_document',
       now: '2026-11-27T08:03:00.000Z',
-      submit: async ({ goal, capabilityId }) => {
+      execute: async ({ goal, allowedCapabilityIds }) => {
         submissions += 1;
         assert.equal(goal, created.goalTemplate);
-        assert.equal(capabilityId, 'cap_fake_document');
-        return { taskId: 'task_real', jobId: 'job_real' };
+        assert.deepEqual(allowedCapabilityIds, ['cap_fake_document']);
+        return { threadId: 'thread_real', executionIds: ['run_real'], artifactPaths: ['result.md'] };
       },
     });
-    assert.equal(confirmed.receipt.taskId, 'task_real');
+    assert.equal(confirmed.receipt.threadId, 'thread_real');
     const confirmedAgain = await service.confirmTrigger({
       automationId: created.id,
       receiptId: first.receipt.id,
-      capabilityId: 'cap_fake_document',
-      submit: async () => {
+      execute: async () => {
         submissions += 1;
-        return { taskId: 'task_wrong' };
+        return { threadId: 'thread_wrong', executionIds: [], artifactPaths: [] };
       },
     });
     assert.equal(confirmedAgain.duplicate, true);

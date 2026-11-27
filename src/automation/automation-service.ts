@@ -39,8 +39,9 @@ export interface AutomationTriggerReceipt {
   eventKey: string;
   triggeredAt: string;
   confirmedAt?: string;
-  taskId?: string;
-  jobId?: string;
+  threadId?: string;
+  executionIds?: string[];
+  artifactPaths?: string[];
 }
 
 export interface AutomationCreateInput {
@@ -80,6 +81,7 @@ function validateTrigger(trigger: AutomationDefinition['trigger']): void {
 export class AutomationService {
   private readonly definitions: JsonObjectStore<AutomationDefinition>;
   private readonly receipts: JsonObjectStore<AutomationTriggerReceipt>;
+  private readonly confirmationLocks = new Map<string, Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }>>();
 
   private constructor(
     definitions: JsonObjectStore<AutomationDefinition>,
@@ -193,26 +195,58 @@ export class AutomationService {
   async confirmTrigger(input: {
     automationId: string;
     receiptId: string;
-    capabilityId: string;
-    submit: (request: { goal: string; capabilityId: string }) => Promise<{ taskId: string; jobId?: string }>;
+    execute: (request: { goal: string; allowedCapabilityIds: string[] }) => Promise<{
+      threadId: string;
+      executionIds: string[];
+      artifactPaths: string[];
+    }>;
+    now?: string;
+  }): Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }> {
+    const previous = this.confirmationLocks.get(input.receiptId);
+    if (previous) return previous;
+    const run = this.confirmTriggerOnce(input);
+    this.confirmationLocks.set(input.receiptId, run);
+    try {
+      return await run;
+    } finally {
+      if (this.confirmationLocks.get(input.receiptId) === run) {
+        this.confirmationLocks.delete(input.receiptId);
+      }
+    }
+  }
+
+  private async confirmTriggerOnce(input: {
+    automationId: string;
+    receiptId: string;
+    execute: (request: { goal: string; allowedCapabilityIds: string[] }) => Promise<{
+      threadId: string;
+      executionIds: string[];
+      artifactPaths: string[];
+    }>;
     now?: string;
   }): Promise<{ receipt: AutomationTriggerReceipt; duplicate: boolean }> {
     const now = input.now || new Date().toISOString();
     const definition = await this.get(input.automationId);
     const receipt = await this.receipts.get(input.receiptId);
     if (!receipt || receipt.automationId !== definition.id) throw new Error('没有找到这次触发');
-    if (receipt.taskId) return { receipt, duplicate: true };
+    if (receipt.confirmedAt) return { receipt, duplicate: true };
     if (definition.lifecycle !== 'active') throw new Error('这项自动化当前未运行');
     if (Date.parse(definition.validUntil) <= Date.parse(now)) throw new Error('这项自动化已经过期');
-    if (!definition.allowedCapabilityIds.includes(input.capabilityId)) {
-      throw new Error('所选能力不在这项自动化的允许范围内');
-    }
-    const submitted = await input.submit({ goal: definition.goalTemplate, capabilityId: input.capabilityId });
-    const next: AutomationTriggerReceipt = {
+    // 先固化 Owner 决定，进程崩溃或重复点击也不能再次执行同一事件。
+    const claimed: AutomationTriggerReceipt = {
       ...receipt,
       confirmedAt: now,
-      taskId: submitted.taskId,
-      ...(submitted.jobId ? { jobId: submitted.jobId } : {}),
+    };
+    await this.receipts.put(claimed);
+    const completed = await input.execute({
+      goal: definition.goalTemplate,
+      allowedCapabilityIds: definition.allowedCapabilityIds.slice(),
+    });
+    const next: AutomationTriggerReceipt = {
+      ...claimed,
+      threadId: completed.threadId,
+      executionIds: cleanList(completed.executionIds),
+      artifactPaths: cleanList(completed.artifactPaths),
     };
     await this.receipts.put(next);
     return { receipt: next, duplicate: false };

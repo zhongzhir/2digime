@@ -32,7 +32,7 @@ test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { time
     assert.match(institutionState, /真实身份认证：尚未接入|机构账号：已连接/);
     assert.equal(authorizationCount, '没有文件夹授权');
     assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('A2A'), false);
-    assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('自动化'), false);
+    assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('workflow'), false);
     const selfBox = await page.locator('#digital-self-page').boundingBox();
     const capabilityBox = await page.locator('#ds-capability-panel').boundingBox();
     assert.ok(selfBox && capabilityBox && capabilityBox.x > selfBox.x + selfBox.width);

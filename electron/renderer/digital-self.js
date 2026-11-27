@@ -213,6 +213,136 @@
     }
   }
 
+  function automationTriggerLabel(item) {
+    const trigger = item && item.trigger ? item.trigger.type : '';
+    if (trigger === 'scheduled') return '按设定时间';
+    if (trigger === 'file_arrival') return '有新文件到达时';
+    if (trigger === 'institution_event') return '机构发来事件时';
+    return '按已设条件';
+  }
+
+  function automationStateLabel(item) {
+    if (!item) return '';
+    if (item.lifecycle === 'paused') return '已暂停';
+    if (item.lifecycle === 'revoked') return '已撤销';
+    return '运行中';
+  }
+
+  async function runAutomationAction(item, action, receipt, row) {
+    const labels = {
+      automationPause: '暂停后，新事件不会触发这项自动化。确认暂停吗？',
+      automationResume: '确认恢复这项自动化吗？',
+      automationRevoke: '撤销后不能恢复，但已有结果会保留。确认撤销吗？',
+      automationConfirm: `确认现在运行“${item.title || '这项自动化'}”吗？`,
+    };
+    if (!window.confirm(labels[action] || '确认继续吗？')) return;
+    const buttons = row ? Array.from(row.querySelectorAll('button')) : [];
+    for (const button of buttons) button.disabled = true;
+    setProjectionNotice(action === 'automationConfirm' ? '正在完成这项自动化…' : '正在更新自动化…');
+    try {
+      await api().invoke('digitalSelf', {
+        action,
+        automationId: item.id,
+        ...(receipt ? { receiptId: receipt.id } : {}),
+      });
+      await refreshCapabilityProjection();
+      if (action === 'automationConfirm') {
+        setProjectionNotice('已运行，结果已回到对话。');
+        const nav = $('nav-chat');
+        if (nav) nav.click();
+      } else {
+        setProjectionNotice('自动化设置已更新。');
+      }
+    } catch (_err) {
+      setProjectionNotice('这次自动化操作没有完成，原设置保持不变。');
+    } finally {
+      for (const button of buttons) button.disabled = false;
+    }
+  }
+
+  function appendAutomationAction(actions, label, item, action, receipt, row, primary) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = primary ? 'primary' : 'ghost';
+    button.textContent = label;
+    button.addEventListener('click', () => runAutomationAction(item, action, receipt, row));
+    actions.appendChild(button);
+  }
+
+  function renderAutomations(items) {
+    const list = $('ds-automation-list');
+    const empty = $('ds-automation-empty');
+    const rows = Array.isArray(items) ? items : [];
+    const active = rows.filter((item) => item.lifecycle === 'active').length;
+    const pending = rows.reduce(
+      (count, item) => count + (
+        item.lifecycle === 'active' &&
+        Array.isArray(item.receipts) &&
+        item.receipts.some((receipt) => !receipt.confirmedAt)
+          ? 1
+          : 0
+      ),
+      0,
+    );
+    setText(
+      'ds-automation-summary',
+      rows.length ? `${active} 项运行中${pending ? ` · ${pending} 项需要确认` : ''}` : '0 项自动化',
+    );
+    if (empty) empty.hidden = rows.length > 0;
+    if (!list) return;
+    list.textContent = '';
+    for (const item of rows.slice(0, 3)) {
+      const li = document.createElement('li');
+      li.className = 'ds-collaboration-item';
+      const title = document.createElement('p');
+      title.className = 'ds-collaboration-title';
+      title.textContent = item.title || '自动化';
+      const goal = document.createElement('p');
+      goal.className = 'ds-collaboration-goal';
+      goal.textContent = item.goalTemplate || '按已设目标处理';
+      const meta = document.createElement('p');
+      meta.className = 'muted tiny';
+      meta.textContent = `${automationTriggerLabel(item)} · ${automationStateLabel(item)}`;
+      li.appendChild(title);
+      li.appendChild(goal);
+      li.appendChild(meta);
+      const receipts = Array.isArray(item.receipts) ? item.receipts : [];
+      const pendingReceipt = receipts.find((receipt) => !receipt.confirmedAt);
+      const latest = receipts[0];
+      if (pendingReceipt || latest) {
+        const result = document.createElement('p');
+        result.className = 'muted tiny';
+        result.textContent = pendingReceipt
+          ? item.lifecycle === 'revoked'
+            ? '撤销前收到的触发已取消，不会执行。'
+            : item.lifecycle === 'paused'
+              ? '有一次新触发；恢复后可由你确认。'
+              : '有一次新触发，正在等你确认。'
+          : latest.artifactPaths && latest.artifactPaths.length
+            ? '最近一次已完成，结果在对话中。'
+            : '最近一次已处理，详情在对话中。';
+        li.appendChild(result);
+      }
+      if (item.lifecycle !== 'revoked' || pendingReceipt) {
+        const actions = document.createElement('div');
+        actions.className = 'ds-collaboration-actions';
+        if (pendingReceipt && item.lifecycle === 'active') {
+          appendAutomationAction(actions, '确认运行', item, 'automationConfirm', pendingReceipt, li, true);
+        }
+        if (item.lifecycle === 'active') {
+          appendAutomationAction(actions, '暂停', item, 'automationPause', null, li, false);
+        } else if (item.lifecycle === 'paused') {
+          appendAutomationAction(actions, '恢复', item, 'automationResume', null, li, true);
+        }
+        if (item.lifecycle !== 'revoked') {
+          appendAutomationAction(actions, '撤销', item, 'automationRevoke', null, li, false);
+        }
+        li.appendChild(actions);
+      }
+      list.appendChild(li);
+    }
+  }
+
   async function refreshCapabilityProjection() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') {
@@ -229,8 +359,9 @@
         ? client.getInstitutionStatus()
         : Promise.reject(new Error('institution status unavailable')),
       client.invoke('collab.interact', { action: 'list' }),
+      client.invoke('digitalSelf', { action: 'automationList' }),
     ];
-    const [identity, authorization, institution, collaboration] = await Promise.allSettled(requests);
+    const [identity, authorization, institution, collaboration, automation] = await Promise.allSettled(requests);
 
     if (identity.status === 'fulfilled' && identity.value) {
       setText('ds-identity-name', identity.value.displayName || '我的数字之我');
@@ -279,6 +410,20 @@
       const list = $('ds-collaboration-list');
       if (list) list.textContent = '';
       setProjectionNotice('部分身份、授权或协作信息暂时无法读取，请稍后重试。');
+    }
+
+    if (automation.status === 'fulfilled' && automation.value) {
+      renderAutomations(automation.value.automations);
+    } else {
+      setText('ds-automation-summary', '暂时无法读取');
+      const empty = $('ds-automation-empty');
+      if (empty) {
+        empty.textContent = '读取失败不表示没有自动化，请稍后重试。';
+        empty.hidden = false;
+      }
+      const list = $('ds-automation-list');
+      if (list) list.textContent = '';
+      setProjectionNotice('部分身份、授权、协作或自动化信息暂时无法读取，请稍后重试。');
     }
   }
 

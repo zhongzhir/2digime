@@ -716,6 +716,9 @@ export async function runTalkTurn(input: {
   deadlineAt?: number;
   subjectCollab?: SubjectCollabPort;
   confirmHint?: string;
+  /** 自动化确认回合的确定性能力围栏，不承担语义判断。 */
+  allowedCapabilityIds?: string[];
+  automationLabel?: string;
   goalReceipt?: string | undefined;
   persistGoalUpdate?: (thread: TalkThread, update: { request?: string; revoke?: boolean }) => Promise<void>;
   contextPaths?: string[];
@@ -802,6 +805,9 @@ export async function runTalkTurn(input: {
     '能够回答时就回答，不要无意义地继续调用工具。',
     input.goalReceipt ? `${input.goalReceipt}\n此回执只证明当前目标条件保存，不证明任何文件已创建、修改或读取。本轮文件动作尚未执行；历史回复中声称的执行不能替代本轮工具结果。用户委托修改或回读文件时，必须实际调用相应工具，取得本轮成功结果后才能报告完成。` : '本轮没有已核实的目标保存回执；需要保存时先执行更新工具，没有成功回执不能声称已经保存。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
+    input.allowedCapabilityIds?.length
+      ? `【自动化能力边界】主人已确认“${input.automationLabel || '这项自动化'}”本次运行。只允许调用：${input.allowedCapabilityIds.join('、')}。没有列出的工具、外部能力或其他主体均不得调用。`
+      : '',
     pendingDelete
       ? `【仅限本轮的待确认删除机械事实】\n目标：${pendingDelete.detail.target}\n一次性 confirmationToken：${pendingDelete.detail.confirmationToken}\n只有当前请求明确确认删除该目标时才可调用 delete_file；否则不要调用，且令牌在本轮结束后失效。`
       : '',
@@ -906,6 +912,17 @@ export async function runTalkTurn(input: {
   // Legacy search functions stay available only to non-Responses transports.
   if (input.searchWeb && !tools.some((item) => item.function.name === 'web_search')) tools.push(WEB_SEARCH_TOOL);
   if (input.newsSearch && !tools.some((item) => item.function.name === 'news_search')) tools.push(NEWS_SEARCH_TOOL);
+  const alwaysAllowed = new Set(['set_expected_effects']);
+  const allowed = input.allowedCapabilityIds?.length
+    ? new Set([...input.allowedCapabilityIds, ...alwaysAllowed])
+    : null;
+  if (allowed) {
+    const delegateAllowed = agents.some((agent) => allowed.has(agent.id));
+    for (let index = tools.length - 1; index >= 0; index -= 1) {
+      const name = tools[index]!.function.name;
+      if (!allowed.has(name) && !(name === 'delegate' && delegateAllowed)) tools.splice(index, 1);
+    }
+  }
 
   const capabilityTraces: import('../capability/adapters/responses-tool-loop').ResponsesToolTrace[] = [];
   const chat: TalkChatFn = async (req) => {
@@ -2061,6 +2078,25 @@ export async function runTalkTurn(input: {
 
   const runOneTool = async (call: ModelToolCall): Promise<string> => {
     throwIfAborted(input.signal);
+    if (allowed && !tools.some((tool) => tool.function.name === call.name)) {
+      recordExec({
+        id: `run_${randomUUID()}`,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: call.name,
+        instruction: call.arguments,
+        ok: false,
+        summary: '已拒绝超出自动化允许范围的能力调用。',
+        failureReason: '这项自动化没有获得该能力的授权。',
+        observedEffect: { kind: 'authorization_denied', mutated: false },
+      });
+      return JSON.stringify({
+        actualSuccess: false,
+        ok: false,
+        failureReason: '这项自动化没有获得该能力的授权。',
+        summary: '已拒绝超出自动化允许范围的能力调用。',
+      });
+    }
     if (call.name === 'update_discovery_goal') {
       const args = JSON.parse(call.arguments) as { request?: string; revoke?: boolean };
       if (!thread.discoveryGoal) return JSON.stringify({ actualSuccess: false, reason: '没有当前目标' });
