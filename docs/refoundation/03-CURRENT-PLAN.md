@@ -199,6 +199,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 直接臂与已归档的合格编排臂通过正式 pair validator，返回 `evidence_ready_for_scoring`：任务、项目类别、fixture digest、project revision、Agent executor/version/executable digest 全部一致，workspaceId 不同，两臂最终测试均通过、变更文件均为 `src/main.cjs`、`outsideScopeWrites=[]`。当前状态为 `DESKTOP_SAME_BUILD_PAIR_ADMITTED`。这只关闭桌面项目类，不代表四类 95% 评分或 Owner 验收；下一小批次进入 `2C-BACKEND-01` 直接臂，不并行启动脏工作区，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-02.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DESKTOP-PAIR-02.md)。
 
+### Slice 2C-13 开发检查点（2026-11-27）
+
+`2C-BACKEND-01` 领先 Agent 直接臂已真实通过：同一官方固定 Codex build 在独立后端项目副本中只修改 `src/retry-after.cjs`，预注册测试由失败变为通过；独立 Windows sandbox 探针证明授权目录内可写、目录外 `Access denied` 且文件不存在，正式单臂证据通过采集。运行使用现有 ChatGPT 登录权益，不调用兔机米托管模型，没有购买、充值或新增外部按量费用。
+
+当前状态为 `BACKEND_DIRECT_PASS / BACKEND_ORCHESTRATED_PENDING`。本检查点只关闭后端直接臂，不是后端双臂、四类 95% 或 Owner 验收；下一小批次只运行同一后端任务的兔机米正式 Talk 编排臂，复用当前已校验临时 Runtime，不进入脏工作区，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-DIRECT-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-BACKEND-DIRECT-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "slice-2c-coding-run-evidence/1",
+  "source": "real_process",
+  "taskId": "2C-BACKEND-01",
+  "projectClass": "backend",
+  "arm": "leading_agent_direct",
+  "workspaceId": "run-1795771496639-93947368",
+  "fixtureDigest": "d4bbdaa202354bbc6cc3e463f02a894eb07a3750170c799def7e6b59ca761a7b",
+  "projectRevision": "de7598c08794e2b647eb9c7be689a05afa90b0b0",
+  "agent": {
+    "executorId": "openai-codex-public-release",
+    "version": "0.171.0-alpha.13.2",
+    "executableDigest": "3b0b6d91b32a43b6e708a200445a7dff190b0116009ca29c3bca3623a1bbb69e"
+  },
+  "baselineTest": {
+    "commandDigest": "4f1bd23313c9ba84b7f7ff0d1e639a2c34cc59977d13e6f339fac7925d37ef0b",
+    "outputDigest": "1d0853214b7b201cabe1dc0d9df137e9c3d9dda7faedf13440c6edfe35b1cb7f",
+    "exitCode": 1,
+    "startedAt": "2026-11-27T09:24:59.225Z",
+    "finishedAt": "2026-11-27T09:24:59.472Z",
+    "matchedRegisteredFailure": true
+  },
+  "finalTest": {
+    "commandDigest": "4f1bd23313c9ba84b7f7ff0d1e639a2c34cc59977d13e6f339fac7925d37ef0b",
+    "outputDigest": "9e3de691641fec9dab5948b7cd0034655783145b2ef9abd9f079ba82bed6e4f5",
+    "exitCode": 0,
+    "startedAt": "2026-11-27T09:27:55.607Z",
+    "finishedAt": "2026-11-27T09:27:55.787Z"
+  },
+  "changedFiles": ["src/retry-after.cjs"],
+  "outsideScopeWrites": [],
+  "cost": {
+    "basis": "existing_entitlement_no_incremental_charge",
+    "externalChargeIncurred": false,
+    "amountCny": 0
+  }
+}
