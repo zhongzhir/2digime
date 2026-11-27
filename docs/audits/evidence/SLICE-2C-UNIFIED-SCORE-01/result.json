@@ -1,0 +1,10 @@
+{
+  "verdict": "developer_threshold_met_owner_pending",
+  "relativePercent": 100,
+  "directWeightedScore": 90,
+  "orchestratedWeightedScore": 90,
+  "missingProjectClasses": [],
+  "reasons": [
+    "开发对照阈值达到，仍需 Owner 产品验收"
+  ]
+}

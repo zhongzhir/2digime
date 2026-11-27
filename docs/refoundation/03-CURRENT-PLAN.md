@@ -223,6 +223,12 @@ TypeScript 构建通过，2C-1～2C-4 联合聚焦测试 12/12 通过；没有�
 
 编排臂与已归档直接臂通过正式 pair validator，返回 `evidence_ready_for_scoring`。当前状态为 `DIRTY_SAME_BUILD_PAIR_ADMITTED`，至此 Web、桌面、后端、脏工作区四类均有合格同 build pair。下一小批次只执行四类统一评分与 Slice 2C 结论审计，不再调用模型，不打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-PAIR-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-DIRTY-PAIR-01.md)。
 
+### Slice 2C-17 最终开发检查点（2026-11-27）
+
+Web、桌面、后端、脏工作区四类真实同 build pair 已进入统一评分。仓库未冻结 1–4 分主观细分量表，本批采用保守二值证据口径：已由正式证据证明的维度记 5；没有覆盖八臂的独立故障注入/恢复收据，因此 `failureRecovery` 全部记 0，不把普通成功或启动诊断冒充恢复能力。每臂其余五项均由真实测试、范围收据和对应结果回执证明，绝对分均为 90。
+
+正式 `evaluateCodingBenchmark` 返回：领先 Agent 加权 90、兔机米编排加权 90、相对得分 100%、`developer_threshold_met_owner_pending`；TypeScript 构建通过，评分门和真实证据门专项测试 10/10 通过。当前状态为 `SLICE_2C_DEVELOPER_THRESHOLD_MET / OWNER_ACCEPTANCE_PENDING`，不是市场全部 Coding 场景 95 分位、发布或产品总验收。下一小批次按计划进入 Slice 3 第一批“双栏骨架 + 身份与授权摘要”，暂不接协作关系或自动化管理。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-2C-UNIFIED-SCORE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-2C-UNIFIED-SCORE-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "slice-2c-unified-score-input/1",
+  "scoringPolicy": {
+    "kind": "binary_evidence_only",
+    "provenDimensionScore": 5,
+    "unprovenDimensionScore": 0,
+    "failureRecoveryDecision": "No separately pre-registered failure-injection and recovery receipt exists for every arm, so all arms receive 0 for failureRecovery.",
+    "receiptDecision": "A valid direct execution/result evidence receipt and a valid orchestrated same-Talk receipt each receive 5 for the receipt dimension appropriate to that arm."
+  },
+  "evidenceRefs": {
+    "2C-WEB-01": "docs/audits/evidence/SLICE-2C-SAME-BUILD-ADMISSION-01/evidence.json",
+    "2C-DESKTOP-01": "docs/audits/evidence/SLICE-2C-DESKTOP-PAIR-02/pair.json",
+    "2C-BACKEND-01": "docs/audits/evidence/SLICE-2C-BACKEND-PAIR-01/pair.json",
+    "2C-DIRTY-01": "docs/audits/evidence/SLICE-2C-DIRTY-PAIR-01/pair.json"
+  },
+  "runs": [
+    {
+      "taskId": "2C-WEB-01",
+      "arm": "leading_agent_direct",
+      "realRun": true,
+      "projectRevision": "406ff7d0eaeb3ef224a395c7927cbce9a8660f6d",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": false
+    },
+    {
+      "taskId": "2C-WEB-01",
+      "arm": "2digime_orchestrated",
+      "realRun": true,
+      "projectRevision": "406ff7d0eaeb3ef224a395c7927cbce9a8660f6d",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": true
+    },
+    {
+      "taskId": "2C-DESKTOP-01",
+      "arm": "leading_agent_direct",
+      "realRun": true,
+      "projectRevision": "f028d9e25b3fc2d844123e79fecb10b89e435901",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": false
+    },
+    {
+      "taskId": "2C-DESKTOP-01",
+      "arm": "2digime_orchestrated",
+      "realRun": true,
+      "projectRevision": "f028d9e25b3fc2d844123e79fecb10b89e435901",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": true
+    },
+    {
+      "taskId": "2C-BACKEND-01",
+      "arm": "leading_agent_direct",
+      "realRun": true,
+      "projectRevision": "de7598c08794e2b647eb9c7be689a05afa90b0b0",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": false
+    },
+    {
+      "taskId": "2C-BACKEND-01",
+      "arm": "2digime_orchestrated",
+      "realRun": true,
+      "projectRevision": "de7598c08794e2b647eb9c7be689a05afa90b0b0",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": true
+    },
+    {
+      "taskId": "2C-DIRTY-01",
+      "arm": "leading_agent_direct",
+      "realRun": true,
+      "projectRevision": "cf17753dbd070ceb048f5f19ec9f7a6a663bd19e",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": false
+    },
+    {
+      "taskId": "2C-DIRTY-01",
+      "arm": "2digime_orchestrated",
+      "realRun": true,
+      "projectRevision": "cf17753dbd070ceb048f5f19ec9f7a6a663bd19e",
+      "scores": { "taskUnderstanding": 5, "changeCorrectness": 5, "verification": 5, "scopeSafety": 5, "failureRecovery": 0, "talkReceipt": 5 },
+      "hardFailures": [],
+      "endToEndEffectVerified": true
+    }
+  ]
+}
