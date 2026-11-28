@@ -12,11 +12,13 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / SLICES_1_TO_4_DEVELOPER_CLOSED / SLICE_5_OWNER_FEEDBACK_CORRECTION_INSTALLED / OWNER_REACCEPTANCE_PENDING`
+**状态：** `OWNER_ACCEPTED / SLICES_1_TO_5_CLOSED / TASK_CLOSED`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
 **本地产品候选：** `v2-tujimi-20261128T113713Z-3665be43` 已完成打包、ZIP 正式入口烟测、Windows 升级/修复、卸载数据保留、最终重装和安装后隔离启动。Slice 1–4 与本轮修正成果已进入本地 `main`；仍未签名、push、公开发布或生产部署。
+
+**当前动作：** Owner 已于 2026-11-28 明确接收该版本；本任务收口，等待后续任务指令。接收不等于授权签名、push、公开发布、生产部署或真实机构试点。
 
 ### 2026-11-24 Owner 产品裁决
 
@@ -61,7 +63,7 @@ Owner 最新裁决覆盖此前“数字之我右侧承载身份与协作”的�
 
 Discover 的 11 月 28 日推荐仍停在 11 月 24 日，根因是当日重建推荐快照后，快照时间被误当作内容发布时间。现在推荐新鲜度同时要求快照有效和可信内容发布时间近期；内容过旧会进入既有开放目录/补充链，并明确显示“正在检查更新；当前可用内容更新至某日”或检查后的真实边界，不承诺互联网上存在的当天内容一定已进入目录，也不新增来源或站点规则。
 
-TypeScript 构建、Discover 新鲜度与连续供给聚焦门 23/23、身份/协作/自动化/机构正式 Electron 联动门 7/7、公共产品表面与“我的”桌面门通过。候选 `v2-tujimi-20261128T113713Z-3665be43` 敏感扫描 0 项、ZIP 正式入口烟测通过；Windows 生命周期门中 1,847 个 Owner 数据文件、71,693,508 bytes 的摘要在升级、再次安装、卸载、最终重装和隔离启动后完全一致，桌面与开始菜单快捷方式存在。setup SHA-256 为 `e157317dfe891abdca266d9076133e0b1f3cf6285a30969644d41937a7ac60c1`。当前为 `OWNER_FEEDBACK_CORRECTION_INSTALLED / OWNER_REACCEPTANCE_PENDING`；尚未签名、push、发布或部署。
+TypeScript 构建、Discover 新鲜度与连续供给聚焦门 23/23、身份/协作/自动化/机构正式 Electron 联动门 7/7、公共产品表面与“我的”桌面门通过。候选 `v2-tujimi-20261128T113713Z-3665be43` 敏感扫描 0 项、ZIP 正式入口烟测通过；Windows 生命周期门中 1,847 个 Owner 数据文件、71,693,508 bytes 的摘要在升级、再次安装、卸载、最终重装和隔离启动后完全一致，桌面与开始菜单快捷方式存在。setup SHA-256 为 `e157317dfe891abdca266d9076133e0b1f3cf6285a30969644d41937a7ac60c1`。Owner 于 2026-11-28 明确接收该版本，状态为 `OWNER_ACCEPTED / TASK_CLOSED`；尚未签名、push、发布或部署。
 
 ### Slice 1A 开发检查点（2026-11-24）
 
