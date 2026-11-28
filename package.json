@@ -11,6 +11,7 @@
     "smoke": "node dist/smoke.js",
     "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/identity/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/intelligence/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
     "electron:version": "node scripts/check-electron-version.cjs",
+    "preflight:electron:lifecycle": "node scripts/electron-playwright-lifecycle.cjs",
     "preflight:electron": "node scripts/electron-preflight.cjs",
     "dev": "node scripts/start-dev.cjs",
     "build:packaged": "node scripts/build-packaged.cjs",
@@ -29,6 +30,7 @@
     "benchmark:coding:evidence": "npm run build && node scripts/check-slice-2c-coding-evidence.cjs",
     "benchmark:coding:collector": "node scripts/slice-2c-coding-collector.cjs",
     "benchmark:coding:codex-direct": "node scripts/run-slice-2c-codex-direct.cjs",
+    "benchmark:unified": "node scripts/run-slice5-unified-benchmark.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
   },
   "dependencies": {

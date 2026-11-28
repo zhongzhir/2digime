@@ -185,7 +185,7 @@ describe('real-mcp-readonly-01', () => {
     assert.equal(job.status, 'succeeded');
     assert.equal(job.capabilityId, 'cap_mcp_readonly');
     assert.ok(calls.includes('tools/call:read_text_file'));
-    rt.workRuntime.stop();
+    await rt.stop();
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -226,7 +226,7 @@ describe('real-mcp-readonly-01', () => {
       '查看提供的项目资料，告诉我哪个项目处于 active 状态，以及它的优先级。',
     );
     assert.ok(looked && /Project Alpha/.test(looked.text) && /high/i.test(looked.text));
-    rt.workRuntime.stop();
+    await rt.stop();
     await rm(dir, { recursive: true, force: true });
   });
 });

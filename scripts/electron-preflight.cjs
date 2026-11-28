@@ -7,7 +7,6 @@
  */
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -87,6 +86,8 @@ function checkVersionCommand(electronPath) {
     encoding: "utf8",
     shell: false,
     env: process.env,
+    timeout: 45_000,
+    windowsHide: true,
   });
   if (result.status !== 0) {
     fail("electron_version_check_failed", "electron:version 预检失败", {
@@ -105,34 +106,6 @@ function checkVersionCommand(electronPath) {
   }
   if (!parsed.ok || !parsed.runtimeVersion) {
     fail("electron_version_incomplete", "版本检查未返回 runtimeVersion", parsed);
-  }
-}
-
-function checkSpawnWithSpacePath(electronPath) {
-  if (!electronPath) return;
-  const spaced = fs.mkdtempSync(path.join(os.tmpdir(), "dm v2 preflight "));
-  const script = path.join(spaced, "ok.cjs");
-  fs.writeFileSync(
-    script,
-    "process.stdout.write('space-path-ok\\n'); process.exit(0);\n",
-    "utf8",
-  );
-  const result = spawnSync(electronPath, [script], {
-    cwd: spaced,
-    encoding: "utf8",
-    shell: false,
-    env: process.env,
-  });
-  try {
-    fs.rmSync(spaced, { recursive: true, force: true });
-  } catch {
-    /* ignore */
-  }
-  if (result.status !== 0 || !String(result.stdout || "").includes("space-path-ok")) {
-    fail("spawn_space_path_failed", "含空格路径的参数数组启动失败", {
-      status: result.status,
-      stderr: String(result.stderr || "").slice(0, 400),
-    });
   }
 }
 
@@ -162,13 +135,57 @@ function checkForbiddenPatternsInRepoScripts() {
   }
 }
 
+function checkPlaywrightLifecycle() {
+  const lifecycle = path.join(__dirname, 'electron-playwright-lifecycle.cjs');
+  const result = spawnSync(process.execPath, [lifecycle], {
+    cwd: root,
+    encoding: 'utf8',
+    shell: false,
+    timeout: 210_000,
+    windowsHide: true,
+  });
+  if (result.error && result.error.code === 'ETIMEDOUT' && Number.isInteger(result.pid)) {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill.exe', ['/PID', String(result.pid), '/T', '/F'], {
+        shell: false,
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+    }
+  }
+  if (result.status !== 0) {
+    fail('playwright_lifecycle_failed', '正式 Electron 入口启动、首窗握手或清理失败', {
+      status: result.status,
+      signal: result.signal,
+      error: result.error ? String(result.error.message || result.error) : null,
+      stdout: String(result.stdout || '').slice(-1200),
+      stderr: String(result.stderr || '').slice(-2400),
+    });
+    return null;
+  }
+  const lines = String(result.stdout || '').trim().split(/\r?\n/).filter(Boolean);
+  try {
+    const parsed = JSON.parse(lines[lines.length - 1] || '{}');
+    if (!parsed.ok || !parsed.userDataRemoved) {
+      fail('playwright_lifecycle_incomplete', 'Electron 生命周期预检未证明清理完成', parsed);
+      return null;
+    }
+    return parsed;
+  } catch {
+    fail('playwright_lifecycle_json_invalid', 'Electron 生命周期预检输出不是有效 JSON', {
+      stdout: String(result.stdout || '').slice(-1200),
+    });
+    return null;
+  }
+}
+
 function main() {
   scanScripts();
   const electronPath = checkElectronBinary();
   checkVersionCommand(electronPath);
-  checkSpawnWithSpacePath(electronPath);
   checkMainEntry();
   checkForbiddenPatternsInRepoScripts();
+  const lifecycle = checkPlaywrightLifecycle();
 
   if (failures.length > 0) {
     console.error(JSON.stringify({ ok: false, failures }, null, 2));
@@ -180,10 +197,12 @@ function main() {
         ok: true,
         root,
         electronPath,
+        lifecycle,
         notes: [
           "历史错误 console.log(process.versions.electron) 来自把 -e 表达式当应用路径",
           "历史错误 截断的路径 来自未引号的空格路径拼接",
           "本预检强制参数数组启动，并提供 npm run electron:version / npm run dev",
+          "Slice 5 预检直接启动正式 electron/main.cjs，并证明首窗握手与有界清理",
         ],
       },
       null,

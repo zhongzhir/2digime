@@ -1,11 +1,10 @@
 "use strict";
 /**
  * 独立 Electron 版本检查。
- * - 不把 JS 表达式当作应用入口路径；
- * - 通过参数数组启动专用脚本打印 process.versions.electron。
+ * - 不把 JS 表达式或临时脚本当作应用入口路径；
+ * - 只调用 Electron 标准 --version，并设置硬超时。
  */
 const { spawnSync } = require("node:child_process");
-const fs = require("node:fs");
 const path = require("node:path");
 
 function main() {
@@ -35,17 +34,13 @@ function main() {
   }
 
   const pkgVersion = require("electron/package.json").version;
-  const printer = path.join(__dirname, "print-electron-runtime-version.cjs");
-  if (!fs.existsSync(printer)) {
-    console.error(JSON.stringify({ ok: false, error: "printer_script_missing", printer }));
-    process.exit(1);
-  }
-
-  const result = spawnSync(electronPath, [printer], {
+  const result = spawnSync(electronPath, ["--version"], {
     encoding: "utf8",
     shell: false,
     cwd: path.resolve(__dirname, ".."),
     env: process.env,
+    timeout: 30_000,
+    windowsHide: true,
   });
 
   if (result.error) {
@@ -64,7 +59,8 @@ function main() {
     .trim()
     .split(/\r?\n/)
     .filter(Boolean)
-    .pop();
+    .pop()
+    ?.replace(/^v/i, "");
   if (result.status !== 0 || !runtimeVersion) {
     console.error(
       JSON.stringify({
