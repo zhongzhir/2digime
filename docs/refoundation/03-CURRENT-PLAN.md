@@ -283,6 +283,12 @@ TypeScript 构建、自动化事实专项 2/2 和 diff 检查通过。当前状�
 
 TypeScript 构建通过；摘要/隐私边界专项 2/2、正式 Electron 合成机构投影与撤销 1/1、Slice 3A Electron 回归 1/1、语法与 diff 检查通过。当前状态为 `SLICE_4A_PERSONAL_INSTITUTION_PROJECTION_DEVELOPER_VALIDATED / PARTNER_SANDBOX_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只在既有 Institution Backend 上建立伙伴沙箱控制台与必要管理动作，不另建机构事实源，不进入真实机构数据、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4A-PERSONAL-INSTITUTION-PROJECTION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4A-PERSONAL-INSTITUTION-PROJECTION-01.md)。
 
+### Slice 4B 开发检查点（2026-11-28）
+
+既有 Institution Backend 已增加本机伙伴沙箱控制台和令牌保护的管理 API；伙伴可用合成数据创建机构、两个测试用户、权益和一项服务 Subject，配置 A2A endpoint、Agent Card URL、零费用人在环授权策略，查看最小审计并停用资源。全部数据仍进入同一 Institution Store，没有新增控制面事实源；管理视图不返回 virtual key 或 provider master key。
+
+TypeScript 构建通过；identity 联合回归 16/16、伙伴管理专项 3/3、随机本机端口端到端控制面验证通过，控制台合同/脚本语法与 diff 检查通过。当前状态为 `SLICE_4B_PARTNER_SANDBOX_CONTROL_PLANE_DEVELOPER_VALIDATED / SYNTHETIC_JOURNEYS_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只完成电信权益发放与银行服务协作两条合成旅程，不进入真实机构数据、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4B-PARTNER-SANDBOX-CONTROL-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4B-PARTNER-SANDBOX-CONTROL-01.md)。
+
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
 ---

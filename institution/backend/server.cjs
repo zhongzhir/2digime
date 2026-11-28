@@ -13,9 +13,12 @@
 'use strict';
 
 const http = require('node:http');
+const fs = require('node:fs');
 const path = require('node:path');
+const { timingSafeEqual } = require('node:crypto');
 const { createStore } = require('./store.cjs');
 const { createLitellmClient } = require('./litellm-client.cjs');
+const partnerAdmin = require('./partner-admin.cjs');
 
 function loadDotEnv(filePath) {
   const fs = require('node:fs');
@@ -38,6 +41,8 @@ const DATA_FILE =
 const DEFAULT_MODEL = process.env.INSTITUTION_DEFAULT_MODEL || 'deepseek-v4-flash';
 const GATEWAY = (process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000').replace(/\/+$/, '');
 const MASTER = process.env.LITELLM_MASTER_KEY || 'sk-institution-spike-local-only';
+const ADMIN_TOKEN = String(process.env.INSTITUTION_ADMIN_TOKEN || '').trim();
+const PARTNER_CONSOLE = fs.readFileSync(path.join(__dirname, 'partner-console.html'), 'utf8');
 
 const store = createStore(DATA_FILE);
 const litellm = createLitellmClient({ baseUrl: GATEWAY, masterKey: MASTER });
@@ -71,7 +76,16 @@ function send(res, status, body) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (c) => chunks.push(c));
+    let bytes = 0;
+    req.on('data', (c) => {
+      bytes += c.length;
+      if (bytes > 1024 * 1024) {
+        reject(Object.assign(new Error('request body too large'), { statusCode: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8');
       if (!raw) return resolve({});
@@ -83,6 +97,27 @@ function readBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+function adminAuthorized(req) {
+  if (!ADMIN_TOKEN) return false;
+  const header = String(req.headers.authorization || '');
+  const supplied = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(ADMIN_TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function requireAdmin(req, res) {
+  if (!ADMIN_TOKEN) {
+    send(res, 503, { error: 'admin_token_not_configured' });
+    return false;
+  }
+  if (!adminAuthorized(req)) {
+    send(res, 401, { error: 'admin_unauthorized' });
+    return false;
+  }
+  return true;
 }
 
 function publicOrg(org) {
@@ -105,13 +140,13 @@ function publicUser(user) {
 }
 
 function entitlementView(user) {
-  const policy = ENTITLEMENT_GROUPS[user.entitlementGroup];
+  const policy = user.entitlement || ENTITLEMENT_GROUPS[user.entitlementGroup];
   return {
     institutionUserId: user.institutionUserId,
     entitlementGroup: user.entitlementGroup,
     policy: policy
       ? {
-          group: policy.group,
+          group: policy.group || user.entitlementGroup || 'custom',
           label: policy.label,
           models: policy.models,
           quotaType: policy.quotaType,
@@ -150,10 +185,23 @@ function clientOverview(data, institutionUserId) {
       validTo: null,
     },
     services: entitlement.policy && active
-      ? [{ id: 'institution-ai', name: '机构 AI 对话服务', status: 'available', entry: 'talk' }]
+      ? [
+          { id: 'institution-ai', name: '机构 AI 对话服务', status: 'available', entry: 'talk' },
+          ...Object.values(data.services || {})
+            .filter((service) => service.organizationId === org.id && service.status === 'active')
+            .map((service) => ({
+              id: service.serviceId,
+              name: service.name,
+              status: 'available',
+              entry: 'subject',
+              subjectId: service.subjectId,
+            })),
+        ]
       : [],
     authorization: {
-      scopes: entitlement.policy && active ? ['ai:talk'] : [],
+      scopes: entitlement.policy && active
+        ? Array.from(new Set(['ai:talk', ...(entitlement.policy.scopes || [])]))
+        : [],
       revocable: true,
     },
     metering: {
@@ -255,6 +303,43 @@ async function handle(req, res) {
   const { pathname } = url;
 
   try {
+    if (req.method === 'GET' && pathname === '/partner-sandbox') {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
+        'X-Content-Type-Options': 'nosniff',
+      });
+      res.end(PARTNER_CONSOLE);
+      return;
+    }
+
+    if (pathname.startsWith('/v0/admin/partner/')) {
+      if (!requireAdmin(req, res)) return;
+      if (req.method === 'GET' && pathname === '/v0/admin/partner/overview') {
+        return send(res, 200, { overview: partnerAdmin.publicOverview(store.read()) });
+      }
+      const body = await readBody(req);
+      const nowIso = new Date().toISOString();
+      if (req.method === 'POST' && pathname === '/v0/admin/partner/organizations') {
+        const next = store.mutate((data) => partnerAdmin.createOrganization(data, body, nowIso));
+        return send(res, 201, { overview: partnerAdmin.publicOverview(next) });
+      }
+      if (req.method === 'POST' && pathname === '/v0/admin/partner/users') {
+        const next = store.mutate((data) => partnerAdmin.createUser(data, body, nowIso));
+        return send(res, 201, { overview: partnerAdmin.publicOverview(next) });
+      }
+      if (req.method === 'POST' && pathname === '/v0/admin/partner/services') {
+        const next = store.mutate((data) => partnerAdmin.createService(data, body, nowIso));
+        return send(res, 201, { overview: partnerAdmin.publicOverview(next) });
+      }
+      if (req.method === 'POST' && pathname === '/v0/admin/partner/disable') {
+        const next = store.mutate((data) => partnerAdmin.disableResource(data, body, nowIso));
+        return send(res, 200, { overview: partnerAdmin.publicOverview(next) });
+      }
+      return send(res, 404, { error: 'not_found' });
+    }
+
     if (req.method === 'GET' && pathname === '/health') {
       const litellmHealth = await litellm.health();
       return send(res, litellmHealth.ok ? 200 : 503, {

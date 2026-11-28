@@ -17,6 +17,7 @@
     "brand:validate": "node institution/brand-kit/validate.cjs",
     "brand:verify": "node institution/brand-kit/run-verify.cjs",
     "institution:accept": "node institution/acceptance-e/run-acceptance.cjs",
+    "institution:partner:verify": "npm run build && node institution/partner-sandbox/run-verify.cjs",
     "identity:oidc:verify": "node institution/identity-sandbox/oidc-provider/run-verify.cjs",
     "identity:oidc:external:verify": "node institution/identity-sandbox/duende-demo/run-verify.cjs",
     "identity:oidc:auth0:verify": "node institution/identity-sandbox/auth0/run-verify.cjs",

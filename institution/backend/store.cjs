@@ -47,6 +47,8 @@ function createStore(filePath) {
         version: 1,
         organizations: {},
         users: {},
+        services: {},
+        auditEvents: [],
         updatedAt: null,
       };
     }

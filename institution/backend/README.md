@@ -15,6 +15,8 @@
 | POST | `/v0/session/exchange` | mock identity → gateway + virtual key |
 | GET | `/v0/entitlement?institutionUserId=` | entitlement + live LiteLLM budget |
 | GET | `/v0/usage/summary` | per-user usage metadata from LiteLLM |
+| GET | `/partner-sandbox` | local synthetic partner console |
+| GET/POST | `/v0/admin/partner/*` | token-protected partner sandbox management |
 
 ## Run
 
@@ -26,6 +28,9 @@ node institution/backend/server.cjs
 
 # real verification (starts backend, seeds, chats, privacy checks)
 node institution/backend/run-verify.cjs
+
+# zero-cost synthetic partner control-plane verification
+npm run institution:partner:verify
 ```
 
 Success verdict:

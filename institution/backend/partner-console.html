@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>兔机米伙伴沙箱</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, "Microsoft YaHei", sans-serif; color: #17211f; background: #f4f0e7; }
+    body { margin: 0; }
+    main { max-width: 1180px; margin: auto; padding: 32px 24px 80px; }
+    h1, h2 { margin: 0 0 12px; }
+    .lead { color: #53605c; max-width: 760px; }
+    .notice { padding: 12px 14px; border: 1px solid #d4cbb8; border-radius: 10px; background: #fffaf0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; margin: 20px 0; }
+    section { border: 1px solid #d9d2c5; border-radius: 14px; padding: 18px; background: rgba(255,255,255,.8); }
+    label { display: grid; gap: 5px; margin: 10px 0; font-size: 14px; }
+    input, select, button { min-height: 40px; border: 1px solid #c9c1b2; border-radius: 9px; padding: 0 10px; font: inherit; }
+    button { cursor: pointer; background: #0c6b5a; color: white; border-color: #0c6b5a; }
+    button.secondary { background: white; color: #17211f; border-color: #c9c1b2; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    .row label { flex: 1 1 220px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; border-bottom: 1px solid #e1dbcf; padding: 9px 7px; vertical-align: top; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #182321; color: #e8f4ef; padding: 14px; border-radius: 10px; max-height: 320px; overflow: auto; }
+    .muted { color: #64706c; font-size: 13px; }
+    #status { min-height: 24px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>兔机米伙伴沙箱</h1>
+  <p class="lead">用合成数据配置机构、测试用户、权益和服务 Subject。这里不是生产运营后台，不接收真实客户数据，也不能读取用户的 Digital Self、私人 Talk、本地文件或长期记忆。</p>
+  <p class="notice">沙箱管理员令牌只保存在当前浏览器会话。退出页面后自动清除。</p>
+  <div class="row">
+    <label>管理员令牌<input id="token" type="password" autocomplete="off" /></label>
+    <button id="load">读取沙箱</button>
+  </div>
+  <p id="status" aria-live="polite"></p>
+
+  <div class="grid">
+    <section>
+      <h2>1. 创建机构</h2>
+      <label>机构 ID<input id="org-id" value="partner-demo" /></label>
+      <label>机构名称<input id="org-name" value="伙伴演示机构" /></label>
+      <label>品牌引用<input id="org-brand" value="tujimi" /></label>
+      <button data-action="create-org">创建机构</button>
+    </section>
+    <section>
+      <h2>2. 创建测试用户</h2>
+      <label>用户 ID<input id="user-id" value="test-user-1" /></label>
+      <label>机构 ID<input id="user-org" value="partner-demo" /></label>
+      <label>权益名称<input id="user-entitlement" value="伙伴试用权益" /></label>
+      <label>合成额度<input id="user-quota" type="number" value="100" min="0" /></label>
+      <button data-action="create-user">创建用户</button>
+    </section>
+    <section>
+      <h2>3. 注册服务</h2>
+      <label>服务 ID<input id="service-id" value="partner-service" /></label>
+      <label>机构 ID<input id="service-org" value="partner-demo" /></label>
+      <label>服务名称<input id="service-name" value="机构服务助手" /></label>
+      <label>Subject ID<input id="service-subject" value="subject-partner-service" /></label>
+      <label>A2A endpoint<input id="service-a2a" placeholder="https://sandbox.example/a2a" /></label>
+      <label>Agent Card URL<input id="service-card" placeholder="https://sandbox.example/.well-known/agent-card.json" /></label>
+      <button data-action="create-service">注册服务</button>
+    </section>
+  </div>
+
+  <section>
+    <div class="row"><h2>当前沙箱</h2><button id="refresh" class="secondary">刷新</button></div>
+    <div id="overview"></div>
+  </section>
+  <section style="margin-top:16px">
+    <h2>最小审计</h2>
+    <p class="muted">只记录操作者、动作、资源标识、时间和结果，不记录请求正文或用户私人数据。</p>
+    <pre id="audit">尚未读取</pre>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const status = (text) => { $('status').textContent = text || ''; };
+  const token = () => $('token').value.trim();
+  async function api(path, method = 'GET', body) {
+    const response = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json.message || json.error || `HTTP ${response.status}`);
+    return json;
+  }
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+  function table(title, rows, fields, type, idField) {
+    const body = rows.map((row) => `<tr>${fields.map((field) => `<td>${esc(row[field.key])}</td>`).join('')}<td>${row.status === 'disabled' ? '已停用' : `<button class="secondary" data-disable-type="${type}" data-disable-id="${esc(row[idField])}">停用</button>`}</td></tr>`).join('');
+    return `<h3>${title}</h3><table><thead><tr>${fields.map((field) => `<th>${field.label}</th>`).join('')}<th>操作</th></tr></thead><tbody>${body || `<tr><td colspan="${fields.length + 1}">暂无</td></tr>`}</tbody></table>`;
+  }
+  async function load() {
+    if (!token()) { status('请输入沙箱管理员令牌。'); return; }
+    sessionStorage.setItem('partnerSandboxToken', token());
+    try {
+      const { overview } = await api('/v0/admin/partner/overview');
+      $('overview').innerHTML = [
+        table('机构', overview.organizations, [{key:'id',label:'ID'},{key:'name',label:'名称'},{key:'status',label:'状态'}], 'organization', 'id'),
+        table('测试用户', overview.users.map((row) => ({...row, entitlementLabel: row.entitlement?.label || '未配置'})), [{key:'institutionUserId',label:'用户'},{key:'organizationId',label:'机构'},{key:'entitlementLabel',label:'权益'},{key:'status',label:'状态'}], 'institution_user', 'institutionUserId'),
+        table('服务 Subject', overview.services, [{key:'serviceId',label:'服务'},{key:'name',label:'名称'},{key:'subjectId',label:'Subject'},{key:'status',label:'状态'}], 'service', 'serviceId'),
+      ].join('');
+      $('audit').textContent = JSON.stringify(overview.auditEvents, null, 2);
+      status('沙箱已读取。');
+    } catch (error) { status(`读取失败：${error.message}`); }
+  }
+  async function mutate(path, body) {
+    try { await api(path, 'POST', body); await load(); }
+    catch (error) { status(`操作失败：${error.message}`); }
+  }
+  $('token').value = sessionStorage.getItem('partnerSandboxToken') || '';
+  $('load').addEventListener('click', load);
+  $('refresh').addEventListener('click', load);
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    if (button.dataset.action === 'create-org') mutate('/v0/admin/partner/organizations', { id:$('org-id').value, name:$('org-name').value, brandRef:$('org-brand').value });
+    if (button.dataset.action === 'create-user') mutate('/v0/admin/partner/users', { institutionUserId:$('user-id').value, organizationId:$('user-org').value, entitlementLabel:$('user-entitlement').value, quotaAmount:Number($('user-quota').value), models:['sandbox-model'] });
+    if (button.dataset.action === 'create-service') mutate('/v0/admin/partner/services', { serviceId:$('service-id').value, organizationId:$('service-org').value, name:$('service-name').value, subjectId:$('service-subject').value, a2aEndpoint:$('service-a2a').value, agentCardUrl:$('service-card').value, scopes:['service:consult'], humanInLoop:true });
+    if (button.dataset.disableType) mutate('/v0/admin/partner/disable', { resourceType:button.dataset.disableType, resourceId:button.dataset.disableId });
+  });
+})();
+</script>
+</body>
+</html>
+
