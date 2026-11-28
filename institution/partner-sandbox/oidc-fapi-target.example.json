@@ -1,0 +1,23 @@
+{
+  "status": "target_not_enabled",
+  "warning": "This is a partner configuration target, not proof that FAPI 2.0 is implemented.",
+  "oidcCurrentProfile": {
+    "flow": "authorization_code",
+    "pkce": "S256",
+    "state": true,
+    "nonce": true,
+    "issuerHttpsRequired": true,
+    "loopbackRedirectForNativeApp": true
+  },
+  "fapi2TargetProfile": {
+    "par": "required",
+    "clientAuthentication": "private_key_jwt",
+    "authorizationCode": true,
+    "pkce": "S256",
+    "senderConstraint": "DPoP",
+    "dpopNonce": "required_when_advertised",
+    "accessTokenPersistence": "forbidden",
+    "privateKeyStorage": "existing SecretStore",
+    "negativeGates": ["code replay", "PAR request URI replay", "DPoP proof replay", "wrong DPoP key", "client or key revocation"]
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "2digime Partner Sandbox API",
+    "version": "0.1.0-sandbox",
+    "description": "Synthetic-data, localhost partner sandbox. Not a production banking or telecom API."
+  },
+  "servers": [{ "url": "http://127.0.0.1:4100" }],
+  "components": {
+    "securitySchemes": {
+      "sandboxAdmin": { "type": "http", "scheme": "bearer" }
+    },
+    "schemas": {
+      "OrganizationInput": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$" },
+          "name": { "type": "string", "maxLength": 200 },
+          "brandRef": { "type": "string" },
+          "gatewayBaseUrl": { "type": ["string", "null"], "format": "uri" }
+        }
+      },
+      "UserInput": {
+        "type": "object",
+        "required": ["institutionUserId", "organizationId", "entitlementLabel"],
+        "properties": {
+          "institutionUserId": { "type": "string" },
+          "organizationId": { "type": "string" },
+          "displayName": { "type": "string" },
+          "entitlementLabel": { "type": "string" },
+          "quotaAmount": { "type": "number", "minimum": 0 },
+          "models": { "type": "array", "items": { "type": "string" }, "maxItems": 10 },
+          "validTo": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "ServiceInput": {
+        "type": "object",
+        "required": ["serviceId", "organizationId", "name", "subjectId"],
+        "properties": {
+          "serviceId": { "type": "string" },
+          "organizationId": { "type": "string" },
+          "name": { "type": "string" },
+          "subjectId": { "type": "string" },
+          "a2aEndpoint": { "type": ["string", "null"], "format": "uri" },
+          "agentCardUrl": { "type": ["string", "null"], "format": "uri" },
+          "scopes": { "type": "array", "items": { "type": "string" }, "maxItems": 20 },
+          "humanInLoop": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/v0/admin/partner/overview": {
+      "get": { "security": [{ "sandboxAdmin": [] }], "responses": { "200": { "description": "Partner sandbox projection without credentials or private subject data" }, "401": { "description": "Missing or invalid admin token" } } }
+    },
+    "/v0/admin/partner/organizations": {
+      "post": { "security": [{ "sandboxAdmin": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrganizationInput" } } } }, "responses": { "201": { "description": "Organization created" } } }
+    },
+    "/v0/admin/partner/users": {
+      "post": { "security": [{ "sandboxAdmin": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserInput" } } } }, "responses": { "201": { "description": "Synthetic user and entitlement created" } } }
+    },
+    "/v0/admin/partner/services": {
+      "post": { "security": [{ "sandboxAdmin": [] }], "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServiceInput" } } } }, "responses": { "201": { "description": "Institution service Subject registered" } } }
+    },
+    "/v0/admin/partner/disable": {
+      "post": { "security": [{ "sandboxAdmin": [] }], "responses": { "200": { "description": "Institution-side resource disabled" } } }
+    },
+    "/v0/session/exchange": {
+      "post": { "responses": { "200": { "description": "Sandbox session with restricted credential; never a provider master key" } } }
+    },
+    "/v0/client/overview": {
+      "get": { "responses": { "200": { "description": "Client institution projection and privacy boundary" } } }
+    },
+    "/v0/usage/summary": {
+      "get": { "responses": { "200": { "description": "Necessary usage metadata without prompt or response bodies" } } }
+    }
+  }
+}

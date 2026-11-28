@@ -64,6 +64,7 @@ async function main() {
       INSTITUTION_BACKEND_PORT: String(port),
       INSTITUTION_DATA_FILE: dataFile,
       INSTITUTION_ADMIN_TOKEN: token,
+      INSTITUTION_SYNTHETIC_MODE: '1',
     },
     stdio: 'ignore',
   });
@@ -119,6 +120,21 @@ async function main() {
     walk(overview);
     assert(leakedKeys.length === 0, `overview leaked private keys: ${leakedKeys.join(', ')}`);
 
+    const exchanged = await request(baseUrl, '', 'POST', '/v0/session/exchange', {
+      institutionUserId: 'test-user-1', assertion: 'mock',
+    });
+    assert(exchanged.ok, 'synthetic institution login failed');
+    const talk = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${exchanged.json.credential.value}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: exchanged.json.model, messages: [{ role: 'user', content: '合成权益验证' }] }),
+    });
+    const talkBody = await talk.json();
+    assert(talk.ok && talkBody.syntheticSandbox === true, 'synthetic capability call failed');
+    assert(talkBody.choices[0].message.content === '机构沙箱能力调用成功。', 'synthetic result mismatch');
+    const usage = await request(baseUrl, '', 'GET', '/v0/usage/summary?institutionUserId=test-user-1');
+    assert(usage.ok && usage.json.summaries[0].usage.requestCount === 1, 'synthetic usage not aggregated');
+
     response = await request(baseUrl, token, 'POST', '/v0/admin/partner/disable', {
       resourceType: 'service', resourceId: 'partner-service',
     });
@@ -130,9 +146,10 @@ async function main() {
       organizationCount: 1,
       userCount: 2,
       serviceCount: 1,
-      auditCount: 5,
+      auditCount: 6,
       unauthorizedRejected: true,
       privacyBoundaryPass: true,
+      syntheticLoginAndCapabilityPass: true,
     }, null, 2));
   } finally {
     if (!child.killed) child.kill();

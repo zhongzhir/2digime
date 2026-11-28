@@ -28,7 +28,8 @@ node institution/backend/server.cjs
 ```powershell
 npm run build
 node institution/partner-sandbox/run-verify.cjs
+npm run institution:partner:journeys
 ```
 
-验证脚本使用系统临时目录和随机本机端口，不连接外部服务、不产生费用。
+验证脚本使用系统临时目录和随机本机端口，不连接外部服务、不产生费用。`institution:partner:journeys` 运行两条合成旅程：电信权益发放，以及银行服务 Subject 的协作接受、撤销与 A2A 互操作。
 

@@ -143,6 +143,9 @@ function createUser(data, input, nowIso) {
       validTo: input.validTo ? text(input.validTo, 'valid_to', 64) : null,
       scopes: ['ai:talk'],
     },
+    credentialType: 'sandbox_synthetic',
+    virtualKey: `sk-sandbox-${randomUUID()}`,
+    usage: { requestCount: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     provisionedAt: nowIso,
   };
   audit(current, 'user.created', 'institution_user', institutionUserId, nowIso);

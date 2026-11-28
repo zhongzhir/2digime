@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_4A_DEVELOPER_VALIDATED`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_4_DEVELOPER_EXIT_GATE_PASS_OWNER_PENDING`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -350,6 +350,12 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 既有 Institution Backend 已增加本机伙伴沙箱控制台和令牌保护的管理 API；伙伴可用合成数据创建机构、两个测试用户、各自权益和一项服务 Subject，配置 A2A endpoint、Agent Card URL、零费用人在环授权策略，查看最小审计并停用机构、用户或服务。全部数据仍进入同一 Institution Store，没有新增控制面事实源。
 
 新管理接口未配置管理员令牌时拒绝，管理视图不返回 virtual key 或 provider master key；最小审计只保存操作者、动作、资源标识、时间与结果。TypeScript 构建通过；identity 联合回归 16/16、伙伴管理领域专项 3/3、随机本机端口端到端控制面验证通过，控制台合同/脚本语法与 diff 检查通过。当前状态为 `SLICE_4B_PARTNER_SANDBOX_CONTROL_PLANE_DEVELOPER_VALIDATED / SYNTHETIC_JOURNEYS_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只完成电信权益发放与银行服务协作两条合成旅程，不进入真实机构数据或生产部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4B-PARTNER-SANDBOX-CONTROL-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4B-PARTNER-SANDBOX-CONTROL-01.md)。
+
+### Slice 4C / Slice 4 开发退出检查点（2026-11-28）
+
+两条合成机构旅程已形成可重复联合门。电信链完成沙箱账号登录、权益到账、同一 Talk 受限能力调用、必要用量归集和客户端撤销；银行链把伙伴服务配置绑定到真实 Digital Subject，复用既有双 Electron Relay/E2EE 正式入口完成协作接受、结束与双方撤销，并通过官方 A2A SDK 的签名 Agent Card、Message、Task、Artifact 互操作。合成 OpenAI-compatible endpoint 只在显式沙箱环境启用，不是新产品 gateway。
+
+伙伴资料包已输出通信架构、60 分钟启动路径、OpenAPI/事件合同、OIDC/FAPI 2.0 目标配置、Agent Card 参考、白标、隐私数据流、安全边界、试点范围和验收清单。最终联合门中 JSON 合同 4/4、identity 17/17、个人端正式 Electron 1/1、电信旅程 1/1、服务 Subject 映射 1/1、双 Electron 银行协作门 1/1、A2A 4/4 通过。当前状态为 `SLICE_4_DEVELOPER_EXIT_GATE_PASS / OWNER_AND_INDEPENDENT_PARTNER_ACCEPTANCE_PENDING`。没有真实银行/电信生产接入、FAPI 2.0、真实 KYC、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4-FINAL-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4-FINAL-DEVELOPER-CLOSURE-01.md)。
 
 ### 个人客户端投影
 

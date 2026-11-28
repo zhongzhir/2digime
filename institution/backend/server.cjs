@@ -42,6 +42,7 @@ const DEFAULT_MODEL = process.env.INSTITUTION_DEFAULT_MODEL || 'deepseek-v4-flas
 const GATEWAY = (process.env.LITELLM_BASE_URL || 'http://127.0.0.1:4000').replace(/\/+$/, '');
 const MASTER = process.env.LITELLM_MASTER_KEY || 'sk-institution-spike-local-only';
 const ADMIN_TOKEN = String(process.env.INSTITUTION_ADMIN_TOKEN || '').trim();
+const SYNTHETIC_MODE = process.env.INSTITUTION_SYNTHETIC_MODE === '1';
 const PARTNER_CONSOLE = fs.readFileSync(path.join(__dirname, 'partner-console.html'), 'utf8');
 
 const store = createStore(DATA_FILE);
@@ -303,6 +304,64 @@ async function handle(req, res) {
   const { pathname } = url;
 
   try {
+    if (
+      req.method === 'POST' &&
+      (pathname === '/v1/chat/completions' || pathname === '/chat/completions') &&
+      SYNTHETIC_MODE
+    ) {
+      const header = String(req.headers.authorization || '');
+      const credential = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+      const data = store.read();
+      const user = Object.values(data.users || {}).find((item) => item.virtualKey === credential);
+      if (!user || user.credentialType !== 'sandbox_synthetic') {
+        return send(res, 401, { error: { message: 'sandbox_credential_invalid', type: 'authentication_error' } });
+      }
+      const org = data.organizations[user.organizationId];
+      if (!org || org.status !== 'active' || user.status !== 'active') {
+        return send(res, 403, { error: { message: 'sandbox_entitlement_inactive', type: 'permission_error' } });
+      }
+      const body = await readBody(req);
+      const inputChars = Array.isArray(body.messages)
+        ? body.messages.reduce((sum, message) => sum + String(message && message.content || '').length, 0)
+        : 0;
+      const usage = {
+        prompt_tokens: Math.max(1, Math.ceil(inputChars / 4)),
+        completion_tokens: 8,
+        total_tokens: Math.max(1, Math.ceil(inputChars / 4)) + 8,
+      };
+      store.mutate((current) => {
+        const next = partnerAdmin.normalizeData(current);
+        const row = next.users[user.institutionUserId];
+        const before = row.usage || { requestCount: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+        row.usage = {
+          requestCount: before.requestCount + 1,
+          inputTokens: before.inputTokens + usage.prompt_tokens,
+          outputTokens: before.outputTokens + usage.completion_tokens,
+          totalTokens: before.totalTokens + usage.total_tokens,
+        };
+        next.auditEvents.push({
+          auditId: `audit_usage_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+          at: new Date().toISOString(),
+          actor: user.institutionUserId,
+          action: 'capability.used',
+          resourceType: 'institution_user',
+          resourceId: user.institutionUserId,
+          outcome: 'success',
+        });
+        next.auditEvents = next.auditEvents.slice(-500);
+        return next;
+      });
+      return send(res, 200, {
+        id: `chatcmpl-sandbox-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: String(body.model || 'sandbox-model'),
+        choices: [{ index: 0, message: { role: 'assistant', content: '机构沙箱能力调用成功。' }, finish_reason: 'stop' }],
+        usage,
+        syntheticSandbox: true,
+      });
+    }
+
     if (req.method === 'GET' && pathname === '/partner-sandbox') {
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
@@ -322,7 +381,10 @@ async function handle(req, res) {
       const body = await readBody(req);
       const nowIso = new Date().toISOString();
       if (req.method === 'POST' && pathname === '/v0/admin/partner/organizations') {
-        const next = store.mutate((data) => partnerAdmin.createOrganization(data, body, nowIso));
+        const input = SYNTHETIC_MODE && !body.gatewayBaseUrl
+          ? { ...body, gatewayBaseUrl: `http://127.0.0.1:${PORT}` }
+          : body;
+        const next = store.mutate((data) => partnerAdmin.createOrganization(data, input, nowIso));
         return send(res, 201, { overview: partnerAdmin.publicOverview(next) });
       }
       if (req.method === 'POST' && pathname === '/v0/admin/partner/users') {
@@ -402,6 +464,17 @@ async function handle(req, res) {
       if (!user) return send(res, 404, { error: 'user_not_found' });
 
       const view = entitlementView(user);
+      if (user.credentialType === 'sandbox_synthetic') {
+        return send(res, 200, {
+          ...view,
+          live: {
+            source: 'synthetic_sandbox',
+            ok: user.status === 'active',
+            usage: user.usage || null,
+            models: view.policy ? view.policy.models : [],
+          },
+        });
+      }
       const info = await litellm.keyInfo(user.virtualKey);
       const spend = extractSpend(info.json);
       return send(res, 200, {
@@ -436,6 +509,17 @@ async function handle(req, res) {
 
       const summaries = [];
       for (const user of users) {
+        if (user.credentialType === 'sandbox_synthetic') {
+          summaries.push({
+            institutionUserId: user.institutionUserId,
+            entitlementGroup: user.entitlementGroup || 'custom',
+            source: 'synthetic_sandbox',
+            ok: user.status === 'active',
+            usage: user.usage || null,
+            models: user.entitlement ? user.entitlement.models : [],
+          });
+          continue;
+        }
         const info = await litellm.keyInfo(user.virtualKey);
         const spend = extractSpend(info.json);
         summaries.push({

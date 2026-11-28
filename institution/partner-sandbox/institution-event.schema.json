@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://2digime.example/schemas/institution-event.v1.json",
+  "title": "2digime institution event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "organizationId", "serviceId", "eventType", "eventKey", "occurredAt"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "organizationId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$" },
+    "serviceId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$" },
+    "eventType": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "eventKey": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Idempotency key" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "subjectRef": { "type": ["string", "null"] },
+    "payloadRef": { "type": ["string", "null"], "description": "Opaque, purpose-bound reference; not private content" },
+    "expiresAt": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "not": {
+    "anyOf": [
+      { "required": ["prompt"] },
+      { "required": ["response"] },
+      { "required": ["digitalSelf"] },
+      { "required": ["fileContent"] },
+      { "required": ["memory"] }
+    ]
+  }
+}

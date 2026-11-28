@@ -1,0 +1,25 @@
+{
+  "warning": "Illustrative shape only. A real card must be generated and signed by the service Subject communication key.",
+  "name": "合成机构服务 Subject",
+  "description": "在明确授权和最小披露范围内提供机构服务协作。",
+  "version": "1.0.0",
+  "supportedInterfaces": [
+    {
+      "url": "https://sandbox.example/a2a",
+      "protocolBinding": "2digime-relay-e2ee",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "skills": [
+    {
+      "id": "service-consult",
+      "name": "机构服务咨询",
+      "description": "只处理本次授权的低风险咨询与草拟。"
+    }
+  ],
+  "securityRequirements": [],
+  "digitalmeSubjectBinding": {
+    "required": true,
+    "signature": "generated_at_runtime_not_in_example"
+  }
+}

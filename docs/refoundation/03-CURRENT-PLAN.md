@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_3_DEVELOPER_EXIT_PASS_OWNER_PENDING / SLICE_4A_DEVELOPER_VALIDATED`
+**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_3_DEVELOPER_EXIT_PASS_OWNER_PENDING / SLICE_4_DEVELOPER_EXIT_PASS_OWNER_PENDING`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -288,6 +288,12 @@ TypeScript 构建通过；摘要/隐私边界专项 2/2、正式 Electron 合成
 既有 Institution Backend 已增加本机伙伴沙箱控制台和令牌保护的管理 API；伙伴可用合成数据创建机构、两个测试用户、权益和一项服务 Subject，配置 A2A endpoint、Agent Card URL、零费用人在环授权策略，查看最小审计并停用资源。全部数据仍进入同一 Institution Store，没有新增控制面事实源；管理视图不返回 virtual key 或 provider master key。
 
 TypeScript 构建通过；identity 联合回归 16/16、伙伴管理专项 3/3、随机本机端口端到端控制面验证通过，控制台合同/脚本语法与 diff 检查通过。当前状态为 `SLICE_4B_PARTNER_SANDBOX_CONTROL_PLANE_DEVELOPER_VALIDATED / SYNTHETIC_JOURNEYS_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只完成电信权益发放与银行服务协作两条合成旅程，不进入真实机构数据、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4B-PARTNER-SANDBOX-CONTROL-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4B-PARTNER-SANDBOX-CONTROL-01.md)。
+
+### Slice 4C / Slice 4 开发退出检查点（2026-11-28）
+
+两条合成机构旅程已形成可重复联合门：电信链完成沙箱登录、权益到账、同一 Talk 受限能力调用、必要用量归集和客户端撤销；银行链把伙伴服务配置绑定真实 Digital Subject，复用双 Electron Relay/E2EE 正式入口完成接受、结束与双方撤销，并通过官方 A2A SDK 的 Agent Card、Message、Task、Artifact 互操作。合成 endpoint 仅在显式沙箱环境启用，不是新 gateway。
+
+合作资料包已包含通信架构、60 分钟路径、OpenAPI/事件合同、OIDC/FAPI 目标配置、Agent Card、白标、隐私数据流、安全边界、试点范围和验收清单。最终联合门：JSON 合同 4/4、identity 17/17、个人端正式 Electron 1/1、电信旅程 1/1、服务 Subject 映射 1/1、双 Electron 银行协作门 1/1、A2A 4/4 通过。当前状态为 `SLICE_4_DEVELOPER_EXIT_GATE_PASS / OWNER_AND_INDEPENDENT_PARTNER_ACCEPTANCE_PENDING`；60 分钟路径尚未由独立外部伙伴人工计时，未进入真实银行/电信数据、FAPI 2.0、打包、push、发布或部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4-FINAL-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4-FINAL-DEVELOPER-CLOSURE-01.md)。
 
 以下 `0A` 及后续历史指针保留为决策和证据记录；与本节冲突时，以本节和新详细计划为准。
 
