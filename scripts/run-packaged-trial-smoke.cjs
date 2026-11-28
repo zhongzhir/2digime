@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { spawn, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -54,7 +54,43 @@ function findExe(dir) {
   return null;
 }
 
-function main() {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function removeOwnedTempDir(dir, prefix) {
+  const resolved = path.resolve(dir);
+  const tempRoot = path.resolve(os.tmpdir());
+  if (!resolved.startsWith(tempRoot + path.sep) || !path.basename(resolved).startsWith(prefix)) {
+    throw new Error(`refusing to clean non-owned temp directory: ${resolved}`);
+  }
+  fs.rmSync(resolved, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+}
+
+function killTree(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      shell: false,
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    return;
+  }
+  try { process.kill(pid, 'SIGKILL'); } catch {}
+}
+
+function isAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function main() {
   const staging = process.env.DIGITALME_V2_STAGING || latestStaging();
   if (!staging) fail('no_staging_build');
   const zip = findZip(staging);
@@ -74,54 +110,68 @@ function main() {
   for (const k of Object.keys(env)) {
     if (/^DIGITALME_/.test(k) || /API_KEY|OPENAI|ANTHROPIC|DEEPSEEK|MINIMAX/.test(k)) delete env[k];
   }
-
-  const child = spawn(exe, [`--user-data-dir=${userData}`], {
-    cwd: path.dirname(exe),
-    env,
-    stdio: 'ignore',
-    shell: false,
-    detached: true,
+  Object.assign(env, {
+    DIGITALME_V2_USER_DATA: userData,
+    DIGITALME_V2_HOME: userData,
   });
-  child.unref();
+  delete env.NODE_TEST_CONTEXT;
 
-  const started = Date.now();
-  const deadline = started + 20_000;
-  const wait = () => {
-    const localState = path.join(userData, 'Local State');
+  const { _electron } = require('playwright');
+  const constrainedWindows =
+    process.platform === 'win32' &&
+    (Boolean(process.env.CODEX_PERMISSION_PROFILE) || process.env.DIGITALME_V2_ELECTRON_NO_SANDBOX === '1');
+  const args = constrainedWindows ? ['--no-sandbox', '--disable-gpu'] : [];
+  let app = null;
+  let pid = null;
+  try {
+    app = await _electron.launch({
+      executablePath: exe,
+      args,
+      cwd: path.dirname(exe),
+      env,
+      timeout: 120_000,
+    });
+    pid = app.process().pid;
+    const page = await app.firstWindow({ timeout: 90_000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 60_000 });
+    await page.locator('#view-welcome, #view-shell').first().waitFor({ state: 'attached', timeout: 30_000 });
+    let closed = false;
+    await Promise.race([
+      app.close().then(() => { closed = true; }),
+      sleep(15_000),
+    ]);
+    if (!closed || isAlive(pid)) {
+      killTree(pid);
+      throw new Error('packaged app did not close cleanly within 15 seconds');
+    }
+    app = null;
     const secrets = path.join(userData, 'secrets.v2.json');
     const modelCfg = path.join(userData, 'model-config.json');
-    if (fs.existsSync(localState)) {
-      if (fs.existsSync(secrets) || fs.existsSync(modelCfg)) {
-        try {
-          process.kill(child.pid);
-        } catch {
-          /* ignore */
-        }
-        fail('unexpected_model_secrets', { userData });
-      }
-      console.log(
-        JSON.stringify({
-          ok: true,
-          zip: path.relative(root, zip),
-          unpack,
-          exe,
-          userData,
-          pid: child.pid,
-        }),
-      );
-      return;
+    if (fs.existsSync(secrets) || fs.existsSync(modelCfg)) {
+      fail('unexpected_model_secrets', { userData });
     }
-    if (Date.now() > deadline) {
-      try {
-        process.kill(child.pid);
-      } catch {
-        /* ignore */
-      }
-      fail('window_did_not_start', { userData, unpack });
+    removeOwnedTempDir(userData, 'dmv2-trial-ud-');
+    removeOwnedTempDir(unpack, 'dmv2-trial-unpack-');
+    console.log(JSON.stringify({
+      ok: true,
+      zip: path.relative(root, zip),
+      exe: path.basename(exe),
+      pid,
+      userDataRemoved: !fs.existsSync(userData),
+      unpackRemoved: !fs.existsSync(unpack),
+      constrainedWindows,
+    }));
+  } catch (error) {
+    if (app) {
+      await Promise.race([app.close().catch(() => undefined), sleep(5_000)]);
     }
-    setTimeout(wait, 500);
-  };
-  wait();
+    killTree(pid);
+    fail('packaged_window_smoke_failed', {
+      error: String(error && error.stack ? error.stack : error),
+      userData,
+      unpack,
+    });
+  }
 }
 
-main();
+void main();

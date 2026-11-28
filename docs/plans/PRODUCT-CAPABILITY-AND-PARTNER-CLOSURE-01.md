@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_4_DEVELOPER_EXIT_GATE_PASS_OWNER_PENDING`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / SLICE_5_DEVELOPER_EXIT_GATE_PASS / OWNER_CONTINUOUS_ACCEPTANCE_PENDING`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -75,7 +75,7 @@
 | Now-2 | Slice 2：Doing 领先能力集成与基准 | In Progress（2A 开发收口，Owner 验收待定） | 2A–2D 各 1–2 周 | 成熟 Office/Coding/Connector 能力 |
 | Next-1 | Slice 3：数字之我右侧身份、协作与自动化投影 | Not Started | 1–2 周小批次 | Slice 2 至少两条真实执行主链 |
 | Next-2 | Slice 4：机构伙伴沙箱与合作演示 | Not Started | 2–3 个小批次 | Slice 3、现有 Institution Distribution |
-| Later | Slice 5：统一产品验收、签名试用包与伙伴材料 | Not Started | 1–2 周 | Slice 1–4 全部门通过 |
+| Later | Slice 5：统一产品验收、签名试用包与伙伴材料 | Developer Exit Pass / Owner Pending | 1–2 周 | 一次 Owner 连续体验；签名与公开发布另行授权 |
 
 \* 仅为单一 AI 辅助工程施工线的初估；不包含第三方商务、合规审查和真实机构排期。
 
@@ -385,6 +385,14 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 - Owner 在正式安装包完成一次连续体验验收；
 - 只有通过的能力进入产品说明，未达到 95% 的能力族明确标注 Beta/有限；
 - 签名、push、公开发布、生产部署和真实机构试点另行授权。
+
+### Slice 5 开发退出检查点（2026-11-28）
+
+八个能力族统一机械门已通过；正式 Electron 生命周期、Discover、Office、本地文件、协作、自动化与机构投影门分别作为顶层命令通过。能力说明只把授权本地文件列为“可用”；Discover、Office、Coding、协作列为 Beta；第三方系统和自动化列为有限预览；机构能力列为伙伴沙箱。
+
+正式本地候选 `v2-tujimi-20261128T091240Z-c37450ea` 已生成，setup/ZIP/已安装 exe 的 SHA-256 已固定，敏感扫描为 0。ZIP 隔离首窗烟测通过；同一 NSIS 候选完成升级、再次升级/修复、卸载、Owner 数据保留、最终干净安装和安装后隔离启动，桌面与开始菜单快捷方式存在。setup 与已安装 exe 均为 `NotSigned`；没有购买证书、自签名、push、公开发布或部署。
+
+当前状态为 `SLICE_5_DEVELOPER_EXIT_GATE_PASS / OWNER_CONTINUOUS_ACCEPTANCE_PENDING`。候选已安装在本机，只安排一次 Owner 连续体验，不让 Owner 参与工程调试。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md)。
 
 ## 10. 风险、依赖与停止条件
 

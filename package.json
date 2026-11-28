@@ -24,6 +24,7 @@
     "identity:oidc:external:verify": "node institution/identity-sandbox/duende-demo/run-verify.cjs",
     "identity:oidc:auth0:verify": "node institution/identity-sandbox/auth0/run-verify.cjs",
     "smoke:packaged": "node scripts/run-packaged-trial-smoke.cjs",
+    "test:windows-installer-lifecycle": "node scripts/windows-installer-lifecycle.cjs",
     "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
     "benchmark:office": "npm run build && node scripts/run-office-benchmark.cjs",
     "benchmark:coding:preflight": "node scripts/preflight-slice-2c-coding-benchmark.cjs",

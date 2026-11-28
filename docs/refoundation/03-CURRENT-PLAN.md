@@ -1,7 +1,7 @@
 # 03 — CURRENT PLAN
 
 **状态：** `current_authority / only_execution_plan`
-**日期：** 2026-11-24
+**日期：** 2026-11-28
 **性质：** 当前唯一执行计划。旧 roadmap、execution index、context 文首指针、01A baseline 附录中的「下一步」均不得再当 current plan。
 
 开始任何实现前读 AGENTS.md 所列四份文件。本文件只回答：现在做什么、按什么顺序、什么不准做、还有哪些未决冲突。
@@ -12,11 +12,11 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `INSTITUTIONAL_SLICES_1A_TO_6_MERGED_LOCAL_MAIN / OWNER_PRODUCT_TRIAL_REVEALED_GAPS / NEXT_PLAN_REVISED / OWNER_DIRECTION_CONFIRMED / SLICE_3_DEVELOPER_EXIT_PASS_OWNER_PENDING / SLICE_4_DEVELOPER_EXIT_PASS_OWNER_PENDING`
+**状态：** `OWNER_DIRECTION_CONFIRMED / SLICES_1_TO_4_DEVELOPER_CLOSED / SLICE_5_DEVELOPER_EXIT_PASS / OWNER_CONTINUOUS_ACCEPTANCE_PENDING`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
-**本地主干基线：** `348226a`。`INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6 已从功能分支快进合并到本地 `main`；构建通过，身份/委托 11/11、Slice 6 主链 3/3、A2A 4/4 聚焦回归通过。尚未 push、打包、发布或部署。
+**本地产品候选：** `c37450e`。Slice 1–4 开发成果已进入本地 `main`；Slice 5 统一机械门、正式 Electron 门和 Windows 安装生命周期门通过。正式候选已在本机安装，但仍未签名、push、公开发布或生产部署。
 
 ### 2026-11-24 Owner 产品裁决
 
@@ -32,6 +32,14 @@
 3. Slice 3：小批次扩展“数字之我”右侧，先身份与授权摘要，再接真实协作关系，最后接已经成立的自动化管理；不建立新一级入口；
 4. Slice 4：机构伙伴沙箱、演示控制台、接口/安全/试点资料；
 5. Slice 5：统一产品基准、Electron 自动化修复、干净机安装与 Owner 验收。
+
+### Slice 5 开发退出检查点（2026-11-28）
+
+八个能力族统一机械门已通过，并按真实边界标注为可用、Beta、有限预览或伙伴沙箱；Electron 正式入口改为独立顶层门，启动、首窗握手、正常关闭和隔离数据清理已通过，Discover、Office、本地文件、协作、自动化与机构投影正式界面门通过。
+
+本地候选 `v2-tujimi-20261128T091240Z-c37450ea` 已完成敏感扫描、ZIP 正式入口烟测、已有安装升级、同身份再次升级/修复、卸载数据保留、最终干净安装、快捷方式与安装后隔离启动。Owner 数据 1,856 个保留文件、71,707,617 bytes 的摘要全程一致。setup 与已安装 exe 均为 `NotSigned`，签名、push、公开发布、生产部署和真实机构试点仍需单独授权。
+
+当前唯一剩余门是 Owner 在已安装正式候选上完成一次连续体验；开发者不再请 Owner 参与工程调试。详见 [`../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md)。
 
 实施保持小步快跑：不大拆大建，不迁移已成立的 Talk/Digital Self/Capability/Relay/A2A/Identity/Institution Distribution；每批只做一条可感知主链，优先现有功能优化、欠账落地和必要功能接入，原则上可独立构建、回归和回退。
 
