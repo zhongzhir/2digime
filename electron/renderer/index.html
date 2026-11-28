@@ -585,6 +585,21 @@
               <p id="ds-institution-state" class="muted tiny">正在读取身份认证状态…</p>
               <p id="ds-identity-detail" class="muted tiny">本机主体和真实身份认证是两件事。</p>
             </section>
+            <section id="ds-institution-card" class="ds-capability-card" aria-labelledby="ds-institution-title">
+              <p class="ds-capability-kicker">机构连接</p>
+              <h3 id="ds-institution-title">机构服务</h3>
+              <p id="ds-institution-account" class="ds-capability-value">正在读取…</p>
+              <p id="ds-institution-verification" class="ds-capability-state"></p>
+              <dl id="ds-institution-details" class="ds-institution-details" hidden>
+                <div><dt>权益</dt><dd id="ds-institution-entitlement"></dd></div>
+                <div><dt>可用服务</dt><dd id="ds-institution-services"></dd></div>
+                <div><dt>授权范围</dt><dd id="ds-institution-scope"></dd></div>
+                <div><dt>有效期</dt><dd id="ds-institution-validity"></dd></div>
+              </dl>
+              <p id="ds-institution-metering" class="muted tiny"></p>
+              <p id="ds-institution-privacy" class="muted tiny"></p>
+              <button type="button" id="btn-ds-disconnect-institution" class="ghost ds-capability-manage" hidden>撤销机构连接</button>
+            </section>
             <section class="ds-capability-card" aria-labelledby="ds-authorization-title">
               <p class="ds-capability-kicker">授权</p>
               <h3 id="ds-authorization-title">当前允许范围</h3>

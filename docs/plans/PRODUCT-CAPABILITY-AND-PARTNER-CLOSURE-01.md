@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_1B_ELECTRON_GATE_PASSED`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / IMPLEMENTATION_IN_PROGRESS / SLICE_4A_DEVELOPER_VALIDATED`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -338,6 +338,12 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 - Owner 能在不理解协议术语的情况下发起、停止和撤销。
 
 ## 8. Slice 4 — 机构伙伴就绪
+
+### Slice 4A 开发检查点（2026-11-28）
+
+“数字之我”右侧已补齐个人客户端机构投影：从既有 Institution Backend 的 Organization、InstitutionUser 与 Entitlement 派生已连接机构、沙箱验证级别、权益、可用服务、授权范围、有效期和最小计量边界；明确机构不能读取 Digital Self、私人 Talk 正文、本地文件和长期记忆。沙箱账号明确标注“非真实身份认证”，机构服务仍进入同一 Talk，不建立机构专用聊天内核。
+
+用户可从同一页面撤销机构连接；操作复用既有 `disconnectInstitution`，只清除本机机构模式与受限凭据，不删除机构侧用户映射或权益。TypeScript 构建通过；摘要/隐私边界专项 2/2、正式 Electron 合成机构连接与撤销 1/1、Slice 3A 正式 Electron 回归 1/1、语法与 diff 检查通过。当前状态为 `SLICE_4A_PERSONAL_INSTITUTION_PROJECTION_DEVELOPER_VALIDATED / PARTNER_SANDBOX_PENDING / OWNER_ACCEPTANCE_PENDING`。下一小批只扩展既有 Institution Backend 为可演示伙伴沙箱控制台，不另建机构事实源，不进入真实银行/电信数据或生产部署。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-4A-PERSONAL-INSTITUTION-PROJECTION-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-4A-PERSONAL-INSTITUTION-PROJECTION-01.md)。
 
 ### 个人客户端投影
 

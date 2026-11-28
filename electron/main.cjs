@@ -1090,13 +1090,27 @@ function registerIpc() {
     const { readMode } = require("./institution-adapter.cjs");
     const mode = readMode(app.getPath("userData"));
     const boot = lastBootInfo || {};
+    let overview = null;
+    let overviewAvailable = false;
+    if (mode.enabled && mode.backendBaseUrl && mode.institutionUserId) {
+      try {
+        const { createInstitutionAdapter } = require("./institution-adapter.cjs");
+        overview = await createInstitutionAdapter({ backendBaseUrl: mode.backendBaseUrl }).getOverview({
+          institutionUserId: mode.institutionUserId,
+        });
+        overviewAvailable = true;
+      } catch {
+        // A failed refresh does not mean the locally recorded connection disappeared.
+      }
+    }
     return {
       enabled: Boolean(mode.enabled),
       organizationName: mode.organizationName || null,
       institutionUserId: mode.institutionUserId || null,
-      backendBaseUrl: mode.backendBaseUrl || null,
       modelReady: !!boot.modelReady,
       gatewayHost: boot.institution ? boot.institution.gatewayHost : null,
+      overview,
+      overviewAvailable,
     };
   });
 

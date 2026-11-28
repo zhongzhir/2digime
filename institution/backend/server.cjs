@@ -122,6 +122,47 @@ function entitlementView(user) {
   };
 }
 
+function clientOverview(data, institutionUserId) {
+  const user = data.users[institutionUserId];
+  if (!user) return null;
+  const org = data.organizations[user.organizationId];
+  if (!org) return null;
+  const entitlement = entitlementView(user);
+  const active = org.status === 'active' && user.status === 'active';
+  return {
+    organization: {
+      id: org.id,
+      name: org.name,
+      status: org.status,
+    },
+    account: {
+      institutionUserId: user.institutionUserId,
+      status: user.status,
+      verificationLevel: 'sandbox_account',
+      verificationLabel: '沙箱账号（非真实身份认证）',
+      authenticationMethod: 'mock',
+    },
+    entitlement: {
+      status: active && entitlement.policy ? 'active' : 'inactive',
+      label: entitlement.policy ? entitlement.policy.label : '未配置权益',
+      models: entitlement.policy ? entitlement.policy.models : [],
+      validFrom: user.provisionedAt || org.createdAt || null,
+      validTo: null,
+    },
+    services: entitlement.policy && active
+      ? [{ id: 'institution-ai', name: '机构 AI 对话服务', status: 'available', entry: 'talk' }]
+      : [],
+    authorization: {
+      scopes: entitlement.policy && active ? ['ai:talk'] : [],
+      revocable: true,
+    },
+    metering: {
+      visibleToInstitution: ['账号映射', '权益状态', '模型与用量汇总', '调用时间'],
+      neverShared: ['Digital Self', '私人 Talk 正文', '本地文件', '长期记忆'],
+    },
+  };
+}
+
 function extractSpend(infoJson) {
   const info = infoJson && (infoJson.info || infoJson.key || infoJson);
   if (!info || typeof info !== 'object') {
@@ -290,6 +331,14 @@ async function handle(req, res) {
       });
     }
 
+    if (req.method === 'GET' && pathname === '/v0/client/overview') {
+      const institutionUserId = String(url.searchParams.get('institutionUserId') || '').trim();
+      if (!institutionUserId) return send(res, 400, { error: 'institutionUserId_required' });
+      const overview = clientOverview(store.read(), institutionUserId);
+      if (!overview) return send(res, 404, { error: 'user_not_found' });
+      return send(res, 200, { overview });
+    }
+
     if (req.method === 'GET' && pathname === '/v0/usage/summary') {
       const institutionUserId = String(url.searchParams.get('institutionUserId') || '').trim();
       const data = store.read();
@@ -350,6 +399,7 @@ module.exports = {
   server,
   ensureDemoSeed,
   ENTITLEMENT_GROUPS,
+  clientOverview,
   store,
   litellm,
 };

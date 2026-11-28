@@ -1035,6 +1035,28 @@ select {
   font-size: var(--font-sm);
 }
 
+.ds-institution-details {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.ds-institution-details > div {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: 8px;
+}
+
+.ds-institution-details dt {
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.ds-institution-details dd {
+  margin: 0;
+  font-size: var(--font-sm);
+}
+
 .ds-capability-manage {
   justify-self: start;
 }

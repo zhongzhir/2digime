@@ -50,6 +50,54 @@
     if (el) el.textContent = text || '';
   }
 
+  function formatInstitutionValidity(value) {
+    if (!value) return '长期有效，直至机构或你撤销';
+    const time = new Date(value);
+    if (Number.isNaN(time.getTime())) return String(value);
+    return `${time.toLocaleDateString('zh-CN')} 到期`;
+  }
+
+  function renderInstitution(info) {
+    const details = $('ds-institution-details');
+    const disconnect = $('btn-ds-disconnect-institution');
+    if (!info || !info.enabled || !info.institutionUserId) {
+      setText('ds-institution-account', '尚未连接机构服务');
+      setText('ds-institution-verification', '连接机构账号与真实身份认证是两件事。');
+      setText('ds-institution-metering', '连接后可在这里查看权益、服务、授权范围和有效期。');
+      setText('ds-institution-privacy', '机构不能读取你的 Digital Self、私人对话、本地文件或长期记忆。');
+      if (details) details.hidden = true;
+      if (disconnect) disconnect.hidden = true;
+      return;
+    }
+    const overview = info.overview;
+    setText('ds-institution-account', overview && overview.organization
+      ? overview.organization.name
+      : info.organizationName || '已连接机构服务');
+    if (!info.overviewAvailable || !overview) {
+      setText('ds-institution-verification', '机构连接仍保留；本次未能刷新权益详情。');
+      setText('ds-institution-metering', '读取失败不表示权益已失效，请稍后重试。');
+      setText('ds-institution-privacy', '机构不能读取你的 Digital Self、私人对话、本地文件或长期记忆。');
+      if (details) details.hidden = true;
+      if (disconnect) disconnect.hidden = false;
+      return;
+    }
+    const entitlement = overview.entitlement || {};
+    const services = Array.isArray(overview.services) ? overview.services : [];
+    const scopes = overview.authorization && Array.isArray(overview.authorization.scopes)
+      ? overview.authorization.scopes
+      : [];
+    const metering = overview.metering || {};
+    setText('ds-institution-verification', overview.account.verificationLabel || '机构账号已验证');
+    setText('ds-institution-entitlement', `${entitlement.label || '未配置权益'} · ${entitlement.status === 'active' ? '可用' : '不可用'}`);
+    setText('ds-institution-services', services.length ? services.map((item) => item.name).join('、') : '暂无可用服务');
+    setText('ds-institution-scope', scopes.includes('ai:talk') ? '可在同一对话使用机构 AI 服务' : '当前未授权服务调用');
+    setText('ds-institution-validity', formatInstitutionValidity(entitlement.validTo));
+    setText('ds-institution-metering', `机构侧仅能看到：${(metering.visibleToInstitution || []).join('、') || '必要账号与用量信息'}。`);
+    setText('ds-institution-privacy', `机构不能读取：${(metering.neverShared || []).join('、') || 'Digital Self、私人对话、本地文件和长期记忆'}。`);
+    if (details) details.hidden = false;
+    if (disconnect) disconnect.hidden = false;
+  }
+
   function collaborationLabel(item) {
     const role = item && item.role === 'responder' ? 'responder' : 'initiator';
     const status = item ? item.status : '';
@@ -376,6 +424,7 @@
 
     if (institution.status === 'fulfilled' && institution.value) {
       const info = institution.value;
+      renderInstitution(info);
       if (info.enabled && info.institutionUserId) {
         setText('ds-institution-state', `机构账号：已连接 ${info.organizationName || '机构服务'}`);
         setText('ds-identity-detail', '机构账号连接不等于真实身份认证；当前仍只确认本机主体归属。');
@@ -384,6 +433,9 @@
         setText('ds-identity-detail', '当前只确认本机主体归属；后续可在安全认证能力具备后连接真实身份。');
       }
     } else {
+      setText('ds-institution-account', '机构连接状态暂时无法读取');
+      setText('ds-institution-verification', '读取失败不表示连接已断开。');
+      setText('ds-institution-privacy', '机构不能读取你的 Digital Self、私人对话、本地文件或长期记忆。');
       setText('ds-institution-state', '身份认证状态暂时无法读取');
       setText('ds-identity-detail', '读取失败不表示未认证，请稍后重试。');
       setProjectionNotice('部分身份或授权信息暂时无法读取，请稍后重试。');
@@ -695,6 +747,7 @@
     const openSettings = $('btn-ds-open-settings');
     const startCollaboration = $('btn-ds-start-collaboration');
     const startAutomation = $('btn-ds-start-automation');
+    const disconnectInstitution = $('btn-ds-disconnect-institution');
     if (tellBtn) {
       tellBtn.addEventListener('click', () => showTellForm(true));
     }
@@ -772,6 +825,21 @@
     }
     if (startAutomation) {
       startAutomation.addEventListener('click', openTalkForAutomation);
+    }
+    if (disconnectInstitution) {
+      disconnectInstitution.addEventListener('click', async () => {
+        if (!window.confirm('撤销后将不能继续使用当前机构权益。确认撤销机构连接吗？')) return;
+        disconnectInstitution.disabled = true;
+        try {
+          await api().disconnectInstitution();
+          await refreshCapabilityProjection();
+          setProjectionNotice('机构连接已撤销。');
+        } catch {
+          setProjectionNotice('没能撤销机构连接，请稍后重试。');
+        } finally {
+          disconnectInstitution.disabled = false;
+        }
+      });
     }
     if (page) {
       page.addEventListener('click', async (evt) => {

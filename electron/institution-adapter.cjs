@@ -141,6 +141,21 @@ function createInstitutionAdapter(opts) {
       };
     },
 
+    async getOverview({ institutionUserId }) {
+      const id = String(institutionUserId || '').trim();
+      if (!id) throw new Error('institutionUserId required');
+      const r = await httpJson(
+        'GET',
+        `${backendBaseUrl}/v0/client/overview?institutionUserId=${encodeURIComponent(id)}`,
+      );
+      if (!r.ok || !r.json || !r.json.overview) {
+        const err = new Error(`机构服务摘要读取失败（${r.status}）`);
+        err.status = r.status;
+        throw err;
+      }
+      return r.json.overview;
+    },
+
     /**
      * Apply exchanged session into existing credential ops (SecretStore + model-config).
      * @param {*} saveCredential from bootstrap-secrets createCredentialOps
