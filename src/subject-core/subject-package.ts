@@ -14,6 +14,14 @@ export interface SubjectPackage {
 export interface SubjectIdentity {
   displayName: string;
   description?: string;
+  /** Owner 设置、用于未来社交与协作名片的本机用户名；联网唯一性需由未来服务确认。 */
+  username?: string;
+  bio?: string;
+  /** 包内相对路径；头像随 SubjectPackage 迁移。 */
+  avatarRef?: string;
+  /** Owner 主动登记的联系方式。未接认证方前只表示已登记，不表示已验证。 */
+  email?: string;
+  phone?: string;
 }
 
 /** 包内固定分区布局。 */

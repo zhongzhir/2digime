@@ -119,6 +119,20 @@
     return ageMs > 30 * 24 * 60 * 60 * 1000 ? '较早内容' : '';
   }
 
+  function orderPersonalCards(cards) {
+    return (cards || [])
+      .map((card, index) => ({ card, index, published: Date.parse(String(card.publishedAt || '')) }))
+      .sort((a, b) => {
+        const aDated = Number.isFinite(a.published);
+        const bDated = Number.isFinite(b.published);
+        if (aDated && bDated) return b.published - a.published || a.index - b.index;
+        if (aDated) return -1;
+        if (bDated) return 1;
+        return a.index - b.index;
+      })
+      .map((row) => row.card);
+  }
+
   function typeLabel(card) {
     const map = { article: '文章', image: '图片', audio: '音频', video: '视频' };
     return map[card.contentType] || (!card.mediaUrl && !card.embedUrl && card.url ? '文章' : '');
@@ -226,6 +240,10 @@
   function openCard(card) {
     if (card.url) window.open(card.url, '_blank', 'noopener,noreferrer');
     if (card.itemId) void act('open', { itemId: card.itemId }, { skipRender: true });
+  }
+
+  function isCardControl(target) {
+    return !!(target && target.closest && target.closest('button, a, input, textarea, select, summary, details, audio, video'));
   }
 
   function stashLater(card) {
@@ -338,6 +356,20 @@
         li.setAttribute('data-published-day', published.getFullYear() + '-' + month + '-' + day);
       }
     }
+    if (card.url) {
+      li.classList.add('content-discover-card--openable');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'link');
+      li.setAttribute('aria-label', '打开：' + String(card.title || '内容'));
+      li.addEventListener('click', (event) => {
+        if (!isCardControl(event.target)) openCard(card);
+      });
+      li.addEventListener('keydown', (event) => {
+        if (event.target !== li || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        openCard(card);
+      });
+    }
     li.setAttribute(
       'data-card-sig',
       [card.itemId || '', type, card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|'),
@@ -449,32 +481,33 @@
       const playBtn = btn(idle, () => togglePlayer(card, type, playHost, playBtn, idle), 'primary');
       actions.appendChild(playBtn);
     }
-    if (card.url) actions.appendChild(btn(consumeLabel(card), () => openCard(card), playable ? 'ghost' : 'primary'));
+    const more = document.createElement('details');
+    more.className = 'content-discover-more';
+    const summary = document.createElement('summary');
+    summary.textContent = '…';
+    summary.setAttribute('aria-label', '更多操作');
+    more.appendChild(summary);
+    if (card.url) more.appendChild(btn(consumeLabel(card), () => openCard(card)));
     const basis = card.basisSource;
     if (basis && basis.url && basis.url !== card.url) {
-      actions.appendChild(btn('看推荐依据', () => window.open(basis.url, '_blank', 'noopener,noreferrer')));
+      more.appendChild(btn('看推荐依据', () => window.open(basis.url, '_blank', 'noopener,noreferrer')));
     }
     if (!opts || !opts.hideLater) {
-      actions.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));
+      more.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));
     }
-    actions.appendChild(btn('不喜欢', () => void act('reduce', { itemId: card.itemId })));
-    actions.appendChild(btn('多推荐', () => void act('boost', { itemId: card.itemId })));
-    actions.appendChild(btn('问兔机米', () => askTalk(card)));
-    actions.appendChild(btn('选择 / 取消比较', () => {
+    more.appendChild(btn('不喜欢', () => void act('reduce', { itemId: card.itemId })));
+    more.appendChild(btn('多推荐', () => void act('boost', { itemId: card.itemId })));
+    more.appendChild(btn('问兔机米', () => askTalk(card)));
+    more.appendChild(btn('选择 / 取消比较', () => {
       if (selectedForTalk.has(card.itemId)) selectedForTalk.delete(card.itemId);
       else selectedForTalk.set(card.itemId, card);
       renderSelection();
     }));
     if (card.publisherSubjectId) {
-      const more = document.createElement('details');
-      more.className = 'content-discover-more';
-      const summary = document.createElement('summary');
-      summary.textContent = '更多';
-      more.appendChild(summary);
       more.appendChild(btn('关注来源', () => void act('follow', { itemId: card.itemId })));
       more.appendChild(btn('不再看这个来源', () => void act('block', { itemId: card.itemId })));
-      actions.appendChild(more);
     }
+    actions.appendChild(more);
     body.appendChild(actions);
     li.appendChild(body);
     return li;
@@ -845,7 +878,9 @@
       lead.textContent =
         (view && view.lead) || '看文章、图片、音频和视频。';
     }
-    lastCards = (view && view.cards) || [];
+    lastCards = view && view.feedMode === 'intent'
+      ? (view.cards || [])
+      : orderPersonalCards((view && view.cards) || []);
     lastRelated = (view && view.relatedCards) || [];
     lastUnjudged = (view && view.unjudgedCards) || [];
     lastView = view;
@@ -1067,6 +1102,15 @@
     } finally {
       clearTimeout(deadline);
     }
+  }
+
+  async function enter() {
+    if (lastView) {
+      renderView(lastView);
+      showSection(activeSection);
+      return;
+    }
+    await refresh();
   }
 
   const MORE_READY_POLL_MS = 800;
@@ -1410,6 +1454,7 @@
   }
 
   window.ContentDiscoverPage = {
+    enter: enter,
     refresh: refresh,
     seek: seek,
     showSection: showSection,

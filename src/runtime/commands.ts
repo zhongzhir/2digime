@@ -41,6 +41,11 @@ export interface CommandMap {
     output: {
       subjectId: string;
       displayName: string;
+      username?: string;
+      bio?: string;
+      email?: string;
+      phone?: string;
+      avatarDataUrl?: string;
       confirmedExperienceCount: number;
       /** 待确认的要点(用户面用「还不确定」等用语,勿展示内部 type)。 */
       candidateExperiences: Array<{
@@ -1050,6 +1055,7 @@ export interface CommandMap {
         | 'correct'
         | 'delete'
         | 'ignore'
+        | 'identityUpdate'
         | 'automationCreate'
         | 'automationList'
         | 'automationPause'
@@ -1058,6 +1064,12 @@ export interface CommandMap {
         | 'automationTrigger'
         | 'automationConfirm';
       text?: string;
+      displayName?: string;
+      username?: string;
+      bio?: string;
+      email?: string;
+      phone?: string;
+      avatarFilePath?: string;
       understandingId?: string;
       filePath?: string;
       automationId?: string;
@@ -1081,6 +1093,14 @@ export interface CommandMap {
       automation?: import('../automation/automation-service').AutomationDefinition;
       receipt?: import('../automation/automation-service').AutomationTriggerReceipt;
       duplicate?: boolean;
+      identity?: {
+        displayName: string;
+        username?: string;
+        bio?: string;
+        email?: string;
+        phone?: string;
+        avatarDataUrl?: string;
+      };
     };
   };
   'talk': {

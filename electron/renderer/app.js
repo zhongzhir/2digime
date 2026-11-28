@@ -722,8 +722,12 @@
       }
     }
     if (nav === "discover") {
-      if (!(opts && opts.skipRefresh) && window.ContentDiscoverPage && typeof window.ContentDiscoverPage.refresh === "function") {
-        await window.ContentDiscoverPage.refresh();
+      if (!(opts && opts.skipRefresh) && window.ContentDiscoverPage) {
+        if (typeof window.ContentDiscoverPage.enter === "function") {
+          await window.ContentDiscoverPage.enter();
+        } else if (typeof window.ContentDiscoverPage.refresh === "function") {
+          await window.ContentDiscoverPage.refresh();
+        }
       }
     }
     if (nav === "subject") {

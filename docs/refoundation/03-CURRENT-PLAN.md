@@ -12,7 +12,7 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / SLICES_1_TO_4_DEVELOPER_CLOSED / SLICE_5_DEVELOPER_EXIT_PASS / OWNER_CONTINUOUS_ACCEPTANCE_PENDING`
+**状态：** `OWNER_DIRECTION_CONFIRMED / SLICES_1_TO_4_DEVELOPER_CLOSED / SLICE_5_OWNER_FEEDBACK_CORRECTION_DEVELOPER_PASS / UPDATED_CANDIDATE_PENDING`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
@@ -40,6 +40,14 @@
 本地候选 `v2-tujimi-20261128T091240Z-c37450ea` 已完成敏感扫描、ZIP 正式入口烟测、已有安装升级、同身份再次升级/修复、卸载数据保留、最终干净安装、快捷方式与安装后隔离启动。Owner 数据 1,856 个保留文件、71,707,617 bytes 的摘要全程一致。setup 与已安装 exe 均为 `NotSigned`，签名、push、公开发布、生产部署和真实机构试点仍需单独授权。
 
 当前唯一剩余门是 Owner 在已安装正式候选上完成一次连续体验；开发者不再请 Owner 参与工程调试。详见 [`../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md)。
+
+### Slice 5 Owner 反馈修正检查点（2026-11-28）
+
+原候选的 Owner 连续体验未通过。直接观看入口不足作为当前公开内容供给边界暂时接受；必须修正的是搜索现场返回后丢失、推荐未按可信日期优先、页面与卡片动作过密，以及个人身份只能看摘要不能实际设置。
+
+修正已经通过开发门：发现页再次进入不再无条件刷新覆盖搜索结果；默认推荐有可信发布日期时按最新优先；卡片主动作收敛为点击卡片，次要动作折叠到“…”；数字之我右侧新增复用 Subject identity 权威的个人名片设置，包含展示名、用户名、简介、头像、电话和邮箱。所有本机登记均诚实标注验证边界；没有真实 KYC、支付或联网用户名唯一性时不得显示为已认证。没有新增 Store、搜索供应商、站点规则、一级入口或第二 runtime。
+
+构建、相关正式 Electron 6/6 和 Electron 生命周期预检通过。全库门只剩一个历史旧 Work Runtime 重启测试与当前“不自动挂载旧 Work Runtime”权威设计冲突；按 Yellow 规则不恢复旧链。下一步只生成并安装包含本轮修正的新本地候选，交 Owner 一次复验；不 push、不公开发布、不部署。
 
 实施保持小步快跑：不大拆大建，不迁移已成立的 Talk/Digital Self/Capability/Relay/A2A/Identity/Institution Distribution；每批只做一条可感知主链，优先现有功能优化、欠账落地和必要功能接入，原则上可独立构建、回归和回退。
 

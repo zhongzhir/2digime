@@ -16,6 +16,8 @@
   const OVERVIEW_CURRENT_LIMIT = 3;
   let ledgerOpen = false;
   let lastGroups = null;
+  let lastIdentity = null;
+  let identityAvatarFilePath = '';
 
   function api() {
     return window.digitalMe;
@@ -48,6 +50,58 @@
   function setText(id, text) {
     const el = $(id);
     if (el) el.textContent = text || '';
+  }
+
+  function renderIdentity(info) {
+    if (!info) return;
+    lastIdentity = info;
+    setText('ds-identity-name', info.displayName || '我的数字之我');
+    setText('ds-identity-username', info.username ? '@' + info.username + ' · 本机用户名' : '尚未设置用户名');
+    setText('ds-identity-bio', info.bio || '尚未设置个人简介。');
+    setText('ds-identity-phone', info.phone ? info.phone + ' · 未验证' : '未登记');
+    setText('ds-identity-email', info.email ? info.email + ' · 未验证' : '未登记');
+    const avatar = $('ds-identity-avatar');
+    const fallback = $('ds-identity-avatar-fallback');
+    if (avatar && info.avatarDataUrl) {
+      avatar.src = info.avatarDataUrl;
+      avatar.hidden = false;
+      if (fallback) fallback.hidden = true;
+    } else {
+      if (avatar) {
+        avatar.removeAttribute('src');
+        avatar.hidden = true;
+      }
+      if (fallback) {
+        fallback.textContent = String(info.displayName || '我').trim().slice(0, 1) || '我';
+        fallback.hidden = false;
+      }
+    }
+  }
+
+  function showIdentityForm(show) {
+    const form = $('ds-identity-form');
+    if (!form) return;
+    form.hidden = !show;
+    if (!show) {
+      identityAvatarFilePath = '';
+      setText('ds-identity-avatar-choice', '');
+      return;
+    }
+    const info = lastIdentity || {};
+    const values = {
+      'ds-identity-display-input': info.displayName || '',
+      'ds-identity-username-input': info.username || '',
+      'ds-identity-bio-input': info.bio || '',
+      'ds-identity-phone-input': info.phone || '',
+      'ds-identity-email-input': info.email || '',
+    };
+    for (const [id, value] of Object.entries(values)) {
+      const input = $(id);
+      if (input) input.value = value;
+    }
+    form.removeAttribute('hidden');
+    const first = $('ds-identity-display-input');
+    if (first) first.focus();
   }
 
   function formatInstitutionValidity(value) {
@@ -414,7 +468,7 @@
     const [identity, authorization, institution, collaboration, automation] = await Promise.allSettled(requests);
 
     if (identity.status === 'fulfilled' && identity.value) {
-      setText('ds-identity-name', identity.value.displayName || '我的数字之我');
+      renderIdentity(identity.value);
       setText('ds-identity-state', '本机主体已建立');
     } else {
       setText('ds-identity-name', '暂时无法读取');
@@ -426,11 +480,11 @@
       const info = institution.value;
       renderInstitution(info);
       if (info.enabled && info.institutionUserId) {
-        setText('ds-institution-state', `机构账号：已连接 ${info.organizationName || '机构服务'}`);
-        setText('ds-identity-detail', '机构账号连接不等于真实身份认证；当前仍只确认本机主体归属。');
+        setText('ds-institution-state', `已连接 ${info.organizationName || '机构账号'}；实名状态以机构返回为准`);
+        setText('ds-identity-detail', '机构连接不等于实名；认证状态以安全认证服务返回的结果为准。');
       } else {
-        setText('ds-institution-state', '真实身份认证：尚未接入');
-        setText('ds-identity-detail', '当前只确认本机主体归属；后续可在安全认证能力具备后连接真实身份。');
+        setText('ds-institution-state', '尚未认证');
+        setText('ds-identity-detail', '用户名和联系方式当前仅保存在本机；实名、电话和邮箱验证需接入安全认证服务。');
       }
     } else {
       setText('ds-institution-account', '机构连接状态暂时无法读取');
@@ -748,8 +802,51 @@
     const startCollaboration = $('btn-ds-start-collaboration');
     const startAutomation = $('btn-ds-start-automation');
     const disconnectInstitution = $('btn-ds-disconnect-institution');
+    const editIdentity = $('btn-ds-edit-identity');
+    const identityForm = $('ds-identity-form');
+    const cancelIdentity = $('btn-ds-cancel-identity');
+    const pickAvatar = $('btn-ds-pick-avatar');
     if (tellBtn) {
       tellBtn.addEventListener('click', () => showTellForm(true));
+    }
+    if (editIdentity) editIdentity.addEventListener('click', () => showIdentityForm(true));
+    if (cancelIdentity) cancelIdentity.addEventListener('click', () => showIdentityForm(false));
+    if (pickAvatar) {
+      pickAvatar.addEventListener('click', async () => {
+        const client = api();
+        if (!client || !client.dialogs || typeof client.dialogs.pickOpenFiles !== 'function') return;
+        const picked = await client.dialogs.pickOpenFiles();
+        const first = Array.isArray(picked) ? picked[0] : '';
+        if (!first) return;
+        identityAvatarFilePath = String(first);
+        setText('ds-identity-avatar-choice', identityAvatarFilePath.split(/[\\/]/).pop() || '已选择头像');
+      });
+    }
+    if (identityForm) {
+      identityForm.addEventListener('submit', async (evt) => {
+        evt.preventDefault();
+        const value = (id) => String(($(id) && $(id).value) || '').trim();
+        const save = $('btn-ds-save-identity');
+        if (save) save.disabled = true;
+        setProjectionNotice('正在保存个人身份…');
+        try {
+          const result = await invoke('identityUpdate', {
+            displayName: value('ds-identity-display-input'),
+            username: value('ds-identity-username-input'),
+            bio: value('ds-identity-bio-input'),
+            phone: value('ds-identity-phone-input'),
+            email: value('ds-identity-email-input'),
+            ...(identityAvatarFilePath ? { avatarFilePath: identityAvatarFilePath } : {}),
+          });
+          renderIdentity(result && result.identity);
+          showIdentityForm(false);
+          setProjectionNotice('个人身份已保存。联系方式仍为未验证状态。');
+        } catch (err) {
+          setProjectionNotice(err && err.message ? String(err.message) : '个人身份没有保存成功。');
+        } finally {
+          if (save) save.disabled = false;
+        }
+      });
     }
     if (cancel) {
       cancel.addEventListener('click', () => {

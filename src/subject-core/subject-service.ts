@@ -244,6 +244,11 @@ export class SubjectService {
     return {
       subjectId: pkg.id,
       displayName: pkg.identity.displayName,
+      ...(pkg.identity.username ? { username: pkg.identity.username } : {}),
+      ...(pkg.identity.bio ? { bio: pkg.identity.bio } : {}),
+      ...(pkg.identity.email ? { email: pkg.identity.email } : {}),
+      ...(pkg.identity.phone ? { phone: pkg.identity.phone } : {}),
+      ...(await this.identityAvatarDataUrl(pkg)),
       confirmedExperienceCount: derived.confirmed.entries.length,
       candidateExperiences: derived.candidates.entries.map((e) => ({
         eventId: e.eventId,
@@ -266,6 +271,87 @@ export class SubjectService {
       helpfulQuestions: slices.helpfulQuestions,
       materials,
     };
+  }
+
+  async updateIdentity(input: {
+    displayName?: string;
+    username?: string;
+    bio?: string;
+    email?: string;
+    phone?: string;
+    avatarFilePath?: string;
+  }): Promise<{
+    displayName: string;
+    username?: string;
+    bio?: string;
+    email?: string;
+    phone?: string;
+    avatarDataUrl?: string;
+  }> {
+    const pkg = this.requireActive();
+    const displayName = String(input.displayName ?? pkg.identity.displayName).trim();
+    const username = String(input.username ?? pkg.identity.username ?? '').trim();
+    const bio = String(input.bio ?? pkg.identity.bio ?? '').trim();
+    const email = String(input.email ?? pkg.identity.email ?? '').trim();
+    const phone = String(input.phone ?? pkg.identity.phone ?? '').trim();
+    if (!displayName || displayName.length > 40) throw new Error('展示名需要 1 到 40 个字符');
+    if (username && (!/^[A-Za-z0-9_.-]{3,32}$/.test(username) || /^[_.-]|[_.-]$/.test(username))) {
+      throw new Error('用户名需要 3 到 32 位字母、数字、点、下划线或短横线，且不能以符号开头或结尾');
+    }
+    if (bio.length > 160) throw new Error('个人简介不能超过 160 个字符');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('邮箱格式不正确');
+    if (phone && !/^\+?[0-9 ()-]{6,24}$/.test(phone)) throw new Error('电话号码格式不正确');
+
+    let avatarRef = pkg.identity.avatarRef;
+    const source = String(input.avatarFilePath || '').trim();
+    if (source) {
+      const ext = path.extname(source).toLowerCase();
+      if (!['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) throw new Error('头像只支持 PNG、JPG 或 WebP');
+      const stat = await fs.stat(source);
+      if (!stat.isFile() || stat.size > 2 * 1024 * 1024) throw new Error('头像文件需要小于 2 MB');
+      const identityDir = path.join(pkg.rootDir, 'identity');
+      await fs.mkdir(identityDir, { recursive: true });
+      avatarRef = path.posix.join('identity', `avatar${ext === '.jpeg' ? '.jpg' : ext}`);
+      await fs.copyFile(source, path.join(pkg.rootDir, ...avatarRef.split('/')));
+    }
+
+    pkg.identity = {
+      ...pkg.identity,
+      displayName,
+      ...(username ? { username } : {}),
+      ...(bio ? { bio } : {}),
+      ...(email ? { email } : {}),
+      ...(phone ? { phone } : {}),
+      ...(avatarRef ? { avatarRef } : {}),
+    };
+    if (!username) delete pkg.identity.username;
+    if (!bio) delete pkg.identity.bio;
+    if (!email) delete pkg.identity.email;
+    if (!phone) delete pkg.identity.phone;
+    this.active = pkg;
+    await this.writeManifest(pkg);
+    const avatar = await this.identityAvatarDataUrl(pkg);
+    return {
+      displayName,
+      ...(username ? { username } : {}),
+      ...(bio ? { bio } : {}),
+      ...(email ? { email } : {}),
+      ...(phone ? { phone } : {}),
+      ...avatar,
+    };
+  }
+
+  private async identityAvatarDataUrl(pkg: SubjectPackage): Promise<{ avatarDataUrl?: string }> {
+    if (!pkg.identity.avatarRef) return {};
+    try {
+      const ext = path.extname(pkg.identity.avatarRef).toLowerCase();
+      const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      const bytes = await fs.readFile(path.join(pkg.rootDir, ...pkg.identity.avatarRef.split('/')));
+      if (bytes.length > 2 * 1024 * 1024) return {};
+      return { avatarDataUrl: `data:${mime};base64,${bytes.toString('base64')}` };
+    } catch {
+      return {};
+    }
   }
 
   /**

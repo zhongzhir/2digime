@@ -118,6 +118,9 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 /* 同一行卡片等高，动作区贴底；宽屏自动多列，窄屏自然降为单列。 */
 .content-discover-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 16px; align-items: stretch; justify-items: stretch; }
 .content-discover-card { padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); margin: 0; align-self: stretch; width: 100%; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+.content-discover-card--openable { cursor: pointer; transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; }
+.content-discover-card--openable:hover { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); box-shadow: 0 8px 24px rgba(28, 36, 48, 0.08); transform: translateY(-1px); }
+.content-discover-card--openable:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; border-color: var(--accent); }
 .content-discover-cover,
 .content-discover-cover--image,
 .content-discover-card--image .content-discover-cover,
@@ -139,7 +142,8 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .talk-content-context { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--accent-soft); font-size: 13px; }
 .content-discover-actions button { padding: 4px 10px; min-height: 36px; }
 .content-discover-more { margin: 0; }
-.content-discover-more > summary { cursor: pointer; min-height: 36px; padding: 6px 10px; color: var(--muted); font-size: 13px; }
+.content-discover-more > summary { cursor: pointer; min-width: 36px; min-height: 36px; padding: 3px 10px 8px; color: var(--muted); font-size: 20px; line-height: 1; list-style: none; border: 1px solid var(--line); border-radius: 10px; }
+.content-discover-more > summary::-webkit-details-marker { display: none; }
 .content-discover-more[open] { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .content-discover-prefs { margin-top: 0; }
 .content-discover-pref-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }

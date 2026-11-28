@@ -24,18 +24,32 @@ test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { time
     })()`);
 
     const identityName = await page.locator('#ds-identity-name').innerText();
-    const identityState = await page.locator('#ds-identity-state').innerText();
     const institutionState = await page.locator('#ds-institution-state').innerText();
     const authorizationCount = await page.locator('#ds-authorization-count').innerText();
     assert.ok(identityName.trim());
-    assert.equal(identityState, '本机主体已建立');
-    assert.match(institutionState, /真实身份认证：尚未接入|机构账号：已连接/);
+    assert.match(institutionState, /尚未认证|已连接/);
     assert.equal(authorizationCount, '没有文件夹授权');
     assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('A2A'), false);
     assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('workflow'), false);
+    await page.locator('#btn-ds-edit-identity').click();
+    await page.locator('#ds-identity-display-input').fill('张三');
+    await page.locator('#ds-identity-username-input').fill('zhangsan');
+    await page.locator('#ds-identity-bio-input').fill('愿意与可信伙伴协作。');
+    await page.locator('#ds-identity-phone-input').fill('138 0000 0000');
+    await page.locator('#ds-identity-email-input').fill('zhangsan@example.com');
+    await page.locator('#btn-ds-save-identity').click();
+    await page.waitForFunction(`document.getElementById('ds-identity-name')?.textContent === '张三'`);
+    assert.equal((await page.locator('#ds-identity-username').innerText()).includes('@zhangsan'), true);
+    assert.match(await page.locator('#ds-identity-phone').innerText(), /未验证/);
+    assert.match(await page.locator('#ds-identity-email').innerText(), /未验证/);
+    assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('尚未接入'), true);
+    await page.locator('#nav-chat').click();
+    await page.locator('#nav-subject').click();
+    await page.waitForFunction(`document.getElementById('ds-identity-name')?.textContent === '张三'`);
     const selfBox = await page.locator('#digital-self-page').boundingBox();
     const capabilityBox = await page.locator('#ds-capability-panel').boundingBox();
     assert.ok(selfBox && capabilityBox && capabilityBox.x > selfBox.x + selfBox.width);
+    await page.locator('#panel-subject').evaluate((node) => { node.scrollTop = 0; });
     await page.screenshot({
       path: path.join(os.tmpdir(), 'digital-self-slice3a-identity-authorization.png'),
       fullPage: true,

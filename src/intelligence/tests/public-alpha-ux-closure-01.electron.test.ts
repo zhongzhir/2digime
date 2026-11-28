@@ -57,6 +57,9 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
       window.ContentDiscoverPage.renderView({
         headline: '发现',
         lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
+        feedMode: 'intent',
+        feedTitle: '当前搜索',
+        searchQuery: 'fusion progress',
         cards: [{
           itemId: 'web_1',
           title: 'Fusion progress this week',
@@ -73,10 +76,15 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
       state: 'visible',
       timeout: 10_000,
     });
-    assert.equal(
-      await harness.page.locator('.content-discover-actions button', { hasText: '阅读原文' }).count() >= 1,
-      true,
-    );
+    const resultCard = harness.page.locator('.content-discover-card', { hasText: 'Fusion progress this week' });
+    assert.equal(await resultCard.getAttribute('role'), 'link');
+    assert.equal(await resultCard.locator('.content-discover-actions button', { hasText: '阅读原文' }).isVisible(), false);
+    await harness.page.locator('#nav-chat').click();
+    await harness.page.locator('#nav-discover').click();
+    await resultCard.waitFor({ state: 'visible', timeout: 10_000 });
+    assert.equal(await harness.page.locator('#content-discover-query').inputValue(), 'fusion progress');
+    assert.equal((await harness.page.locator('#content-discover-feed-title').innerText()).trim(), '当前搜索');
+    await resultCard.locator('summary[aria-label="更多操作"]').click();
     await harness.page.locator('.content-discover-actions button', { hasText: '稍后看' }).click();
     await harness.page.locator('#content-discover-later').waitFor({ state: 'visible', timeout: 10_000 });
     assert.match(await harness.page.locator('#content-discover-later').innerText(), /Fusion progress this week/);

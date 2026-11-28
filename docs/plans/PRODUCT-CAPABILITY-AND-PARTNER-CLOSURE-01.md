@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / SLICE_5_DEVELOPER_EXIT_GATE_PASS / OWNER_CONTINUOUS_ACCEPTANCE_PENDING`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / SLICE_5_OWNER_FEEDBACK_CORRECTION_DEVELOPER_PASS / UPDATED_CANDIDATE_PENDING`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -393,6 +393,14 @@ Slice 2B 开发门通过，状态转为 `DEVELOPER_GATE_PASS / OWNER_ACCEPTANCE_
 正式本地候选 `v2-tujimi-20261128T091240Z-c37450ea` 已生成，setup/ZIP/已安装 exe 的 SHA-256 已固定，敏感扫描为 0。ZIP 隔离首窗烟测通过；同一 NSIS 候选完成升级、再次升级/修复、卸载、Owner 数据保留、最终干净安装和安装后隔离启动，桌面与开始菜单快捷方式存在。setup 与已安装 exe 均为 `NotSigned`；没有购买证书、自签名、push、公开发布或部署。
 
 当前状态为 `SLICE_5_DEVELOPER_EXIT_GATE_PASS / OWNER_CONTINUOUS_ACCEPTANCE_PENDING`。候选已安装在本机，只安排一次 Owner 连续体验，不让 Owner 参与工程调试。证据见 [`../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md`](../audits/PRODUCT-CAPABILITY-SLICE-5-DEVELOPER-CLOSURE-01.md)。
+
+### Slice 5 Owner 反馈修正检查点（2026-11-28）
+
+Owner 接受“最火的短剧”本轮只能找到热门对象、尚无直接可用观看入口的供给边界，但原候选未通过连续体验：离开“发现”后搜索现场被默认推荐覆盖；默认推荐没有把可信发布日期的新内容优先放在前面；“为你发现”和卡片动作重复、干扰判断；“数字之我”右侧把本机主体、机构连接和认证状态堆成摘要，缺少真正可设置的个人身份。
+
+本轮只做现有功能修正，没有新增搜索供应商、站点特例、一级入口、身份 Store 或支付/KYC 假能力：发现页重新进入时恢复同一搜索现场；默认推荐按可信发布日期优先展示；分区名改为“推荐”，卡片点击直接打开，阅读、稍后看、反馈、比较等次要动作收进“…”；个人身份复用 SubjectPackage 的唯一 identity 权威，可设置展示名、用户名、简介、电话、邮箱和随包迁移的本机头像。电话、邮箱明确标为未验证，用户名不冒充联网唯一账号，实名与支付明确为尚未认证/尚未接入；协作和自动化继续复用既有事实与 Talk 主链。
+
+TypeScript 构建通过；发现现场/卡片/新鲜度、个人身份持久化/头像/输入校验、协作与机构投影聚焦门 6/6；正式 Electron 生命周期预检通过（首窗 2.692 秒、关闭 136 毫秒、隔离 userData 已清理）。全库 `npm test` 仍有一个与本轮无关的旧 `controlled-remote` 重启用例要求打开 Subject 包后自动挂载已退役 Work Runtime；连续复现后按 Yellow 规则停止，不为测试恢复旧运行时。当前状态为 `OWNER_FEEDBACK_CORRECTION_DEVELOPER_PASS / UPDATED_CANDIDATE_PENDING`；尚未重打包、安装、Owner 复验、push、发布或部署。
 
 ## 10. 风险、依赖与停止条件
 

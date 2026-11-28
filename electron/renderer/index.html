@@ -440,7 +440,7 @@
             <button type="button" class="ghost" id="btn-discover-personal" hidden>为你发现</button>
           </form>
           <div class="discover-switcher" role="tablist" aria-label="发现分区">
-            <button type="button" class="ghost discover-switch active" data-discover-section="for-you">为你发现</button>
+            <button type="button" class="ghost discover-switch active" data-discover-section="for-you">推荐</button>
             <button type="button" class="ghost discover-switch" data-discover-section="later">稍后看</button>
             <button type="button" class="ghost discover-switch" data-discover-section="prefs">内容偏好</button>
             <button type="button" class="ghost discover-switch" data-discover-section="sources">内容来源</button>
@@ -574,20 +574,46 @@
           </section>
           <aside id="ds-capability-panel" class="ds-capability-panel" aria-labelledby="ds-capability-title">
             <div class="ds-capability-heading">
-              <h2 id="ds-capability-title">身份、授权与协作</h2>
-              <p>这里是已有身份、授权和协作事实的摘要，不另建一套资料。</p>
+              <h2 id="ds-capability-title">我的身份与协作</h2>
+              <p>设置对外名片，管理认证、授权、协作和自动化。</p>
             </div>
             <section class="ds-capability-card" aria-labelledby="ds-identity-title">
-              <p class="ds-capability-kicker">身份</p>
-              <h3 id="ds-identity-title">本机主体</h3>
-              <p id="ds-identity-name" class="ds-capability-value">正在读取…</p>
-              <p id="ds-identity-state" class="ds-capability-state">正在确认本机主体状态…</p>
-              <p id="ds-institution-state" class="muted tiny">正在读取身份认证状态…</p>
-              <p id="ds-identity-detail" class="muted tiny">本机主体和真实身份认证是两件事。</p>
+              <div class="ds-identity-profile">
+                <div id="ds-identity-avatar-fallback" class="ds-identity-avatar" aria-hidden="true">我</div>
+                <img id="ds-identity-avatar" class="ds-identity-avatar" alt="个人头像" hidden />
+                <div>
+                  <h3 id="ds-identity-title">个人名片</h3>
+                  <p id="ds-identity-name" class="ds-capability-value">正在读取…</p>
+                  <p id="ds-identity-username" class="ds-capability-state">尚未设置用户名</p>
+                </div>
+              </div>
+              <p id="ds-identity-bio" class="muted tiny">尚未设置个人简介。</p>
+              <dl class="ds-identity-details">
+                <div><dt>电话</dt><dd id="ds-identity-phone">未登记</dd></div>
+                <div><dt>邮箱</dt><dd id="ds-identity-email">未登记</dd></div>
+                <div><dt>实名</dt><dd id="ds-institution-state">尚未认证</dd></div>
+                <div><dt>支付</dt><dd>尚未接入</dd></div>
+              </dl>
+              <p id="ds-identity-detail" class="muted tiny">用户名和联系方式当前仅保存在本机；实名、电话和邮箱验证需接入安全认证服务。</p>
+              <button type="button" id="btn-ds-edit-identity" class="ghost ds-capability-manage">设置个人身份</button>
+              <form id="ds-identity-form" class="ds-identity-form" hidden>
+                <label class="field"><span>展示名</span><input id="ds-identity-display-input" maxlength="40" required /></label>
+                <label class="field"><span>用户名</span><input id="ds-identity-username-input" maxlength="32" placeholder="例如 zhangsan" /></label>
+                <label class="field"><span>个人简介</span><textarea id="ds-identity-bio-input" maxlength="160" rows="2" placeholder="让未来的协作对象了解你"></textarea></label>
+                <label class="field"><span>电话</span><input id="ds-identity-phone-input" inputmode="tel" maxlength="24" /></label>
+                <label class="field"><span>邮箱</span><input id="ds-identity-email-input" inputmode="email" maxlength="120" /></label>
+                <div class="row">
+                  <button type="button" id="btn-ds-pick-avatar" class="ghost">选择头像</button>
+                  <span id="ds-identity-avatar-choice" class="muted tiny"></span>
+                </div>
+                <div class="row">
+                  <button type="submit" id="btn-ds-save-identity" class="primary">保存</button>
+                  <button type="button" id="btn-ds-cancel-identity" class="ghost">取消</button>
+                </div>
+              </form>
             </section>
             <section id="ds-institution-card" class="ds-capability-card" aria-labelledby="ds-institution-title">
-              <p class="ds-capability-kicker">机构连接</p>
-              <h3 id="ds-institution-title">机构服务</h3>
+              <h3 id="ds-institution-title">机构与服务</h3>
               <p id="ds-institution-account" class="ds-capability-value">正在读取…</p>
               <p id="ds-institution-verification" class="ds-capability-state"></p>
               <dl id="ds-institution-details" class="ds-institution-details" hidden>
@@ -601,15 +627,13 @@
               <button type="button" id="btn-ds-disconnect-institution" class="ghost ds-capability-manage" hidden>撤销机构连接</button>
             </section>
             <section class="ds-capability-card" aria-labelledby="ds-authorization-title">
-              <p class="ds-capability-kicker">授权</p>
-              <h3 id="ds-authorization-title">当前允许范围</h3>
+              <h3 id="ds-authorization-title">文件授权</h3>
               <p id="ds-authorization-count" class="ds-capability-value">正在读取…</p>
               <p id="ds-authorization-detail" class="muted tiny">授权可随时撤销。</p>
             </section>
-            <button type="button" id="btn-ds-open-settings" class="ghost ds-capability-manage">管理身份与授权</button>
+            <button type="button" id="btn-ds-open-settings" class="ghost ds-capability-manage">管理文件授权与机构连接</button>
             <section class="ds-capability-card" aria-labelledby="ds-collaboration-title">
-              <p class="ds-capability-kicker">协作</p>
-              <h3 id="ds-collaboration-title">我的协作</h3>
+              <h3 id="ds-collaboration-title">协作</h3>
               <p id="ds-collaboration-summary" class="ds-capability-value">正在读取…</p>
               <ul id="ds-collaboration-list" class="ds-collaboration-list" aria-label="最近协作"></ul>
               <p id="ds-collaboration-empty" class="muted tiny" hidden>还没有协作记录。</p>
@@ -617,8 +641,7 @@
               <p class="muted tiny ds-collaboration-help">说清想与谁完成什么，兔机米会回到同一对话继续。</p>
             </section>
             <section class="ds-capability-card" aria-labelledby="ds-automation-title">
-              <p class="ds-capability-kicker">自动化</p>
-              <h3 id="ds-automation-title">我的自动化</h3>
+              <h3 id="ds-automation-title">自动化</h3>
               <p id="ds-automation-summary" class="ds-capability-value">正在读取…</p>
               <ul id="ds-automation-list" class="ds-collaboration-list" aria-label="我的自动化"></ul>
               <p id="ds-automation-empty" class="muted tiny" hidden>还没有自动化设置。</p>

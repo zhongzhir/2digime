@@ -581,6 +581,20 @@ export class DigitalMeRuntime {
   async digitalSelf(
     input: CommandMap['digitalSelf']['input'],
   ): Promise<CommandMap['digitalSelf']['output']> {
+    if (input.action === 'identityUpdate') {
+      const identity = await this.subject.updateIdentity({
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.username !== undefined ? { username: input.username } : {}),
+        ...(input.bio !== undefined ? { bio: input.bio } : {}),
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.avatarFilePath !== undefined ? { avatarFilePath: input.avatarFilePath } : {}),
+      });
+      return {
+        view: (await this.getDigitalSelfService().invoke({ action: 'read' })).view,
+        identity,
+      };
+    }
     const automationActions = new Set([
       'automationCreate',
       'automationList',
