@@ -56,7 +56,7 @@
     if (!info) return;
     lastIdentity = info;
     setText('ds-identity-name', info.displayName || '我的数字之我');
-    setText('ds-identity-username', info.username ? '@' + info.username + ' · 本机用户名' : '尚未设置用户名');
+    setText('ds-identity-username', '兔机米号：尚未开通');
     setText('ds-identity-bio', info.bio || '尚未设置个人简介。');
     setText('ds-identity-phone', info.phone ? info.phone + ' · 未验证' : '未登记');
     setText('ds-identity-email', info.email ? info.email + ' · 未验证' : '未登记');
@@ -90,7 +90,6 @@
     const info = lastIdentity || {};
     const values = {
       'ds-identity-display-input': info.displayName || '',
-      'ds-identity-username-input': info.username || '',
       'ds-identity-bio-input': info.bio || '',
       'ds-identity-phone-input': info.phone || '',
       'ds-identity-email-input': info.email || '',
@@ -484,7 +483,7 @@
         setText('ds-identity-detail', '机构连接不等于实名；认证状态以安全认证服务返回的结果为准。');
       } else {
         setText('ds-institution-state', '尚未认证');
-        setText('ds-identity-detail', '用户名和联系方式当前仅保存在本机；实名、电话和邮箱验证需接入安全认证服务。');
+        setText('ds-identity-detail', '名字、头像和简介当前仅保存在本机；电话、邮箱和实名验证需接入安全认证服务，且默认不公开。');
       }
     } else {
       setText('ds-institution-account', '机构连接状态暂时无法读取');
@@ -832,7 +831,6 @@
         try {
           const result = await invoke('identityUpdate', {
             displayName: value('ds-identity-display-input'),
-            username: value('ds-identity-username-input'),
             bio: value('ds-identity-bio-input'),
             phone: value('ds-identity-phone-input'),
             email: value('ds-identity-email-input'),
@@ -840,7 +838,7 @@
           });
           renderIdentity(result && result.identity);
           showIdentityForm(false);
-          setProjectionNotice('个人身份已保存。联系方式仍为未验证状态。');
+          setProjectionNotice('个人资料已保存。联系方式仍为未验证状态。');
         } catch (err) {
           setProjectionNotice(err && err.message ? String(err.message) : '个人身份没有保存成功。');
         } finally {

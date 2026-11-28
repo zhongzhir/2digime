@@ -964,16 +964,13 @@ select {
 }
 
 .digital-self-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(17rem, 0.85fr);
-  gap: 28px;
-  align-items: start;
-  max-width: 76rem;
+  display: block;
+  max-width: 52em;
 }
 
 .digital-self-page {
   display: block;
-  max-width: 44em;
+  max-width: 52em;
   min-height: 12rem;
 }
 
@@ -1175,13 +1172,7 @@ div.ds-identity-avatar {
 }
 
 @media (max-width: 900px) {
-  .digital-self-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .digital-self-page {
-    max-width: 42em;
-  }
+  .digital-self-page { max-width: 42em; }
 }
 
 #growth-block {

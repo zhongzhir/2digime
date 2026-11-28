@@ -198,6 +198,22 @@ test('open Discover replaces a stale full-screen cache with newer directory cont
   };
   assert.equal(refreshedCache.personal.itemIds.every((itemId) => itemId.startsWith('ni_current_')), true);
   assert.equal(refreshedCache.personal.generatedAt, '2026-11-24T08:00:00.000Z');
+
+  const reopenedFourDaysLater = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_stale_first_screen'),
+    items: current,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    searchWeb: async () => [],
+    mode: 'open',
+    now: '2026-11-28T08:00:00.000Z',
+  });
+  assert.equal(reopenedFourDaysLater.view.replenishing, true);
+  assert.match(reopenedFourDaysLater.view.notice, /正在检查更新.*11月23日/);
 });
 
 test('non-consumable directory still replenishes; search failure keeps the previous feed', async () => {

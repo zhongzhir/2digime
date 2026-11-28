@@ -107,8 +107,8 @@ test('Slice 4A：数字之我投影机构权益、最小计量边界并可撤销
   try {
     const { page } = launched;
     await skipWelcomeAndEnterShell(page);
-    await page.locator('#nav-subject').click();
-    await page.locator('#digital-self-page').waitFor({ state: 'visible' });
+    await page.locator('#nav-settings').click();
+    await page.locator('#view-settings').waitFor({ state: 'visible' });
     await page.waitForFunction(`document.getElementById('ds-institution-account')?.textContent === '伙伴电信沙箱'`);
 
     assert.equal(await page.locator('#ds-institution-account').innerText(), '伙伴电信沙箱');

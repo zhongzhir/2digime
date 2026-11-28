@@ -38,7 +38,7 @@ test('Slice 3B：数字之我只读投影真实协作并从同一 Talk 发起', 
     assert.ok(proposed.recordId);
     assert.equal(proposed.status, 'proposed');
 
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await page.locator('#ds-collaboration-summary').waitFor({ state: 'visible' });
     await page.waitForFunction(`document.getElementById('ds-collaboration-summary')?.textContent?.includes('1 项协作')`);
     const cardCopy = await page.locator('#ds-collaboration-title').locator('..').innerText();
@@ -65,7 +65,7 @@ test('Slice 3B：数字之我只读投影真实协作并从同一 Talk 发起', 
     assert.equal(await page.locator('#chat-input').inputValue(), '我想发起一项协作：');
     assert.equal(await page.evaluate(`document.activeElement?.id === 'chat-input'`), true);
 
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await page.screenshot({
       path: path.join(os.tmpdir(), 'digital-self-slice3b-collaboration.png'),
       fullPage: true,

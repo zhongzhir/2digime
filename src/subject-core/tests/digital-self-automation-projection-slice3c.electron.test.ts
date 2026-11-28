@@ -37,12 +37,12 @@ test('Slice 3-3B：数字之我投影待确认自动化并可暂停、恢复、�
       triggerType: 'institution_event',
     })})`);
 
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await page.waitForFunction(`document.getElementById('ds-automation-summary')?.textContent?.includes('1 项运行中')`);
     await page.getByRole('button', { name: '设置自动化' }).click();
     await page.waitForFunction(`document.getElementById('chat-input')?.value?.includes('无需每次确认')`);
     assert.match(await page.locator('#chat-input').inputValue(), /已连接的机构/);
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     const card = page.locator('#ds-automation-list .ds-collaboration-item').first();
     const text = await card.innerText();
     assert.match(text, /机构账单摘要/);
@@ -113,7 +113,7 @@ test('Slice 3-3D：低风险自动化真实运行后在对话中标明自动化�
     assert.match(await automated.innerText(), /低风险自动成果验证/);
     assert.equal((await automated.innerText()).includes('我确认运行'), false);
 
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await page.waitForFunction(`document.getElementById('ds-automation-list')?.textContent?.includes('自动执行')`);
     const card = page.locator('#ds-automation-list .ds-collaboration-item').first();
     assert.match(await card.innerText(), /最近一次已完成，结果在对话中/);

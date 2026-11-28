@@ -792,6 +792,39 @@ function cacheFresh(snapshot: FeedSnapshot | undefined, nowMs: number): boolean 
   return Number.isFinite(at) && nowMs - at <= STALE_MS;
 }
 
+function latestPublishedTime(cards: DiscoverCard[]): number | null {
+  const times = cards
+    .map((card) => Date.parse(String(card.publishedAt || '')))
+    .filter((value) => Number.isFinite(value));
+  return times.length ? Math.max(...times) : null;
+}
+
+function hasRecentlyPublishedCard(cards: DiscoverCard[], nowMs: number): boolean {
+  const latest = latestPublishedTime(cards);
+  // 没有可信发布日期时不伪造时效结论；有日期时，快照的新旧不能替代内容本身的新旧。
+  return latest === null || nowMs - latest <= STALE_MS;
+}
+
+function stalePublicationNotice(
+  cards: DiscoverCard[],
+  nowMs: number,
+  state: 'checking' | 'checked' | 'unavailable',
+): string {
+  const latest = latestPublishedTime(cards);
+  if (latest === null || nowMs - latest <= STALE_MS) return '';
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(new Date(latest));
+  const month = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
+  const label = `${month}月${day}日`;
+  if (state === 'checking') return `正在检查更新；当前可用内容更新至${label}。`;
+  if (state === 'checked') return `已检查公开来源；当前可用内容更新至${label}。`;
+  return `当前可用内容更新至${label}。`;
+}
+
 function interleaveHits<T>(left: T[], right: T[]): T[] {
   const out: T[] = [];
   const n = Math.max(left.length, right.length);
@@ -925,6 +958,16 @@ export async function ensurePersonalFeed(input: {
               : supplement === 'called'
                 ? '补充搜索有返回，但没有换成不同的内容。'
                 : '这次没有换出不同的内容。';
+    const givenNotice = sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : String(view.notice || '');
+    const freshnessNotice = stalePublicationNotice(
+      cards,
+      nowMs,
+      view.replenishing
+        ? 'checking'
+        : canReplenishSupply({ ...input, networking })
+          ? 'checked'
+          : 'unavailable',
+    );
     const traced = viewOf({
       cards,
       relatedCards: view.relatedCards || [],
@@ -935,7 +978,7 @@ export async function ensurePersonalFeed(input: {
       ...(view.relatedTitle ? { relatedTitle: view.relatedTitle } : {}),
       preferences: view.preferences,
       notice: terminalDefaultNotice(
-        sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : String(view.notice || ''),
+        givenNotice || freshnessNotice,
         view.replenishing,
       ),
       reasonCode,
@@ -1050,7 +1093,8 @@ export async function ensurePersonalFeed(input: {
       mark('DIRECTORY_READ', localCards.length);
     }
     const fresh =
-      localFromCache.length >= MIN_FEED ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
+      (localFromCache.length >= MIN_FEED ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED) &&
+      hasRecentlyPublishedCard(localCards, nowMs);
     const replenishing = canReplenishSupply({ ...input, networking }) && (localCards.length < MIN_FEED || !fresh);
     if (localCards.length) {
       const snapshot: FeedSnapshot = {

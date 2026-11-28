@@ -13,7 +13,7 @@
     const brand = window.__digitalMeBrand;
     const helpIntro =
       (brand && brand.strings && brand.strings.helpIntro) ||
-      "日常使用这四个页面：与兔机米、发现、数字之我、设置。";
+      "日常使用这四个页面：与兔机米、发现、数字之我、我的。";
     if (titleEl) titleEl.textContent = helpIntro;
     for (const node of document.querySelectorAll(".help-topic")) {
       const topic = node.getAttribute("data-help-topic");
@@ -751,6 +751,7 @@
   }
 
   function openSettings(opts) {
+    mountMyProfilePanel();
     returnView = currentView === "settings" ? returnView : currentView;
     if (activeNav !== "settings") {
       returnNav = activeNav === "chat" ? "chat" : activeNav;
@@ -761,6 +762,9 @@
       btn.classList.toggle("active", btn.dataset.nav === "settings");
     }
     fillSettingsForm();
+    if (window.DigitalSelfPage && typeof window.DigitalSelfPage.refresh === "function") {
+      void window.DigitalSelfPage.refresh();
+    }
     void refreshFilesystemGrantUi();
     setView("settings");
     const advanced = document.getElementById("settings-advanced");
@@ -787,6 +791,14 @@
       }
     }
   }
+
+  function mountMyProfilePanel() {
+    const slot = document.getElementById("my-profile-slot");
+    const panel = document.getElementById("ds-capability-panel");
+    if (slot && panel && panel.parentElement !== slot) slot.appendChild(panel);
+  }
+
+  mountMyProfilePanel();
 
   window.openDigitalMeAiSettings = function openDigitalMeAiSettings(opts) {
     openSettings({ focusAi: true });

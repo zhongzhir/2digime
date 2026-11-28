@@ -54,6 +54,22 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
   border: 0;
   box-shadow: none;
 }
+.my-profile-slot { grid-column: 1 / -1; }
+#view-settings .ds-capability-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+#view-settings .ds-capability-heading,
+#view-settings #ds-capability-notice { grid-column: 1 / -1; }
+#view-settings .ds-capability-card {
+  padding: 28px;
+  border-radius: 16px;
+  background: var(--panel);
+}
+@media (max-width: 720px) {
+  #view-settings .ds-capability-panel { grid-template-columns: minmax(0, 1fr); }
+}
 @media (min-width: 960px) {
   #view-settings .settings-panel {
     grid-template-columns: 1fr 1fr;

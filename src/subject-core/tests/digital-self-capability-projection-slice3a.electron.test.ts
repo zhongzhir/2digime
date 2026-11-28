@@ -9,7 +9,7 @@ import {
 
 const STUB_ENV = { DIGITALME_V2_DIGITAL_SELF_STUB: '1' };
 
-test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { timeout: 240_000 }, async () => {
+test('Slice 3A：我的承接身份与授权，数字之我只保留当前理解', { timeout: 240_000 }, async () => {
   const launched = await launchDigitalMeElectron({ extraEnv: STUB_ENV });
   try {
     const { page } = launched;
@@ -17,6 +17,9 @@ test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { time
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('#nav-subject').click();
     await page.locator('#digital-self-page').waitFor({ state: 'visible' });
+    await page.locator('#ds-capability-panel').waitFor({ state: 'hidden' });
+    await page.locator('#nav-settings').click();
+    await page.locator('#view-settings').waitFor({ state: 'visible' });
     await page.locator('#ds-capability-panel').waitFor({ state: 'visible' });
     await page.waitForFunction(`(() => {
       const text = document.getElementById('ds-identity-name')?.textContent || '';
@@ -33,25 +36,27 @@ test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { time
     assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('workflow'), false);
     await page.locator('#btn-ds-edit-identity').click();
     await page.locator('#ds-identity-display-input').fill('张三');
-    await page.locator('#ds-identity-username-input').fill('zhangsan');
     await page.locator('#ds-identity-bio-input').fill('愿意与可信伙伴协作。');
     await page.locator('#ds-identity-phone-input').fill('138 0000 0000');
     await page.locator('#ds-identity-email-input').fill('zhangsan@example.com');
     await page.locator('#btn-ds-save-identity').click();
     await page.waitForFunction(`document.getElementById('ds-identity-name')?.textContent === '张三'`);
-    assert.equal((await page.locator('#ds-identity-username').innerText()).includes('@zhangsan'), true);
+    assert.equal(await page.locator('#ds-identity-username').innerText(), '兔机米号：尚未开通');
+    assert.equal((await page.locator('#ds-identity-detail').innerText()).includes('用户名'), false);
     assert.match(await page.locator('#ds-identity-phone').innerText(), /未验证/);
     assert.match(await page.locator('#ds-identity-email').innerText(), /未验证/);
     assert.equal((await page.locator('#ds-capability-panel').innerText()).includes('尚未接入'), true);
     await page.locator('#nav-chat').click();
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await page.waitForFunction(`document.getElementById('ds-identity-name')?.textContent === '张三'`);
-    const selfBox = await page.locator('#digital-self-page').boundingBox();
-    const capabilityBox = await page.locator('#ds-capability-panel').boundingBox();
-    assert.ok(selfBox && capabilityBox && capabilityBox.x > selfBox.x + selfBox.width);
-    await page.locator('#panel-subject').evaluate((node) => { node.scrollTop = 0; });
+    assert.equal(await page.locator('#ds-capability-panel').evaluate((node) => node.parentElement?.id), 'my-profile-slot');
+    await page.evaluate(`(() => {
+      for (const node of Array.from(document.querySelectorAll('*'))) {
+        if (node instanceof HTMLElement && node.scrollTop) node.scrollTop = 0;
+      }
+    })()`);
     await page.screenshot({
-      path: path.join(os.tmpdir(), 'digital-self-slice3a-identity-authorization.png'),
+      path: path.join(os.tmpdir(), 'my-slice3a-identity-authorization.png'),
       fullPage: true,
     });
 
@@ -62,6 +67,7 @@ test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { time
     await page.locator('#ds-capability-panel').evaluate((node) => {
       node.setAttribute('hidden', '');
     });
+    await page.locator('#nav-subject').click();
     await page.locator('#btn-ds-tell').click();
     await page.locator('#ds-tell-input').fill('我叫张三');
     await page.locator('#btn-ds-tell-submit').click();
@@ -76,7 +82,7 @@ test('Slice 3A：数字之我双栏只投影现有身份与授权事实', { time
     await page.locator('#ds-capability-panel').evaluate((node) => {
       node.removeAttribute('hidden');
     });
-    await page.locator('#btn-ds-open-settings').click();
+    await page.locator('#nav-settings').click();
     await page.locator('#view-settings').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#filesystem-grant-list').count(), 1);
     assert.equal(await page.locator('#institution-status').count(), 1);

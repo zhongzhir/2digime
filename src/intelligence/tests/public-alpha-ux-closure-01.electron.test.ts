@@ -1,5 +1,5 @@
 /**
- * PUBLIC-ALPHA-UX-CLOSURE-01：一级发现、数字之我概览、设置双列。
+ * PUBLIC-ALPHA-UX-CLOSURE-01：一级发现、数字之我概览、我的双列。
  * 正式 Electron 产品面；不改 Digital Self / content 语义。
  */
 import test from 'node:test';
@@ -32,7 +32,7 @@ const RSS = `<?xml version="1.0"?>
   </channel>
 </rss>`;
 
-test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置', { timeout: 240_000 }, async () => {
+test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 我的', { timeout: 240_000 }, async () => {
   const harness = await launchDigitalMeElectron({ extraEnv: STUB_ENV });
   try {
     await skipWelcomeAndEnterShell(harness.page);
@@ -40,7 +40,7 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
     assert.match(navText, /与兔机米/);
     assert.match(navText, /发现/);
     assert.match(navText, /数字之我/);
-    assert.match(navText, /设置/);
+    assert.match(navText, /我的/);
     assert.equal(await harness.page.locator('#nav-discover').isVisible(), true);
     assert.equal(await harness.page.locator('#panel-chat #content-discover').count(), 0);
 
@@ -48,7 +48,7 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
     await harness.page.locator('#panel-discover').waitFor({ state: 'visible', timeout: 15_000 });
     const discoverCopy = await harness.page.locator('#panel-discover').innerText();
     assert.match(discoverCopy, /想看什么/);
-    assert.match(discoverCopy, /目前还没有可展示的内容|还没有为你挑出的新内容|这里可以直接看/);
+    assert.match(discoverCopy, /目前还没有可展示的内容|还没有为你挑出的新内容|这里可以直接看|正在准备一些值得看的内容/);
     assert.equal(discoverCopy.includes('还没有新内容') && !discoverCopy.includes('还没有为你挑出'), false);
     assert.equal(await harness.page.locator('#content-discover-query').isVisible(), true);
     assert.equal(await harness.page.locator('#content-discover-empty').isVisible(), true);

@@ -12,11 +12,11 @@
 
 **任务名：** `PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01`
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / SLICES_1_TO_4_DEVELOPER_CLOSED / SLICE_5_UPDATED_CANDIDATE_INSTALLED / OWNER_REACCEPTANCE_PENDING`
+**状态：** `OWNER_DIRECTION_CONFIRMED / SLICES_1_TO_4_DEVELOPER_CLOSED / SLICE_5_OWNER_FEEDBACK_CORRECTION_DEVELOPER_VALIDATED / UPDATED_PACKAGE_PENDING`
 
 **详细计划：** [`../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md`](../plans/PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01.md)
 
-**本地产品候选：** `c37450e`。Slice 1–4 开发成果已进入本地 `main`；Slice 5 统一机械门、正式 Electron 门和 Windows 安装生命周期门通过。正式候选已在本机安装，但仍未签名、push、公开发布或生产部署。
+**本地产品候选：** 当前已安装的是上一轮 `v2-tujimi-20261128T103027Z-a9f6e646`；本轮信息架构与推荐时效修正已通过开发门，尚未形成替代安装包。Slice 1–4 开发成果已进入本地 `main`；仍未签名、push、公开发布或生产部署。
 
 ### 2026-11-24 Owner 产品裁决
 
@@ -52,6 +52,16 @@
 替代候选 `v2-tujimi-20261128T103027Z-a9f6e646` 已生成并完成 ZIP 正式入口烟测、Windows 升级/修复、卸载数据保留、最终重装、快捷方式和安装后隔离启动；本次生命周期内 1,845 个 Owner 数据文件、71,599,340 bytes 摘要一致。setup SHA-256 为 `d09aa256d64faf4cb5c7c4deb633f45bfe2ed38ce3137fa3aa57217291741efe`。下一步只交 Owner 一次复验；不 push、不公开发布、不部署。
 
 实施保持小步快跑：不大拆大建，不迁移已成立的 Talk/Digital Self/Capability/Relay/A2A/Identity/Institution Distribution；每批只做一条可感知主链，优先现有功能优化、欠账落地和必要功能接入，原则上可独立构建、回归和回退。
+
+### Slice 5 Owner 信息架构与推荐时效修正（2026-11-28）
+
+Owner 最新裁决覆盖此前“数字之我右侧承载身份与协作”的页面安排，但不改变底层事实边界：`数字之我` 只回答兔机米怎样理解用户、依据是什么以及如何纠正；原“设置”改名为`我的`，统一承接个人资料、认证状态、机构连接、文件授权、协作、自动化和 AI/联网能力。没有新增一级入口、身份 Store、社交网络或第二 runtime。
+
+个人身份按成熟社交产品的用途分层：`名字`是可重复、可修改的公开称呼；`兔机米号`是未来唯一、稳定、可查找和建立连接的网络标识，在安全账号与唯一性服务成立前只显示“尚未开通”，不允许用本机字段冒充；电话、邮箱和实名信息用于找回与高信任服务，默认不公开。现存本机 username 数据只做兼容保留，本轮不删除、不再由界面编辑。
+
+Discover 的 11 月 28 日推荐仍停在 11 月 24 日，根因是当日重建推荐快照后，快照时间被误当作内容发布时间。现在推荐新鲜度同时要求快照有效和可信内容发布时间近期；内容过旧会进入既有开放目录/补充链，并明确显示“正在检查更新；当前可用内容更新至某日”或检查后的真实边界，不承诺互联网上存在的当天内容一定已进入目录，也不新增来源或站点规则。
+
+TypeScript 构建、Discover 新鲜度与连续供给聚焦门 23/23、身份/协作/自动化/机构正式 Electron 联动门 7/7、公共产品表面与“我的”桌面门通过；当前为 `OWNER_FEEDBACK_CORRECTION_DEVELOPER_VALIDATED / UPDATED_PACKAGE_PENDING`，尚未打包、安装、签名、push、发布或部署。
 
 ### Slice 1A 开发检查点（2026-11-24）
 

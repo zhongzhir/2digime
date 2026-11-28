@@ -116,7 +116,7 @@ test('Electron：统一产品表面导航与同一入口 A/B/C/D/E', { timeout: 
     const help = await harness.page.locator('#view-help').innerText();
     assert.match(help, /与兔机米/);
     assert.match(help, /数字之我/);
-    assert.match(help, /设置/);
+    assert.match(help, /我的/);
     assert.equal(help.includes('转为任务'), false);
     assert.equal(help.includes('点「转为任务」'), false);
     await harness.page.locator('#btn-help-back').click();

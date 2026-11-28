@@ -157,7 +157,7 @@ test('Slice 3B：收到请求可接受/拒绝，已建立协作可结束且事�
       goal: acceptedGoal,
     });
 
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await waitForRowCopy(page, acceptedGoal, '待你确认协作');
     const acceptedRow = page.locator('.ds-collaboration-item', { hasText: acceptedGoal });
     await actionButton(acceptedRow, '接受').waitFor({ state: 'visible' });
@@ -205,7 +205,7 @@ test('Slice 3B：收到请求可接受/拒绝，已建立协作可结束且事�
       goal: rejectedGoal,
     });
     await page.locator('#nav-chat').click();
-    await page.locator('#nav-subject').click();
+    await page.locator('#nav-settings').click();
     await waitForRowCopy(page, rejectedGoal, '待你确认协作');
     const rejectedRow = page.locator('.ds-collaboration-item', { hasText: rejectedGoal });
     await actionButton(rejectedRow, '拒绝').waitFor({ state: 'visible' });

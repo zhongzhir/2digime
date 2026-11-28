@@ -19,13 +19,13 @@
           <button type="button" class="nav-item active" data-nav="chat" id="nav-chat" aria-keyshortcuts="Control+1">与兔机米</button>
           <button type="button" class="nav-item" data-nav="discover" id="nav-discover" aria-keyshortcuts="Control+2">发现</button>
           <button type="button" class="nav-item" data-nav="subject" id="nav-subject" aria-keyshortcuts="Control+3">数字之我</button>
-          <button type="button" class="nav-item" data-nav="settings" id="nav-settings" aria-keyshortcuts="Control+4">设置</button>
+          <button type="button" class="nav-item" data-nav="settings" id="nav-settings" aria-keyshortcuts="Control+4">我的</button>
           <button type="button" class="nav-item legacy-nav" data-nav="work" id="nav-work" hidden>做事</button>
           <button type="button" class="nav-item legacy-nav" data-nav="collab" id="nav-collab" hidden>协作</button>
         </nav>
         <div class="topbar-actions" aria-label="次级入口">
           <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
-          <button type="button" id="btn-open-settings" class="ghost topbar-secondary" hidden>设置</button>
+          <button type="button" id="btn-open-settings" class="ghost topbar-secondary" hidden>我的</button>
         </div>
       </header>
       <section id="view-welcome" class="view">
@@ -105,11 +105,12 @@
 
       <section id="view-settings" class="view" hidden>
         <header class="page-heading">
-          <h1>设置</h1>
-          <p class="page-lead">AI 能力由兔机米提供。高级设置里可以改用自己的服务。</p>
+          <h1>我的</h1>
+          <p class="page-lead">管理个人资料、身份认证、授权、连接与兔机米能力。</p>
           <button type="button" id="btn-settings-back">返回</button>
         </header>
         <div class="welcome-actions settings-panel">
+          <section id="my-profile-slot" class="my-profile-slot" aria-label="身份、授权与协作"></section>
           <section class="settings-card settings-model">
           <h2>AI 能力</h2>
           <p class="muted">普通使用无需申请或填写 API Key。</p>
@@ -574,17 +575,17 @@
           </section>
           <aside id="ds-capability-panel" class="ds-capability-panel" aria-labelledby="ds-capability-title">
             <div class="ds-capability-heading">
-              <h2 id="ds-capability-title">我的身份与协作</h2>
-              <p>设置对外名片，管理认证、授权、协作和自动化。</p>
+              <h2 id="ds-capability-title">身份、授权与协作</h2>
+              <p>这些内容决定你怎样被识别、怎样连接外部服务，以及兔机米可代表你做什么。</p>
             </div>
             <section class="ds-capability-card" aria-labelledby="ds-identity-title">
               <div class="ds-identity-profile">
                 <div id="ds-identity-avatar-fallback" class="ds-identity-avatar" aria-hidden="true">我</div>
                 <img id="ds-identity-avatar" class="ds-identity-avatar" alt="个人头像" hidden />
                 <div>
-                  <h3 id="ds-identity-title">个人名片</h3>
+                  <h3 id="ds-identity-title">个人资料</h3>
                   <p id="ds-identity-name" class="ds-capability-value">正在读取…</p>
-                  <p id="ds-identity-username" class="ds-capability-state">尚未设置用户名</p>
+                  <p id="ds-identity-username" class="ds-capability-state">兔机米号：尚未开通</p>
                 </div>
               </div>
               <p id="ds-identity-bio" class="muted tiny">尚未设置个人简介。</p>
@@ -594,11 +595,10 @@
                 <div><dt>实名</dt><dd id="ds-institution-state">尚未认证</dd></div>
                 <div><dt>支付</dt><dd>尚未接入</dd></div>
               </dl>
-              <p id="ds-identity-detail" class="muted tiny">用户名和联系方式当前仅保存在本机；实名、电话和邮箱验证需接入安全认证服务。</p>
-              <button type="button" id="btn-ds-edit-identity" class="ghost ds-capability-manage">设置个人身份</button>
+              <p id="ds-identity-detail" class="muted tiny">名字、头像和简介用于未来社交与协作；兔机米号将在安全账号服务接入后开通。电话、邮箱和实名状态默认不公开。</p>
+              <button type="button" id="btn-ds-edit-identity" class="ghost ds-capability-manage">编辑个人资料</button>
               <form id="ds-identity-form" class="ds-identity-form" hidden>
-                <label class="field"><span>展示名</span><input id="ds-identity-display-input" maxlength="40" required /></label>
-                <label class="field"><span>用户名</span><input id="ds-identity-username-input" maxlength="32" placeholder="例如 zhangsan" /></label>
+                <label class="field"><span>名字</span><input id="ds-identity-display-input" maxlength="40" placeholder="别人看到的名字，可以重复" required /></label>
                 <label class="field"><span>个人简介</span><textarea id="ds-identity-bio-input" maxlength="160" rows="2" placeholder="让未来的协作对象了解你"></textarea></label>
                 <label class="field"><span>电话</span><input id="ds-identity-phone-input" inputmode="tel" maxlength="24" /></label>
                 <label class="field"><span>邮箱</span><input id="ds-identity-email-input" inputmode="email" maxlength="120" /></label>
@@ -1392,13 +1392,13 @@
         </header>
         <div class="panel help-panel">
           <h1>帮助</h1>
-          <p id="help-topic-title" class="page-lead">日常使用这四个页面：与兔机米、发现、数字之我、设置。</p>
+          <p id="help-topic-title" class="page-lead">日常使用这四个页面：与兔机米、发现、数字之我、我的。</p>
 
           <div class="help-topic" data-help-topic="chat" id="help-chat">
             <h2>与兔机米</h2>
             <p>在这里直接说话。聊天、把一件事做完、纠正对你的理解，都在这一页完成。</p>
             <ul class="help-list">
-              <li>兔机米提供对话能力。若免费额度用完，可到「设置」使用自己的 AI 服务。</li>
+              <li>兔机米提供对话能力。若免费额度用完，可到「我的」使用自己的 AI 服务。</li>
               <li>对话是完善数字之我的主要方式；你确认过的内容会被记住。</li>
               <li>需要做成具体工作时，直接说出来即可。做成的文件会出现在对话里。</li>
               <li>想找内容时也可以直接说。找到的内容会放进「发现」，不在对话里堆成信息流。</li>
@@ -1423,11 +1423,12 @@
           </div>
 
           <div class="help-topic" data-help-topic="settings" id="help-settings">
-            <h2>设置</h2>
-            <p>在这里连接 AI。连上之后即可聊天。</p>
+            <h2>我的</h2>
+            <p>管理个人资料、身份与认证、授权、协作、自动化，以及兔机米使用的 AI 服务。</p>
             <ul class="help-list">
-              <li>密钥只保存在这台电脑上。</li>
-              <li>日常不必打开「高级」。普通联网发现不需要填写搜索密钥。</li>
+              <li>名字、头像和简介用于未来的社交与协作；电话、邮箱和实名信息默认不公开。</li>
+              <li>兔机米号将作为未来唯一的查找与连接标识，需在安全账号服务接入后开通。</li>
+              <li>AI 服务密钥只保存在这台电脑上；日常不必打开「高级」。</li>
             </ul>
           </div>
 

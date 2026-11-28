@@ -179,7 +179,7 @@ test('Slice 3-2C：协作成果可见，发起方可采用或退回且决定同�
     });
     await deliverResult(responder, initiator, adoptedRecordId);
 
-    await initiator.locator('#nav-subject').click();
+    await initiator.locator('#nav-settings').click();
     await waitForRowCopy(initiator, adoptedGoal, '需要你确认结果');
     const adoptedRow = initiator.locator('.ds-collaboration-item', { hasText: adoptedGoal });
     await actionButton(adoptedRow, '采用结果').waitFor({ state: 'visible' });
@@ -217,7 +217,7 @@ test('Slice 3-2C：协作成果可见，发起方可采用或退回且决定同�
     });
     await deliverResult(responder, initiator, returnedRecordId);
     await initiator.locator('#nav-chat').click();
-    await initiator.locator('#nav-subject').click();
+    await initiator.locator('#nav-settings').click();
     await waitForRowCopy(initiator, returnedGoal, '需要你确认结果');
     const returnedRow = initiator.locator('.ds-collaboration-item', { hasText: returnedGoal });
     await actionButton(returnedRow, '退回结果').click();
