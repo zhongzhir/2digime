@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_ACCEPTED / SLICES_1_TO_5_CLOSED / TASK_CLOSED`
+**状态：** `OWNER_ACCEPTED / SLICES_1_TO_5_CLOSED / RELEASE_PUBLISHED / TASK_CLOSED`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -412,7 +412,7 @@ Owner 最新裁决将原“设置”改为“我的”，并把个人资料、�
 
 推荐时效修复不再用推荐快照生成时间代替内容发布时间。只要存在可信日期且最新内容超过 24 小时，打开推荐即进入现有补充链，并展示当前内容真实更新日期和检查状态；不新增搜索能力、内容供应商、关键词或站点特例。TypeScript 构建通过；个人流聚焦回归 23/23；身份、协作、自动化和机构联动正式 Electron 7/7；公共产品表面、“我的”宽窄布局与 Discover 正式入口回归通过。
 
-候选 `v2-tujimi-20261128T113713Z-3665be43` 已完成敏感扫描、ZIP 正式入口烟测和 Windows 安装生命周期门。setup SHA-256 为 `e157317dfe891abdca266d9076133e0b1f3cf6285a30969644d41937a7ac60c1`；1,847 个 Owner 数据文件、71,693,508 bytes 的摘要在升级、再次安装、卸载、最终重装和隔离启动后完全一致。Owner 于 2026-11-28 明确接收该版本，状态为 `OWNER_ACCEPTED / TASK_CLOSED`；未签名、push、公开发布或部署。
+候选 `v2-tujimi-20261128T113713Z-3665be43` 已完成敏感扫描、ZIP 正式入口烟测和 Windows 安装生命周期门。setup SHA-256 为 `e157317dfe891abdca266d9076133e0b1f3cf6285a30969644d41937a7ac60c1`；1,847 个 Owner 数据文件、71,693,508 bytes 的摘要在升级、再次安装、卸载、最终重装和隔离启动后完全一致。Owner 于 2026-11-28 明确接收并授权发布；远端 `main` 已更新，tag `v0.3.0-public-alpha.1` 指向包内源码提交，GitHub Release 已成为 Latest。状态为 `OWNER_ACCEPTED / RELEASE_PUBLISHED / TASK_CLOSED`；安装包未签名，未生产部署。
 
 ## 10. 风险、依赖与停止条件
 
