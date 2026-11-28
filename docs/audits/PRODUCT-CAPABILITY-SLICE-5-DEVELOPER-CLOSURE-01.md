@@ -1,7 +1,7 @@
 # PRODUCT-CAPABILITY-AND-PARTNER-CLOSURE-01 — Slice 5 开发退出审计
 
 **日期：** 2026-11-28  
-**结论：** `ORIGINAL_CANDIDATE_OWNER_CORRECTION_REQUIRED / UPDATED_CANDIDATE_PENDING`
+**结论：** `UPDATED_CANDIDATE_INSTALLED / OWNER_REACCEPTANCE_PENDING`
 **产品候选提交：** `c37450ea7585b978e1f3cfd1684a565a45cdd545`
 
 ## 1. 统一能力门
@@ -93,4 +93,14 @@ Owner 于 2026-11-28 接受短剧直接观看入口不足的当前供给边界�
 - 电话邮箱只表示 Owner 已登记，用户名只表示本机名片，实名和支付没有真实外部能力时明确为未认证/未接入；
 - 协作、自动化、机构和文件授权仍投影既有权威，不新增第二套资料或一级入口。
 
-开发证据：TypeScript 构建通过；相关领域与正式 Electron 6/6；Electron 正式入口生命周期通过。全库门中的历史 `controlled-remote` 重启用例仍要求已退役 Work Runtime 自动挂载，与当前权威设计冲突，本轮未以兼容补丁恢复旧链。替代 Windows 候选尚待生成与安装，因此当前不能重新请求 Owner 验收。
+开发证据：TypeScript 构建通过；相关领域与正式 Electron 6/6；Electron 正式入口生命周期通过。全库门中的历史 `controlled-remote` 重启用例仍要求已退役 Work Runtime 自动挂载，与当前权威设计冲突，本轮未以兼容补丁恢复旧链。
+
+替代候选已经生成并安装：
+
+| 文件 | SHA-256 | 大小 |
+|---|---|---:|
+| `兔机米-0.3.0-public-alpha-win-x64-setup.exe` | `d09aa256d64faf4cb5c7c4deb633f45bfe2ed38ce3137fa3aa57217291741efe` | 88,651,127 bytes |
+| `兔机米-0.3.0-public-alpha-win-x64.zip` | `16f4363946885e81c43efce42f9c674aea7204b28d9774542ee6bf568c02f56e` | 122,638,337 bytes |
+| 候选 `兔机米.exe` | `ae25ca853cfae282da97b2fb6cfe428ebadafe5edce6f488d8ce5af851f61c48` | 186,300,416 bytes |
+
+候选 build ID 为 `v2-tujimi-20261128T103027Z-a9f6e646`，嵌入提交 `a9f6e6467f5a0e7b2b2280e84aba600077fb85d9`，敏感扫描 0 项。ZIP 正式入口烟测通过；Windows 升级、再次安装、卸载、Owner 数据保留、最终重装、快捷方式和安装后隔离启动通过。生命周期开始时的 1,845 个 Owner 数据文件、71,599,340 bytes 在全部阶段摘要一致。当前只剩 Owner 对替代候选进行一次连续体验复验；仍未签名、push、公开发布或部署。

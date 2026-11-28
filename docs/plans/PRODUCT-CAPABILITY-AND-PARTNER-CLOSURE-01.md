@@ -2,7 +2,7 @@
 
 **日期：** 2026-11-24
 
-**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / SLICE_5_OWNER_FEEDBACK_CORRECTION_DEVELOPER_PASS / UPDATED_CANDIDATE_PENDING`
+**状态：** `OWNER_DIRECTION_CONFIRMED / PLAN_REVISED / SLICE_5_UPDATED_CANDIDATE_INSTALLED / OWNER_REACCEPTANCE_PENDING`
 
 **基线：** 本地 `main` 已快进到 `348226a`，包含 `INSTITUTIONAL-SUBJECT-COLLABORATION-01` Slice 1A–6；尚未 push、打包、发布或部署。
 
@@ -400,7 +400,9 @@ Owner 接受“最火的短剧”本轮只能找到热门对象、尚无直接�
 
 本轮只做现有功能修正，没有新增搜索供应商、站点特例、一级入口、身份 Store 或支付/KYC 假能力：发现页重新进入时恢复同一搜索现场；默认推荐按可信发布日期优先展示；分区名改为“推荐”，卡片点击直接打开，阅读、稍后看、反馈、比较等次要动作收进“…”；个人身份复用 SubjectPackage 的唯一 identity 权威，可设置展示名、用户名、简介、电话、邮箱和随包迁移的本机头像。电话、邮箱明确标为未验证，用户名不冒充联网唯一账号，实名与支付明确为尚未认证/尚未接入；协作和自动化继续复用既有事实与 Talk 主链。
 
-TypeScript 构建通过；发现现场/卡片/新鲜度、个人身份持久化/头像/输入校验、协作与机构投影聚焦门 6/6；正式 Electron 生命周期预检通过（首窗 2.692 秒、关闭 136 毫秒、隔离 userData 已清理）。全库 `npm test` 仍有一个与本轮无关的旧 `controlled-remote` 重启用例要求打开 Subject 包后自动挂载已退役 Work Runtime；连续复现后按 Yellow 规则停止，不为测试恢复旧运行时。当前状态为 `OWNER_FEEDBACK_CORRECTION_DEVELOPER_PASS / UPDATED_CANDIDATE_PENDING`；尚未重打包、安装、Owner 复验、push、发布或部署。
+TypeScript 构建通过；发现现场/卡片/新鲜度、个人身份持久化/头像/输入校验、协作与机构投影聚焦门 6/6；正式 Electron 生命周期预检通过（首窗 2.692 秒、关闭 136 毫秒、隔离 userData 已清理）。全库 `npm test` 仍有一个与本轮无关的旧 `controlled-remote` 重启用例要求打开 Subject 包后自动挂载已退役 Work Runtime；连续复现后按 Yellow 规则停止，不为测试恢复旧运行时。
+
+替代候选 `v2-tujimi-20261128T103027Z-a9f6e646` 已生成：setup SHA-256 `d09aa256d64faf4cb5c7c4deb633f45bfe2ed38ce3137fa3aa57217291741efe`，ZIP SHA-256 `16f4363946885e81c43efce42f9c674aea7204b28d9774542ee6bf568c02f56e`，敏感文件扫描 0 项。ZIP 正式入口烟测通过；Windows 旧安装升级、再次安装、卸载数据保留、最终重装、快捷方式和安装后隔离启动通过，测试期间 1,845 个 Owner 数据文件、71,599,340 bytes 摘要完全一致。当前状态为 `UPDATED_CANDIDATE_INSTALLED / OWNER_REACCEPTANCE_PENDING`；没有 push、公开发布、部署、真实 KYC 或支付接入。
 
 ## 10. 风险、依赖与停止条件
 
